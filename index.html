@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>The Scent — Signature Aromatherapy & Wellness</title>
+  <!-- Google Fonts: Cormorant Garamond, Montserrat, Raleway -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Montserrat:wght@400;500&family=Raleway:wght@500&display=swap" rel="stylesheet">
+  <!-- Font Awesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"/>
+  <style>
+    :root {
+      /* Color palette from oa1, with button/shop accent from oa2 */
+      --clr-bg: #f6f5f1;
+      --clr-bg-dark: #182024;
+      --clr-text: #262c2f;
+      --clr-text-dark: #ebeaea;
+      --clr-primary: #2c899a;
+      --clr-primary-dark: #30ccbb;
+      --clr-accent: #d69f61;
+      --clr-accent-dark: #e2bb85;
+      --clr-soap: #b9cfc3;
+      --clr-overlay: rgba(44,137,154,0.08);
+      --clr-overlay-dark: rgba(24,32,36,0.6);
+      --clr-cta: #ff7f50;
+      --clr-cta-hover: #ff6347;
+      --clr-cta-dark: #ff4a39;
+      --clr-cta-dark-hover: #ff3098;
+
+      --font-head: 'Cormorant Garamond', serif;
+      --font-body: 'Montserrat', sans-serif;
+      --font-accent: 'Raleway', sans-serif;
+
+      --transition: 0.26s cubic-bezier(.35,2,.31,1);
+      --shadow: 0 8px 34px 0 rgba(60,35,16,0.11);
+      --shadow-dark: 0 8px 34px 0 rgba(0,0,0,0.16);
+      --container: 1160px;
+
+      --mist-light: rgba(255,255,255,0.17);
+      --mist-dark: rgba(200,235,255,0.26);
+
+      --parallax-blur: 2.5px;
+    }
+    body {
+      font-family: var(--font-body);
+      background: var(--clr-bg);
+      color: var(--clr-text);
+      line-height: 1.75;
+      min-height: 100vh;
+      transition: background 0.7s, color 0.6s;
+    }
+    body.dark {
+      background: var(--clr-bg-dark);
+      color: var(--clr-text-dark);
+    }
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-head);
+      font-weight: 700;
+      color: var(--clr-primary);
+      margin: 0 0 0.7em 0;
+      letter-spacing: .5px;
+    }
+    body.dark h1, body.dark h2, body.dark h3, body.dark h4, body.dark h5, body.dark h6 {
+      color: var(--clr-accent-dark);
+    }
+    a { color: var(--clr-primary); text-decoration: none; transition: color .2s; }
+    a:focus { outline: 2px solid var(--clr-accent); }
+    .container { width: 90%; max-width: var(--container); margin: 0 auto; }
+    /* ---------- Nav Styles + Dark/Light Toggle ---------- */
+    nav.navbar {
+      width:100%; position:fixed; z-index:1009; top:0; left:0;
+      background:rgba(255,255,255,0.8); backdrop-filter: blur(8px);
+      box-shadow:0 2px 19px rgba(44,137,154,0.08);
+      display:flex; align-items:center; justify-content:center;
+      padding: 0.7rem 0;
+      transition: background .35s;
+    }
+    body.dark nav.navbar {
+      background:rgba(22,29,32,0.97);
+      box-shadow: var(--shadow-dark);
+    }
+    .nav-container {
+      width:90%; max-width: var(--container); display:flex; align-items:center; justify-content:space-between;
+    }
+    .brand {
+      font-family: var(--font-head);
+      font-weight:700;
+      font-size:2rem;
+      color:var(--clr-primary);
+      letter-spacing:2px;
+      display:flex;
+      align-items:center;
+      gap:.7em;
+      transition: color .2s;
+    }
+    body.dark .brand { color: var(--clr-primary-dark);}
+    .brand i {font-size:1.28em;color:var(--clr-accent);}
+    .nav-links {
+      display:flex; align-items:center; gap:2.4rem;
+      font-family: var(--font-accent);
+    }
+    .nav-links a {
+      font-weight:600; text-transform:uppercase; font-size:1.01rem;
+      letter-spacing: 1px; color:var(--clr-text); position:relative;
+      display:inline-flex; align-items:center; gap:0.37em;
+      padding: 0.7em 0 0.6em 0;
+      transition: color .17s;
+    }
+    body.dark .nav-links a { color: var(--clr-text-dark);}
+    .nav-links a::after {
+      content: '';
+      position: absolute; left:50%; bottom:0; width:0; height:2.1px;
+      background: var(--clr-accent); border-radius:2px; transition: width .24s; transform:translateX(-50%);
+    }
+    .nav-links a:hover, .nav-links a:focus { color: var(--clr-accent); }
+    .nav-links a:hover::after, .nav-links a:focus::after { width: 70%; }
+    .nav-links .dark-toggle {
+      background: none; border:none; cursor:pointer; margin-left:1.35rem;
+      font-size:1.38rem; color:var(--clr-accent);
+      display:inline-flex; align-items:center; transition: color .18s;
+      border-radius:50%;
+      padding:0.13em 0.34em;
+    }
+    body.dark .nav-links .dark-toggle { color:var(--clr-accent-dark);}
+    .nav-links .dark-toggle:focus { outline:2px solid var(--clr-primary); }
+    @media (max-width: 800px) {
+      nav .nav-container { flex-direction:column; gap:.4em;}
+      .nav-links { flex-wrap: wrap; gap:1.1em;}
+    }
+    /* ---------- Ambient Audio Toggle ---------- */
+    .ambient-audio-toggle {
+      position: fixed; top: 1.3em; right: 1.7em; z-index: 1098;
+      background:rgba(255,255,255,0.46);border-radius:50%;
+      box-shadow:0 5px 22px rgba(40,40,31,0.14);
+    }
+    .ambient-audio-toggle button {
+      border-radius:50%; border:none;
+      padding:0.7em 0.8em; background:none;
+      font-size:1.5em; color:var(--clr-accent);
+      transition: background .21s;
+      cursor:pointer;
+    }
+    .ambient-audio-toggle button:focus, .ambient-audio-toggle button:hover {background:var(--clr-soap);}
+    /* ---------- HERO SECTION ---------- */
+    header.hero {
+      min-height: 100vh; position:relative; width:100%;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      overflow:hidden; isolation: isolate;
+      box-shadow:0 6px 44px rgba(44,137,154,0.07);
+      background: #222;
+    }
+    .hero-bg-video {
+      position:absolute; inset:0; width:100vw; height:100vh; object-fit:cover; z-index:0;
+      filter: blur(0.7px) brightness(0.93);
+    }
+    .hero-bg-fallback { display:none; }
+    .mist-trails {
+      pointer-events:none; position:absolute; inset:0; z-index:2;
+      mix-blend-mode:lighten;
+    }
+    .mist-path {
+      fill:none; stroke:var(--mist-light); stroke-width: 14; opacity:.72;
+      stroke-linecap:round; stroke-linejoin:round;
+      filter: blur(0.5px);
+      stroke-dasharray:4400; stroke-dashoffset:4400;
+      animation: mistTrail 16s linear infinite;
+    }
+    .mist-path2 {
+      stroke: var(--mist-light); stroke-width: 8; opacity: 0.59;
+      stroke-dasharray:4000; stroke-dashoffset:4000;
+      animation: mistTrail2 22s linear infinite;
+    }
+    body.dark .mist-path, body.dark .mist-path2 {
+      stroke: var(--mist-dark);
+      opacity:0.77;
+    }
+    @keyframes mistTrail {
+      0% { stroke-dashoffset:4400; opacity:.45;}
+      65% { opacity:.87;}
+      100% { stroke-dashoffset:0; opacity:.45;}
+    }
+    @keyframes mistTrail2 {
+      0% { stroke-dashoffset:4000; opacity:0.22;}
+      35% { opacity:.6;}
+      100% { stroke-dashoffset:0; opacity:.33;}
+    }
+    .hero-content {
+      z-index:10; max-width:760px; text-align:center; margin-inline:auto;
+      margin-top:8vh;
+      position:relative;
+      font-family: var(--font-head);
+    }
+    .hero-content h1 {
+      font-size:clamp(2.9rem,7vw,4.4rem); color:#fff;
+      text-shadow:0 3px 16px rgba(32,66,88,0.29);
+      letter-spacing:1.7px;
+      margin-bottom: 0.45em;
+    }
+    .hero-content p {
+      color: #e5e8ea;
+      margin:2.5rem 0 3rem 0; font-size:clamp(1.25rem,2.4vw,1.55rem);
+      text-shadow:0 1px 6px rgba(50,80,92,0.17);
+      font-family: var(--font-body);
+    }
+    .hero-content .cta-main {
+      background:var(--clr-cta); color:white;
+      font-family:var(--font-accent); font-weight:700;
+      font-size:1.2rem; padding:1.1em 2.5em;
+      border-radius:37px; border:none; cursor:pointer;
+      box-shadow:0 6px 22px rgba(244,112,83,0.16);
+      transition:background 0.22s, transform 0.19s, box-shadow 0.19s;
+      animation: ctaPulse 2.6s infinite alternate cubic-bezier(.68,.09,.34,.98);
+      display:inline-flex; align-items:center; gap:.95em;
+      letter-spacing: 0.02em;
+    }
+    .hero-content .cta-main i { font-size:1.26em; }
+    .hero-content .cta-main:hover, .hero-content .cta-main:focus {
+      background:var(--clr-cta-hover); color:var(--clr-primary);
+      transform:scale(1.06);
+      box-shadow:0 10px 26px rgba(228,183,125,0.22);
+      outline:none;
+    }
+    @keyframes ctaPulse {
+      from {box-shadow: 0 2px 22px 2px var(--clr-cta);}
+      to   {box-shadow: 0 0 35px 7px var(--clr-cta-hover);transform:translateY(-5px) scale(1.027);}
+    }
+    /* --- Floating shop now button --- */
+    .shop-now {
+      position:fixed; bottom:2.2em; right:2.2em; z-index:1091;
+      background:var(--clr-cta); color:#fff; font-size:1rem; font-weight:600;
+      border-radius:50px; padding:1.1em 2em 1.09em 2.3em;
+      box-shadow:0 6px 19px rgba(255,115,80,0.16);
+      display:flex; align-items:center; gap:0.86em;
+      transition: background .22s, transform .2s, box-shadow .19s;
+      border: none; cursor: pointer;
+      animation: shopNowPulse 1.88s infinite alternate cubic-bezier(.44,1.38,.46,1);
+      font-family: var(--font-accent);
+      letter-spacing: 0.01em;
+    }
+    .shop-now i { font-size:1.38em; }
+    .shop-now:hover, .shop-now:focus {
+      background:var(--clr-cta-hover); color:var(--clr-primary);
+      transform:scale(1.08);
+      box-shadow: 0 8px 30px var(--clr-accent);
+      outline:none;
+    }
+    @keyframes shopNowPulse {
+      0% { box-shadow: 0 0 15px 0 var(--clr-cta);}
+      100% { box-shadow: 0 0 35px 11px var(--clr-accent);}
+    }
+    @media (max-width:615px) {
+      .shop-now { bottom:1.2em; right:3vw; font-size:.93rem;}
+    }
+    /* ------- Section base styles -------- */
+    section { padding:5.6rem 0 5rem 0;}
+    .container { width:88%; max-width:var(--container); margin-inline:auto; }
+    section h2 { font-family:var(--font-head); font-size:2.6rem; color:var(--clr-primary); text-align:center; margin-bottom:2.6rem; letter-spacing:.5px; }
+    body.dark section h2 { color:var(--clr-accent-dark); }
+    /* ------- About w/Parallax Ingredients -------- */
+    .about-section { background: linear-gradient(118deg, #ecf8f8 60%, #faf7ee 100%); position:relative; overflow:hidden; }
+    body.dark .about-section { background: linear-gradient(114deg, #243439 70%, #202326 100%);}
+    .about-parallax {
+      display:flex; align-items:center; justify-content:center; gap:4vw;
+      width:100%; max-width:1040px; margin-inline:auto;
+      min-height: 320px;
+    }
+    .about-parallax-img {
+      flex:1.7 1 0; min-width:290px; position:relative;
+      perspective:400px; transform-style:preserve-3d;
+    }
+    .about-parallax-img img {
+      border-radius:19px; width:100%; max-width:420px;
+      box-shadow: 0 18px 60px -10px var(--clr-soap);
+      filter: blur(var(--parallax-blur));
+      transition: filter .34s, transform .6s;
+      will-change: transform;
+      pointer-events: none;
+    }
+    .about-parallax-text {
+      flex:2.5 1 0; min-width: 290px;
+      position:relative; z-index:7;
+      padding:1.2em 1.1rem 1.1em 1.4em;
+    }
+    .about-parallax-text h2 { text-align:left;}
+    .about-parallax-text p {
+      font-size:1.11rem; margin-bottom:1.7rem; color:var(--clr-text); max-width:90vw;
+      font-family: var(--font-body);
+    }
+    body.dark .about-parallax-text p { color:var(--clr-text-dark);}
+    .about-icons {
+      display:flex; gap:2em; margin-top:.8em;
+      font-size:1.7em; justify-content:left; align-items:center;
+      font-family: var(--font-accent);
+    }
+    .about-icons span {
+      color:var(--clr-primary); font-size:.72em; margin-left:.3em;
+      font-family:var(--font-accent); opacity:.75; letter-spacing:1.5px;
+    }
+    body.dark .about-icons i, body.dark .about-icons span {
+      color:var(--clr-accent-dark); opacity:.80;
+    }
+    @media (pointer:fine) {
+      .about-parallax-img.scrolled img { filter: blur(0.2px) saturate(1.13) contrast(1.09); transform: scale(1.07) rotateZ(-3deg);}
+    }
+    @media (max-width:900px) {
+      .about-parallax { flex-direction:column;}
+      .about-parallax-img, .about-parallax-text { min-width: 0; width:100%;}
+      .about-parallax-img img { max-width: 320px;}
+      .about-parallax-text { text-align:center; padding-left:0;}
+      .about-icons { justify-content:center; }
+    }
+    @media (max-width:480px) {
+      .about-parallax-img img { max-width: 95vw;}
+    }
+    /* Ingredients Map */
+    .ingredient-map-wrap { margin:2em auto 0 auto; max-width:650px; text-align:center;}
+    .ingredient-map-title { text-align:center; color:var(--clr-primary); font-size:1.29rem; margin-bottom:1.1rem; font-family: var(--font-accent);}
+    body.dark .ingredient-map-title { color:var(--clr-accent-dark);}
+    .ingredient-map {
+      position:relative; width:100%; max-width:560px; height:auto;
+      margin:1.2rem auto 0 auto;
+      border-radius:13px; box-shadow:0 3px 18px var(--clr-soap);
+      overflow:visible;
+    }
+    .ingredient-map img { width:100%; display:block; border-radius:13px;}
+    .ingredient-marker {
+      position:absolute; width:25px; height:25px;
+      left:0; top:0; transform:translate(-55%, -80%);
+      cursor:pointer; z-index:10;
+    }
+    .ingredient-marker .marker-pulse {
+      position:absolute; left:5px; top:5px; width:14px;height:14px;background:var(--clr-accent);border-radius:50%;
+      animation: markerPulse 1.5s infinite alternate cubic-bezier(.71,2,.32,1);
+    }
+    @keyframes markerPulse {
+      from { box-shadow: 0 0 7px 3px var(--clr-accent);}
+      to { box-shadow: 0 0 17px 9px var(--clr-accent-dark);}
+    }
+    .ingredient-marker .marker-label {
+      pointer-events:none;
+      opacity:0; min-width:80px; white-space:nowrap;
+      background:rgba(25,39,45,0.97); color:#fff; font-size:.98em;
+      padding:4.5px 14px; border-radius:7px; position:absolute;
+      left:2.3em; top:55%; transform:translateY(-50%);
+      font-family:var(--font-accent);
+      transition:opacity 0.18s cubic-bezier(.74,2,0,1);
+      box-shadow:0 2px 9px var(--clr-soap);
+    }
+    .ingredient-marker:focus .marker-label,
+    .ingredient-marker:hover .marker-label {
+      opacity:1;
+    }
+
+    /* ------- Products Grid -------- */
+    .products-section {
+      background:#fff; box-shadow:0 7px 38px var(--clr-soap);
+    }
+    body.dark .products-section { background: #222829;}
+    .products-grid {
+      display:grid; grid-template-columns: repeat(auto-fit,minmax(248px,1fr));
+      gap:2.2rem;
+      margin-top:3rem;
+    }
+    .product-card {
+      background:var(--clr-bg);
+      border-radius:15px;
+      box-shadow:0 4px 19px rgba(44,137,154,0.09);
+      transition:transform .25s, box-shadow .28s, background .19s;
+      overflow:hidden; cursor:pointer; position:relative;
+      display:flex; flex-direction:column; align-items:stretch;
+      border:2px solid transparent;
+      font-family: var(--font-body);
+    }
+    .product-card:hover, .product-card:focus {
+      transform:translateY(-8px) scale(1.04);
+      box-shadow:0 9px 34px var(--clr-accent-dark), 0 12px 34px var(--clr-primary-dark);
+      background:linear-gradient(114deg, #f8faef 60%, #e7f6f6 100%);
+      border:2px solid var(--clr-accent);
+      outline:none;
+    }
+    body.dark .product-card { background:#232c2e;}
+    .product-card img {
+      width:100%; height:220px; object-fit:cover; border-radius:15px 15px 0 0; transition: opacity .23s;
+    }
+    .product-card:hover img { opacity:.86; }
+    .product-info {
+      padding:1.4em 1.3em 1em 1.3em; text-align:center; flex:1 1 0;
+      display:flex; flex-direction:column; justify-content:center; align-items:center;
+    }
+    .product-info h3 { font-family:var(--font-head); font-size:1.28em; margin-bottom:0.59em; color:var(--clr-primary);}
+    body.dark .product-info h3 { color:var(--clr-accent-dark);}
+    .product-info p { font-size:0.97em; color:#444; }
+    body.dark .product-info p { color:#eaeaea;}
+    .product-info .product-link {
+      display:inline-flex; align-items:center; gap:0.57em;
+      margin-top:.93em; color:var(--clr-cta);
+      font-family: var(--font-accent);
+      font-weight:600; text-transform:uppercase; font-size:0.99em;
+      transition: color .18s; border-bottom:1.7px solid transparent;
+      padding-bottom:2px;
+    }
+    .product-card:hover .product-link, .product-link:focus {
+      color:var(--clr-accent); border-bottom:1.7px solid var(--clr-accent);
+    }
+    /* -------- Scent Quiz (multi-step animated) -------- */
+    .finder-section {
+      background: linear-gradient(115deg, #e6f4ea 70%, #f9f6ee 100%);
+      min-height:490px;
+    }
+    body.dark .finder-section {
+      background: linear-gradient(110deg, #263239 85%, #1a2027 100%);
+    }
+    .quiz-wrap { max-width:640px; margin:0 auto; padding:3em 2.2em; box-shadow:0 6px 28px var(--clr-soap); border-radius:19px; background: rgba(255,255,255,0.89);}
+    body.dark .quiz-wrap { background: rgba(34,41,40,0.98); box-shadow:0 7px 33px #0006;}
+    .quiz-headline { text-align:center; font-size:2.08rem; margin-bottom:1.3rem; color:var(--clr-primary); font-family: var(--font-head);}
+    body.dark .quiz-headline { color:var(--clr-accent-dark);}
+    .multi-quiz { margin-top:1.4em; }
+    .quiz-step { display:none; min-height:140px; animation:fadInUp .73s;}
+    .quiz-step.active { display:block;}
+    @keyframes fadInUp {
+      from { opacity:.15; transform:translateY(21px);}
+      to   { opacity:1;   transform:translateY(0);}
+    }
+    .quiz-q {
+      font-family: var(--font-head); font-size:1.23em; margin-bottom:1.1em; color:var(--clr-text);
+    }
+    body.dark .quiz-q { color:var(--clr-accent-dark);}
+    .quiz-options {
+      display:flex; gap:1.35em; flex-wrap:wrap; justify-content:center; margin-bottom:1.6em;
+    }
+    .quiz-opt {
+      background:var(--clr-accent); color:var(--clr-primary);
+      border:none; border-radius:29px; font-family:var(--font-accent); font-size:1.06em; font-weight:600;
+      padding:.9em 2.1em; margin:0 0.61em 0.7em 0;
+      box-shadow:0 2px 14px var(--clr-soap);
+      cursor:pointer; transition:background .16s, transform .16s;
+      display:flex; align-items:center; gap:.65em;
+    }
+    .quiz-opt:focus, .quiz-opt:hover {
+      background:var(--clr-cta); color:var(--clr-bg);
+      transform:scale(1.08);
+      outline:none;
+    }
+    .quiz-progress {
+      text-align:center; font-size:1.01em; color:var(--clr-primary);opacity: .78; margin-bottom:0.7em;
+      font-family: var(--font-accent);
+    }
+    body.dark .quiz-progress { color:var(--clr-accent-dark);}
+    .quiz-result {
+      display:none; text-align:center; padding:1.2em .7em;
+      animation:fadInUp .7s; min-height:180px;
+    }
+    .quiz-result h4 { font-size:1.26em; color:var(--clr-accent); margin-bottom:.7em;}
+    .quiz-result .products-grid { margin-top:1.45em;}
+    /* --------- Testimonials --------- */
+    .testimonials-section {
+      background:#f7fbfc; position:relative;
+    }
+    body.dark .testimonials-section { background:#1e2a2d;}
+    .testi-headline { font-size:2.19em; color:var(--clr-primary); margin-bottom:2.7rem;}
+    body.dark .testi-headline { color:var(--clr-accent-dark);}
+    .testimonials-grid {
+      display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:2.8em;
+      padding-bottom:1.2em;
+    }
+    .testimonial {
+      background:#fff;
+      border-radius:16px; box-shadow:0 2px 13px var(--clr-soap);
+      padding:2.1em 1.4em; text-align:left;
+      opacity:0; transform:translateY(24px); transition: all .78s;
+      font-family: var(--font-body);
+    }
+    .testimonial.visible {
+      opacity:1; transform:translateY(0);
+    }
+    body.dark .testimonial {
+      background:#283236; color:#d9f5f4;
+      box-shadow:0 6px 19px #22264754;
+    }
+    .testimonial p { font-style:italic; color:#345; margin-bottom:1.3em;}
+    .testimonial .testi-author { font-weight:700; color:var(--clr-accent);}
+    body.dark .testimonial .testi-author { color:var(--clr-accent-dark);}
+    .testimonial .testi-stars { color:var(--clr-primary); letter-spacing:1.4px; font-size:1.08em;}
+    body.dark .testimonial .testi-stars { color:var(--clr-accent);}
+    /* --------- Newsletter ---------- */
+    .newsletter-section {
+      background:var(--clr-primary); color:#fff;
+      text-align:center; padding:4.2em 0 4.8em 0;
+    }
+    body.dark .newsletter-section { background:var(--clr-accent-dark);}
+    .newsletter-section h2 { color:#fff; }
+    .newsletter-form {
+      margin:2em 0 0 0; display:flex; justify-content:center; gap:.7em; flex-wrap:wrap;
+      max-width:620px; margin-inline:auto;
+    }
+    .newsletter-form input[type="email"] {
+      font-size:1.03em; font-family:var(--font-body); padding:1.09em 1.2em; border-radius:35px; border:none;
+      background:rgba(255,255,255,0.86); color:var(--clr-primary); min-width:210px;
+      margin-bottom:.7em; flex:1 1 150px;
+      box-shadow:0 2px 7px var(--clr-soap);
+    }
+    .newsletter-form button {
+      background:var(--clr-cta); color:#fff; font-family:var(--font-accent); font-weight:700; font-size:.97em;
+      border-radius:35px; border:none; cursor:pointer; padding:.9em 2.2em; transition:background .18s;
+      box-shadow:0 2px 8px var(--clr-accent-dark);
+    }
+    .newsletter-form button:focus, .newsletter-form button:hover {
+      background:var(--clr-cta-hover); color:var(--clr-primary);
+    }
+    /* --- Section transitions and shapes -- */
+    .curve-separator {
+      position: relative; height: 55px; margin-top:-3rem; background:none; pointer-events:none; z-index:4;
+    }
+    .curve-separator svg { display:block; width:100%; height:100%; }
+    .curve-separator path { fill: var(--clr-bg);}
+    body.dark .curve-separator path { fill: var(--clr-bg-dark);}
+    /* --- Responsive --- */
+    @media (max-width:1000px) {
+      .footer-container { gap:1.7em;}
+    }
+    @media (max-width:768px) {
+      nav .nav-container { flex-direction:column; gap:.9em;}
+      .nav-links { gap:1.1em;}
+      .about-parallax { gap:1.1em; }
+      .products-grid { grid-template-columns:1fr 1fr;}
+      .testimonials-grid { grid-template-columns:1fr;}
+      .footer-container {flex-direction:column; gap:1em;}
+    }
+    @media (max-width:545px) {
+      header.hero .hero-content h1 { font-size:2rem;}
+      .nav-links { gap:0.17em; flex-wrap:wrap;}
+      section {padding:3.5em 0;}
+      .curve-separator { height: 34px;}
+      .products-grid { grid-template-columns:1fr;}
+      .quiz-wrap { padding:1.1em .3em;}
+    }
+    /* -- Reduce motion support for neurodiverse users -- */
+    @media (prefers-reduced-motion: reduce) {
+      .mist-path, .mist-path2,
+      .shop-now, .hero-content .cta-main, .about-parallax-img img, .product-card, .testimonial, * { animation-duration:0.01s !important;}
+    }
+
+    /* --- Footer from oa2 --- */
+    footer {
+      background: #222826; color: #efedea; padding:3em 0 0 0;
+      font-family: var(--font-body);
+    }
+    .footer-main {
+      display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:2.2em; padding-bottom:2em;
+      max-width:var(--container); margin:auto;
+    }
+    .footer-main h3 {
+      font-family:var(--font-accent);font-size:1.12em;color:var(--clr-accent);margin-bottom:.88em;
+    }
+    .footer-about p {margin-bottom: 0.7em; font-size:.98em;}
+    .footer-social {margin-top:.4em;display:flex;gap:.8em;}
+    .footer-social a {color:#fff; font-size:1.25em; transition:color .19s;}
+    .footer-social a:hover {color:var(--clr-accent);}
+    .footer-links ul {list-style:none; padding-left:0;}
+    .footer-links li{margin-bottom:.46em;}
+    .footer-links a {color:#ddd; font-size:1em; transition:color .13s;}
+    .footer-links a:hover {color:var(--clr-accent);}
+    .footer-contact p {margin-bottom:.5em;}
+    .footer-contact i {color:var(--clr-accent);margin-right:.59em;}
+    .footer-bottom {
+      background:#191c18; padding:1.9em 0 1.4em 0;text-align:center;margin-top:1.2em;font-size:.95em;
+      color:rgba(255,255,255,0.86);
+    }
+    .footer-bottom .payment-methods {margin-top:.5em;}
+    .footer-bottom i {font-size:1.37em; color:#bbb;margin:0 .33em;}
+    @media (max-width: 1050px) {
+      .footer-main {max-width:1000px;}
+    }
+    @media (max-width: 520px) {
+      .footer-main {max-width:99vw;}
+    }
+  </style>
+</head>
+<body>
+  <!-- Ambient background audio toggle -->
+  <div class="ambient-audio-toggle" title="Toggle Ambient Sound" role="region" aria-label="Toggle ambient sound">
+    <audio id="scentAudio" loop src="https://cdn.pixabay.com/audio/2022/10/16/audio_12bac8f711.mp3"></audio>
+    <button id="audioBtn" aria-label="Toggle ambient scent sound"><i class="fas fa-volume-mute"></i></button>
+  </div>
+
+  <!-- Navigation bar -->
+  <nav class="navbar" aria-label="Main Navigation">
+    <div class="nav-container">
+      <span class="brand"><i class="fas fa-leaf"></i> The Scent</span>
+      <div class="nav-links">
+        <a href="#hero"><i class="fa-solid fa-home"></i> Home</a>
+        <a href="#about"><i class="fa-solid fa-spa"></i> About</a>
+        <a href="#products"><i class="fa-solid fa-box-open"></i> Shop</a>
+        <a href="#finder"><i class="fa-solid fa-flask-vial"></i> Quiz</a>
+        <a href="#testimonials"><i class="fa-solid fa-comments"></i> Reviews</a>
+        <a href="#contact"><i class="fa-solid fa-envelope"></i> Contact</a>
+        <button class="dark-toggle" id="darkToggle" aria-label="Toggle light/dark mode"><i class="fas fa-moon"></i></button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO SECTION with animated mist trails and video bg -->
+  <header class="hero" id="hero">
+    <video class="hero-bg-video" autoplay muted loop playsinline poster="https://raw.githubusercontent.com/nordeim/The-Scent/refs/heads/main/images/scent5.jpg">
+      <source src="https://raw.githubusercontent.com/nordeim/The-Scent/refs/heads/main/videos/aroma.mp4" type="video/mp4">
+      <!-- Fallback image for browsers not supporting video -->
+      <img class="hero-bg-fallback" src="https://raw.githubusercontent.com/nordeim/The-Scent/refs/heads/main/images/scent5.jpg" alt="Calm Aroma Visual">
+    </video>
+    <!-- Animated mist/scent trails overlay SVG -->
+    <div class="mist-trails" aria-hidden="true">
+      <svg width="100%" height="100%" viewBox="0 0 1400 700" fill="none" xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:0;top:0;width:100%;height:100%;">
+        <path class="mist-path"
+              d="M0,580 Q280,430 530,590 T800,410 Q1000,210 1400,350"
+        />
+        <path class="mist-path2"
+          d="M0,650 Q460,600 880,580 T1400,680"
+        />
+      </svg>
+    </div>
+    <div class="hero-content">
+      <h1>Immerse Yourself in Aroma</h1>
+      <p>Handcrafted global aromatherapy made with rare botanicals and expertise—for your mind, body, and soul.</p>
+      <a href="#products" class="cta-main" role="button"><i class="fa-solid fa-bag-shopping"></i> Shop Our Collection</a>
+    </div>
+  </header>
+
+  <!-- Floating Shop Now Button -->
+  <a href="#products" class="shop-now"><i class="fa-solid fa-bag-shopping"></i> Shop Now</a>
+
+  <!-- Decorative organic separator -->
+  <div class="curve-separator" aria-hidden="true">
+    <svg viewBox="0 0 1440 60"><path d="M0,32c128,32,320,-12,580,0c260,12,368,44,544,28c100,-10,178,-16,316,-20v20H0Z"></path></svg>
+  </div>
+
+  <!-- ABOUT/PARALLAX section -->
+  <section id="about" class="about-section">
+    <div class="about-parallax">
+      <div class="about-parallax-img" id="aboutParallaxImg">
+        <img src="https://raw.githubusercontent.com/nordeim/The-Scent/refs/heads/main/images/scent4.jpg" loading="lazy" alt="Botanical Aromatic Ingredients">
+      </div>
+      <div class="about-parallax-text">
+        <h2>Nature's Wisdom in Every Drop</h2>
+        <p>
+          Founded on the belief that nature restores, <b>The Scent</b> fuses the world's finest botanicals into harmonious blends.
+          Our aroma oils and soaps are crafted by experts using globally sourced ingredients,
+          blending passion with science to nurture your well-being.
+        </p>
+        <div class="about-icons">
+          <span><i class="fa-solid fa-globe"></i> <span>Global</span></span>
+          <span><i class="fa-solid fa-recycle"></i> <span>Eco</span></span>
+          <span><i class="fa-solid fa-flask"></i> <span>Expertly Formulated</span></span>
+        </div>
+      </div>
+    </div>
+    <!-- INGREDIENT MAP with animated markers -->
+    <div class="ingredient-map-wrap">
+      <div class="ingredient-map-title">Our Signature Ingredients Come from Every Corner</div>
+      <div class="ingredient-map" style="width:100%;max-width:480px;">
+        <img src="https://raw.githubusercontent.com/nordeim/The-Scent-ideas/refs/heads/main/images/BlankMap-World-noborders.jpg" alt="World Map of Ingredient Origins" />
+        <!-- France, Lavender -->
+        <div class="ingredient-marker" tabindex="0" style="left:43%;top:45%;">
+          <div class="marker-pulse"></div>
+          <span class="marker-label">Lavender<br><small>France</small></span>
+        </div>
+        <!-- Japan, Cedarwood -->
+        <div class="ingredient-marker" tabindex="0" style="left:76.5%;top:50%;">
+          <div class="marker-pulse"></div>
+          <span class="marker-label">Cedarwood<br><small>Japan</small></span>
+        </div>
+        <!-- Mediterranean, Rosemary -->
+        <div class="ingredient-marker" tabindex="0" style="left:48%;top:55%;">
+          <div class="marker-pulse"></div>
+          <span class="marker-label">Rosemary<br><small>Mediterranean</small></span>
+        </div>
+        <!-- Brazil, Orange -->
+        <div class="ingredient-marker" tabindex="0" style="left:35%;top:73%;">
+          <div class="marker-pulse"></div>
+          <span class="marker-label">Orange<br><small>Brazil</small></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Decorative separator -->
+  <div class="curve-separator" aria-hidden="true">
+    <svg viewBox="0 0 1440 80"><path d="M0,40c180,48,460,14,740,18c280,4,440,61,700,0v22H0z"></path></svg>
+  </div>
+
+  <!-- PRODUCTS GRID -->
+  <section id="products" class="products-section">
+    <div class="container">
+      <h2>Our Artisanal Collections</h2>
+      <div class="products-grid">
+        <div class="product-card" tabindex="0">
+          <img src="https://raw.githubusercontent.com/nordeim/The-Scent/refs/heads/main/images/scent2.jpg" alt="Serenity Blend Oil">
+          <div class="product-info">
+            <h3>Serenity Blend Oil</h3>
+            <p>Calming Lavender & Chamomile</p>
+            <span class="product-link"><i class="fa-solid fa-leaf"></i> View Product</span>
+          </div>
+        </div>
+        <div class="product-card" tabindex="0">
+          <img src="https://raw.githubusercontent.com/nordeim/The-Scent/refs/heads/main/images/scent4.jpg" alt="Focus Flow Oil">
+          <div class="product-info">
+            <h3>Focus Flow Oil</h3>
+            <p>Invigorating Rosemary & Mint</p>
+            <span class="product-link"><i class="fa-solid fa-leaf"></i> View Product</span>
+          </div>
+        </div>
+        <div class="product-card" tabindex="0">
+          <img src="https://raw.githubusercontent.com/nordeim/The-Scent/refs/heads/main/images/soap4.jpg" alt="Citrus Burst Soap">
+          <div class="product-info">
+            <h3>Citrus Burst Soap</h3>
+            <p>Energizing Lemon & Orange Peel</p>
+            <span class="product-link"><i class="fa-solid fa-bath"></i> View Product</span>
+          </div>
+        </div>
+        <div class="product-card" tabindex="0">
+          <img src="https://raw.githubusercontent.com/nordeim/The-Scent/refs/heads/main/images/soap6.jpg" alt="Woodland Retreat Soap">
+          <div class="product-info">
+            <h3>Woodland Retreat Soap</h3>
+            <p>Grounding Cedarwood & Pine</p>
+            <span class="product-link"><i class="fa-solid fa-bath"></i> View Product</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PARALLAX separator -->
+  <div class="curve-separator" aria-hidden="true">
+    <svg viewBox="0 0 1440 56"><path d="M0,0c160,64,480,54,720,30c240,-24,520,-24,720,40v10H0z"></path></svg>
+  </div>
+
+  <!-- Inline SCENT QUIZ (interactive) -->
+  <section id="finder" class="finder-section">
+    <div class="container">
+      <div class="quiz-wrap">
+        <div class="quiz-headline">Discover Your Perfect Scent</div>
+        <form id="scentQuiz" class="multi-quiz" autocomplete="off">
+          <div class="quiz-step active" data-step="1">
+            <div class="quiz-q"><i class="fa-solid fa-brain"></i> What do you want right now?</div>
+            <div class="quiz-options">
+              <button type="button" class="quiz-opt" data-value="relax"><i class="fa-solid fa-leaf"></i> Relaxation</button>
+              <button type="button" class="quiz-opt" data-value="energize"><i class="fa-solid fa-bolt"></i> Energy</button>
+              <button type="button" class="quiz-opt" data-value="focus"><i class="fa-solid fa-eye"></i> Focus</button>
+              <button type="button" class="quiz-opt" data-value="sleep"><i class="fa-solid fa-moon"></i> Sleep</button>
+            </div>
+          </div>
+          <div class="quiz-step" data-step="2">
+            <div class="quiz-q"><i class="fa-solid fa-spa"></i> Which scent appeals to you?</div>
+            <div class="quiz-options">
+              <button type="button" class="quiz-opt" data-value="floral"><i class="fa-solid fa-seedling"></i> Floral</button>
+              <button type="button" class="quiz-opt" data-value="citrus"><i class="fa-solid fa-lemon"></i> Citrus</button>
+              <button type="button" class="quiz-opt" data-value="woody"><i class="fa-solid fa-tree"></i> Woody</button>
+              <button type="button" class="quiz-opt" data-value="herbal"><i class="fa-solid fa-mortar-pestle"></i> Herbal</button>
+            </div>
+          </div>
+          <div class="quiz-step" data-step="3">
+            <div class="quiz-q"><i class="fa-solid fa-bottle-droplet"></i> Pick your preferred type</div>
+            <div class="quiz-options">
+              <button type="button" class="quiz-opt" data-value="oil"><i class="fa-solid fa-bottle-droplet"></i> Essential Oil</button>
+              <button type="button" class="quiz-opt" data-value="soap"><i class="fa-solid fa-bath"></i> Soap</button>
+              <button type="button" class="quiz-opt" data-value="both"><i class="fa-solid fa-box"></i> Both</button>
+            </div>
+          </div>
+          <div class="quiz-progress">
+            Step <span id="quizStepNum">1</span> of 3
+          </div>
+        </form>
+        <div class="quiz-result" id="quizResult">
+          <h4>Your Aroma Match</h4>
+          <div class="products-grid" id="quizProducts"></div>
+          <a href="#products" class="cta-main" style="margin-top:2rem; font-size:1em;"><i class="fa-solid fa-shop"></i> Shop All Products</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Separator -->
+  <div class="curve-separator" aria-hidden="true">
+    <svg viewBox="0 0 1440 58"><path d="M0,30c210,38,470,12,700,16c230,4,330,34,740,0v12H0z"></path></svg>
+  </div>
+
+  <!-- TESTIMONIALS with fade-in animations -->
+  <section id="testimonials" class="testimonials-section">
+    <div class="container">
+      <h2 class="testi-headline">What Our Community Says</h2>
+      <div class="testimonials-grid">
+        <div class="testimonial" tabindex="0">
+          <p>"The Scent's lavender oil transformed my sleep. The calming aroma is my new evening ritual."</p>
+          <span class="testi-author"><i class="fa-solid fa-user"></i> Sarah L. (Los Angeles)</span><br>
+          <span class="testi-stars" aria-label="5 stars">★★★★★</span>
+        </div>
+        <div class="testimonial" tabindex="0">
+          <p>"The Focus Blend has made my home office a space of productivity—refreshing and not overpowering!"</p>
+          <span class="testi-author"><i class="fa-solid fa-user"></i> Michael T. (Chicago)</span><br>
+          <span class="testi-stars" aria-label="5 stars">★★★★★</span>
+        </div>
+        <div class="testimonial" tabindex="0">
+          <p>"The soaps not only smell delightful—they make my skin feel healthy and nourished. Beautifully packaged, too."</p>
+          <span class="testi-author"><i class="fa-solid fa-user"></i> Emma R. (Seattle)</span><br>
+          <span class="testi-stars" aria-label="5 stars">★★★★★</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- NEWSLETTER -->
+  <section class="newsletter-section" id="contact">
+    <div class="container">
+      <h2>Join The Scent Community</h2>
+      <p>Subscribe for exclusive offers, well-being tips, and the latest aroma journeys—straight to your inbox.</p>
+      <form class="newsletter-form">
+        <input type="email" required placeholder="Your email address">
+        <button type="submit"><i class="fa-solid fa-envelope"></i> Subscribe</button>
+      </form>
+      <small>By joining, you agree to receive emails from The Scent.</small>
+    </div>
+  </section>
+
+  <!-- FOOTER from oa2 -->
+  <footer>
+    <div class="footer-main">
+      <div class="footer-about">
+        <h3>The Scent</h3>
+        <p>Premium aroma & wellness products, inspired by nature and crafted for harmony. From globally sourced raw materials to creative blends exported worldwide—aromatherapy for today's world.</p>
+        <div class="footer-social">
+          <a href="#" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+          <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+          <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+          <a href="#" aria-label="Pinterest"><i class="fab fa-pinterest"></i></a>
+        </div>
+      </div>
+      <div class="footer-links">
+        <h3>Shop</h3>
+        <ul>
+          <li><a href="#">Essential Oils</a></li>
+          <li><a href="#">Premium Soaps</a></li>
+          <li><a href="#">Gift Sets</a></li>
+          <li><a href="#">New This Season</a></li>
+          <li><a href="#">Bestsellers</a></li>
+        </ul>
+      </div>
+      <div class="footer-links">
+        <h3>Help</h3>
+        <ul>
+          <li><a href="#">Contact Us</a></li>
+          <li><a href="#">FAQs</a></li>
+          <li><a href="#">Shipping & Returns</a></li>
+          <li><a href="#">Track Your Order</a></li>
+          <li><a href="#">Privacy Policy</a></li>
+        </ul>
+      </div>
+      <div class="footer-contact">
+        <h3>Contact</h3>
+        <p><i class="fas fa-map-marker-alt"></i> 123 Aroma Lane, Wellness City, World</p>
+        <p><i class="fas fa-phone"></i> +1 (555) 123‑4567</p>
+        <p><i class="fas fa-envelope"></i> care@thescent.com</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div>
+        &copy; 2025 The Scent. All rights reserved.<br>
+        <span class="payment-methods">
+          <i class="fab fa-cc-visa" title="Visa"></i>
+          <i class="fab fa-cc-mastercard" title="Mastercard"></i>
+          <i class="fab fa-cc-paypal" title="Paypal"></i>
+          <i class="fab fa-cc-amex" title="Amex"></i>
+        </span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- SCRIPTS -->
+  <script>
+    // ------- DARK/LIGHT MODE TOGGLE ------
+    const darkToggle = document.getElementById('darkToggle');
+    darkToggle.addEventListener('click', () => {
+      document.body.classList.toggle('dark');
+      const icon = darkToggle.querySelector('i');
+      if(document.body.classList.contains('dark')){
+        icon.classList.remove('fa-moon'); icon.classList.add('fa-sun');
+      } else {
+        icon.classList.add('fa-moon'); icon.classList.remove('fa-sun');
+      }
+    });
+    // ------ AMBIENT SOUND --------------
+    const scentAudio = document.getElementById('scentAudio');
+    const audioBtn = document.getElementById('audioBtn');
+    let audioOn = false;
+    audioBtn.addEventListener('click', () => {
+      if (scentAudio.paused) {
+        scentAudio.volume = 0.20;
+        scentAudio.play();
+        audioOn = true; audioBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
+      } else {
+        scentAudio.pause();
+        audioOn = false; audioBtn.innerHTML = '<i class="fas fa-volume-mute"></i>';
+      }
+    });
+    // Keyboard support
+    audioBtn.addEventListener('keydown', e => {
+      if (e.key === "Enter" || e.key === " ") audioBtn.click();
+    });
+
+    // --------- PARALLAX INGREDIENT IMAGE --------
+    // Only on desktop/pointer devices: simple parallax
+    const parallaxImgDiv = document.getElementById('aboutParallaxImg');
+    if (parallaxImgDiv && window.innerWidth > 600) {
+      let ticking = false;
+      window.addEventListener('scroll', () => {
+        if (!ticking) {
+          window.requestAnimationFrame(() => {
+            const rect = parallaxImgDiv.getBoundingClientRect();
+            const offset = Math.max(0, Math.min(1, (window.innerHeight - rect.top) / window.innerHeight));
+            // Only if visible
+            if(offset > 0.08 && offset < 0.94){
+              parallaxImgDiv.classList.add('scrolled');
+              parallaxImgDiv.querySelector('img').style.transform =
+                `translateY(${offset*18}px) scale(${1+offset*0.06}) rotateZ(${-3+offset*4}deg)`;
+              parallaxImgDiv.querySelector('img').style.filter =
+                `blur(${2.5-1.8*offset}px) saturate(${1+0.12*offset})`;
+            } else {
+              parallaxImgDiv.classList.remove('scrolled');
+              parallaxImgDiv.querySelector('img').style.transform = '';
+              parallaxImgDiv.querySelector('img').style.filter = '';
+            }
+            ticking = false;
+          });
+          ticking = true;
+        }
+      });
+    }
+
+    // --------- INTERACTIVE QUIZ ------------
+    let quizAnswers = [];
+    const quizForm = document.getElementById('scentQuiz');
+    const quizSteps = document.querySelectorAll('.quiz-step');
+    const quizStepNum = document.getElementById('quizStepNum');
+    const quizResultDiv = document.getElementById('quizResult');
+    const quizProductsDiv = document.getElementById('quizProducts');
+    let curr = 0;
+    function showStep(idx) {
+      quizSteps.forEach((step, i) => step.classList.toggle('active', i===idx));
+      quizStepNum.innerText = idx+1;
+      quizResultDiv.style.display = "none";
+      quizForm.style.display = "";
+      window.scrollTo({top: quizForm.offsetTop-70, behavior: 'smooth'});
+    }
+    function showResult() {
+      quizForm.style.display = "none";
+      quizResultDiv.style.display = "block";
+      // Very basic mapping, easily expandable
+      const [want, scent, format] = quizAnswers;
+      let products = [];
+      if (want==="relax" && scent==="floral") products.push({
+        img:"scent2.jpg", name:"Serenity Blend Oil",desc:"Lavender & Chamomile",icon:"fa-leaf"
+      });
+      if (want==="focus" && (scent==="herbal"||scent==="woody")) products.push({
+        img:"scent4.jpg", name:"Focus Flow Oil",desc:"Rosemary & Mint",icon:"fa-leaf"
+      });
+      if (want==="energize"&&scent==="citrus") products.push({
+        img:"soap4.jpg",name:"Citrus Burst Soap",desc:"Lemon & Orange Peel",icon:"fa-bath"
+      });
+      if (want==="sleep"||scent==="woody") products.push({
+        img:"soap6.jpg", name:"Woodland Retreat Soap",desc:"Cedarwood & Pine",icon:"fa-bath"
+      });
+      if (products.length===0) products = [
+        {img:"scent2.jpg",name:"Serenity Blend Oil",desc:"Lavender & Chamomile",icon:"fa-leaf"},
+        {img:"soap4.jpg",name:"Citrus Burst Soap",desc:"Lemon & Orange Peel",icon:"fa-bath"},
+        {img:"scent4.jpg",name:"Focus Flow Oil",desc:"Rosemary & Mint",icon:"fa-leaf"},
+        {img:"soap6.jpg",name:"Woodland Retreat Soap",desc:"Cedarwood & Pine",icon:"fa-bath"}
+      ];
+      // Filter by format
+      if (format==="oil") products = products.filter(p => p.name.includes('Oil'));
+      if (format==="soap") products = products.filter(p => p.name.includes('Soap'));
+      // If format is both, show all above matches
+      if (products.length === 0) products = [
+        {img:"scent2.jpg",name:"Serenity Blend Oil",desc:"Lavender & Chamomile",icon:"fa-leaf"},
+        {img:"soap4.jpg",name:"Citrus Burst Soap",desc:"Lemon & Orange Peel",icon:"fa-bath"},
+        {img:"scent4.jpg",name:"Focus Flow Oil",desc:"Rosemary & Mint",icon:"fa-leaf"},
+        {img:"soap6.jpg",name:"Woodland Retreat Soap",desc:"Cedarwood & Pine",icon:"fa-bath"}
+      ];
+      quizProductsDiv.innerHTML = products.map(p =>
+        `<div class="product-card">
+           <img src="https://raw.githubusercontent.com/nordeim/The-Scent/refs/heads/main/images/${p.img}" alt="${p.name}">
+           <div class="product-info">
+             <h3>${p.name}</h3>
+             <p>${p.desc}</p>
+             <span class="product-link"><i class="fa-solid ${p.icon}"></i> Shop Now</span>
+           </div>
+         </div>`).join('');
+    }
+    quizForm.querySelectorAll('.quiz-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        quizAnswers[curr] = btn.dataset.value;
+        if(curr < quizSteps.length-1){
+          curr++; showStep(curr);
+        } else {
+          showResult();
+        }
+      });
+    });
+    // Initialize quiz on load
+    window.addEventListener('DOMContentLoaded', () => {
+      quizAnswers = [];
+      curr = 0;
+      showStep(0);
+      quizResultDiv.style.display = "none";
+    });
+
+    // ----------- Animated testimonial fade-ins -----
+    function animateTestimonials() {
+      const testimonials = document.querySelectorAll('.testimonial');
+      function checkVis() {
+        testimonials.forEach(t => {
+          const rect = t.getBoundingClientRect();
+          if(window.innerHeight - rect.top > 80){
+            t.classList.add('visible');
+          }
+        });
+      }
+      window.addEventListener('scroll', checkVis, {passive:true});
+      checkVis();
+    }
+    animateTestimonials();
+
+    // INGREDIENT MAP tooltips accessibility
+    document.querySelectorAll('.ingredient-marker').forEach(marker=>{
+      marker.addEventListener('focus', ()=>marker.querySelector('.marker-label').style.opacity=1);
+      marker.addEventListener('blur', ()=>marker.querySelector('.marker-label').style.opacity=0);
+      marker.addEventListener('mouseenter', ()=>marker.querySelector('.marker-label').style.opacity=1);
+      marker.addEventListener('mouseleave', ()=>marker.querySelector('.marker-label').style.opacity=0);
+    });
+
+    // Newsletter submit (demo action)
+    document.querySelector('.newsletter-form').addEventListener('submit', e => {
+      e.preventDefault(); alert("Thank you for subscribing!");
+      e.target.reset();
+    });
+  </script>
+</body>
+</html>
