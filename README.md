@@ -15,7 +15,7 @@
 From animated aroma mist and global storytelling to interactive quizzes and glowing CTAs, every pixel is crafted to evoke calm, luxury, and authentic connection.
 
 **Live Demo:** [View on GitHub Pages ⟶](https://nordeim.github.io/The-Scent-oa5/)  
-**Designer/Developer:** [YourName](mailto:your.email@example.com)
+**Designer/Developer:** [YourName](https://github.com/copilot/share/081d0110-40e4-8881-9041-d040406268ff)
 
 ---
 
