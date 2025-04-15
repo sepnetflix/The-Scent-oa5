@@ -14,7 +14,7 @@
 **The Scent** is more than a storefront—it's a journey for the senses.  
 From animated aroma mist and global storytelling to interactive quizzes and glowing CTAs, every pixel is crafted to evoke calm, luxury, and authentic connection.
 
-**Live Demo:** [View on GitHub Pages ⟶](#)  
+**Live Demo:** [View on GitHub Pages ⟶](https://nordeim.github.io/The-Scent-oa5/)  
 **Designer/Developer:** [YourName](mailto:your.email@example.com)
 
 ---
