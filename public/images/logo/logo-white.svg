@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="200" height="60" viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Decorative Flourish Left -->
+    <path d="M10 30C10 30 20 20 30 30" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <path d="M10 30C10 30 20 40 30 30" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    
+    <!-- Text "The" -->
+    <text x="40" y="35" font-family="Georgia" font-size="24" fill="white">The</text>
+    
+    <!-- Text "Scent" -->
+    <text x="85" y="35" font-family="Georgia" font-size="32" font-weight="bold" fill="white">Scent</text>
+    
+    <!-- Decorative Flourish Right -->
+    <path d="M170 30C170 30 180 20 190 30" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <path d="M170 30C170 30 180 40 190 30" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    
+    <!-- Decorative Droplet -->
+    <path d="M155 25L158 32L161 25" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
