@@ -2,17 +2,17 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 0); // Disable error display in production
 
-if (!file_exists(__DIR__ . '/../config.php')) {
+if (!file_exists(__DIR__ . '/config.php')) {
     error_log("Config file not found");
-    require_once __DIR__ . '/../views/error.php';
+    require_once __DIR__ . '/views/error.php';
     exit();
 }
 
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/config.php';
 
 if (!defined('DB_HOST')) {
     error_log("DB_HOST not defined");
-    require_once __DIR__ . '/../views/error.php';
+    require_once __DIR__ . '/views/error.php';
     exit();
 }
 
@@ -25,6 +25,6 @@ try {
     ]);
 } catch (PDOException $e) {
     error_log("Database connection failed: " . $e->getMessage());
-    require_once __DIR__ . '/../views/error.php';
+    require_once __DIR__ . '/views/error.php';
     exit();
 }

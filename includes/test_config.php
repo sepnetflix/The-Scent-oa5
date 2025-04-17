@@ -5,7 +5,7 @@ ini_set('display_errors', 1);
 echo "Step 1: Before including config.php\n";
 var_dump(__DIR__);
 
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/../config.php';
 
 echo "Step 2: After including config.php\n";
 var_dump([
