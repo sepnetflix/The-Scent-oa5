@@ -3,6 +3,14 @@ RewriteEngine On
 
 # Allow Installatron requests
 RewriteCond %{REQUEST_FILENAME} deleteme\.\w+\.php
-RewriteRule (.*) - [L] 
+RewriteRule (.*) - [L]
 
+# If the requested file or directory exists, do not rewrite
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Exclude all URLs like /test_xxx.php and /sample_xxx.html from being rewritten
+RewriteCond %{REQUEST_URI} !^/test_.*\.php$
+RewriteCond %{REQUEST_URI} !^/sample_.*\.html$
 RewriteRule ^ index.php [L]
