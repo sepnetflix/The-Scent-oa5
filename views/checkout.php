@@ -1,4 +1,4 @@
-<?php require_once 'layout/header.php'; ?>
+<?php require_once __DIR__ . '/layout/header.php'; ?>
 
 <!-- Add Stripe.js -->
 <script src="https://js.stripe.com/v3/"></script>
@@ -421,4 +421,4 @@ initialize();</script>
 }
 </style>
 
-<?php require_once 'layout/footer.php'; ?>
+<?php require_once __DIR__ . '/layout/footer.php'; ?>

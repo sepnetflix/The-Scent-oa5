@@ -1,4 +1,4 @@
-<?php require_once 'layout/header.php'; ?>
+<?php require_once __DIR__ . '/layout/header.php'; ?>
 
 <section class="error-section">
     <div class="container">
@@ -100,4 +100,4 @@
 }
 </style>
 
-<?php require_once 'layout/footer.php'; ?>
+<?php require_once __DIR__ . '/layout/footer.php'; ?>

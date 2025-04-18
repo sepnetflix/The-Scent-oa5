@@ -4,7 +4,7 @@ ini_set('display_errors', 1);
 
 // Include the database connection setup from db.php.
 // This file will incorporate the configuration and create a PDO instance.
-require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../includes/db.php';
 
 try {
     echo "Connection successful!\n";

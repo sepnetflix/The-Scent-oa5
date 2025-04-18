@@ -1,0 +1,344 @@
+<!-- DEBUG: index.php loaded --><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Scent - Premium Aromatherapy Products</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Montserrat:wght@400;500;600&family=Raleway:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1A4D5A',
+                        'primary-dark': '#164249',
+                        secondary: '#A0C1B1',
+                        accent: '#D4A76A'
+                    },
+                    fontFamily: {
+                        heading: ['Cormorant Garamond', 'serif'],
+                        body: ['Montserrat', 'sans-serif'],
+                        accent: ['Raleway', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="/css/style.css">
+    
+    <!-- Scripts -->
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    <script>
+        // Initialize mobile menu functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const mobileMenuToggle = document.querySelector('.mobile-menu-toggle');
+            const mobileMenu = document.getElementById('mobile-menu');
+            let isMenuOpen = false;
+
+            function toggleMenu() {
+                isMenuOpen = !isMenuOpen;
+                mobileMenu.classList.toggle('active');
+                document.body.classList.toggle('menu-open');
+                mobileMenuToggle.innerHTML = isMenuOpen ? 
+                    '<i class="fas fa-times"></i>' : 
+                    '<i class="fas fa-bars"></i>';
+            }
+
+            function closeMenu() {
+                if (isMenuOpen) {
+                    isMenuOpen = false;
+                    mobileMenu.classList.remove('active');
+                    document.body.classList.remove('menu-open');
+                    mobileMenuToggle.innerHTML = '<i class="fas fa-bars"></i>';
+                }
+            }
+
+            mobileMenuToggle?.addEventListener('click', function(e) {
+                e.stopPropagation();
+                toggleMenu();
+            });
+
+            document.addEventListener('click', function(e) {
+                if (isMenuOpen && !e.target.closest('.main-nav')) {
+                    closeMenu();
+                }
+            });
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && isMenuOpen) {
+                    closeMenu();
+                }
+            });
+
+            mobileMenu?.querySelectorAll('a').forEach(link => {
+                link.addEventListener('click', closeMenu);
+            });
+        });
+    </script>
+</head>
+<body>
+    <header>
+        <nav class="main-nav sample-header">
+            <div class="container header-container">
+                <div class="logo">
+                    <a href="index.php" style="text-transform:uppercase; letter-spacing:1px;">The Scent</a>
+                    <span style="display:block; font-family:'Raleway',sans-serif; font-size:0.7rem; letter-spacing:2px; text-transform:uppercase; color:#A0C1B1; margin-top:-5px; opacity:0.8;">AROMATHERAPY</span>
+                </div>
+                <div class="nav-links" id="mobile-menu">
+                    <a href="index.php">Home</a>
+                    <a href="index.php?page=products">Shop</a>
+                    <a href="index.php?page=quiz">Scent Finder</a>
+                    <a href="index.php?page=about">About</a>
+                    <a href="index.php?page=contact">Contact</a>
+                </div>
+                <div class="header-icons">
+                    <a href="#" aria-label="Search"><i class="fas fa-search"></i></a>
+                                            <a href="index.php?page=login" aria-label="Login"><i class="fas fa-user"></i></a>
+                                        <a href="index.php?page=cart" class="cart-link" aria-label="Cart">
+                        <i class="fas fa-shopping-bag"></i>
+                        <span class="cart-count">0</span>
+                    </a>
+                </div>
+                <button class="mobile-menu-toggle md:hidden" aria-label="Toggle Menu">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+        </nav>
+    </header>
+    <main>
+        
+<section class="error-section">
+    <div class="container">
+        <div class="error-container" data-aos="fade-up">
+                            <h1>Oops! Something went wrong</h1>
+                <p>We apologize for the inconvenience. Please try again later.</p>
+                <div class="error-actions">
+                    <a href="/" class="btn-primary">Return Home</a>
+                    <a href="javascript:history.back()" class="btn-secondary">Go Back</a>
+                </div>
+                    </div>
+    </div>
+</section>
+
+<style>
+.error-section {
+    padding: 4rem 0;
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+}
+
+.error-container {
+    text-align: center;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.error-container h1 {
+    color: #dc2626;
+    margin-bottom: 1.5rem;
+}
+
+.error-details {
+    text-align: left;
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 6px;
+    margin-top: 1.5rem;
+}
+
+.error-message {
+    font-size: 1.1rem;
+    color: #1f2937;
+    margin-bottom: 1rem;
+}
+
+.error-location {
+    font-family: monospace;
+    background: #e5e7eb;
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.error-trace {
+    margin-top: 1.5rem;
+}
+
+.error-trace h3 {
+    color: #4b5563;
+    margin-bottom: 0.5rem;
+}
+
+.error-trace pre {
+    background: #e5e7eb;
+    padding: 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.875rem;
+}
+
+.error-actions {
+    margin-top: 2rem;
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+</style>
+
+</main>
+    <footer>
+        <div class="container">
+            <div class="footer-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:3rem;margin-bottom:3rem;">
+                <div class="footer-about">
+                    <h3>About The Scent</h3>
+                    <p>Creating premium aromatherapy products to enhance mental and physical well-being through the power of nature.</p>
+                    <div class="social-icons">
+                        <a href="#" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+                        <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+                        <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+                        <a href="#" aria-label="Pinterest"><i class="fab fa-pinterest"></i></a>
+                    </div>
+                </div>
+                <div class="footer-links">
+                    <h3>Shop</h3>
+                    <ul>
+                        <li><a href="index.php?page=products">Essential Oils</a></li>
+                        <li><a href="index.php?page=products">Natural Soaps</a></li>
+                        <li><a href="index.php?page=products">Gift Sets</a></li>
+                        <li><a href="index.php?page=products">New Arrivals</a></li>
+                        <li><a href="index.php?page=products">Bestsellers</a></li>
+                    </ul>
+                </div>
+                <div class="footer-links">
+                    <h3>Help</h3>
+                    <ul>
+                        <li><a href="index.php?page=contact">Contact Us</a></li>
+                        <li><a href="index.php?page=faq">FAQs</a></li>
+                        <li><a href="index.php?page=shipping">Shipping & Returns</a></li>
+                        <li><a href="index.php?page=order-tracking">Track Your Order</a></li>
+                        <li><a href="index.php?page=privacy">Privacy Policy</a></li>
+                    </ul>
+                </div>
+                <div class="footer-contact">
+                    <h3>Contact Us</h3>
+                    <p><i class="fas fa-map-marker-alt"></i> 123 Aromatherapy Lane, Wellness City, WB 12345</p>
+                    <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
+                    <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
+                    <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
+                        <input type="hidden" name="csrf_token" value="">
+                        <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
+                        <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
+                    </form>
+                    <p class="newsletter-consent" style="font-size:0.8rem;opacity:0.7; margin-top:1rem;">By subscribing, you agree to our <a href="index.php?page=privacy" style="color:#A0C1B1; text-decoration:underline;">Privacy Policy</a> and consent to receive emails from The Scent.</p>
+                </div>
+            </div>
+            <div class="footer-bottom" style="background-color:#222b2e; padding:1.5rem 0; margin-top:2rem;">
+                <div class="container" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;font-size:0.85rem;">
+                    <p>&copy; 2025 The Scent. All rights reserved.</p>
+                    <div class="payment-methods" style="display:flex;align-items:center;gap:0.8rem;">
+                        <span>Accepted Payments:</span>
+                        <i class="fab fa-cc-visa"></i>
+                        <i class="fab fa-cc-mastercard"></i>
+                        <i class="fab fa-cc-paypal"></i>
+                        <i class="fab fa-cc-amex"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+    <script>
+        // Initialize AOS
+        document.addEventListener('DOMContentLoaded', function() {
+            AOS.init({
+                duration: 800,
+                offset: 100,
+                once: true
+            });
+
+            if (document.getElementById('particles-js')) {
+                particlesJS.load('particles-js', '/particles.json');
+            }
+        });
+
+        // Newsletter Form
+        document.getElementById('newsletter-form')?.addEventListener('submit', handleNewsletterSubmit);
+        document.getElementById('newsletter-form-footer')?.addEventListener('submit', handleNewsletterSubmit);
+
+        function handleNewsletterSubmit(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+
+            fetch('index.php?page=newsletter&action=subscribe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    this.innerHTML = '<p class="success">Thank you for subscribing!</p>';
+                } else {
+                    alert(data.message || 'Subscription failed. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Subscription failed. Please try again.');
+            });
+        }
+
+        // Add to Cart functionality with CSRF protection
+        document.querySelectorAll('.add-to-cart')?.forEach(button => {
+            button.addEventListener('click', function() {
+                const productId = this.dataset.productId;
+                const formData = new FormData();
+                formData.append('product_id', productId);
+                formData.append('quantity', '1');
+                formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
+
+                fetch('index.php?page=cart&action=add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams(formData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const cartCount = document.querySelector('.cart-count');
+                        if (cartCount) {
+                            cartCount.textContent = data.cartCount;
+                        }
+                        alert('Product added to cart!');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to add product to cart. Please try again.');
+                });
+            });
+        });
+    </script>
+</body>
+</html>
