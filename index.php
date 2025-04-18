@@ -1,6 +1,6 @@
 <?php
 echo '<!-- DEBUG: index.php loaded -->';
-define('ROOT_PATH', dirname(__DIR__));
+define('ROOT_PATH', __DIR__);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/auth.php';

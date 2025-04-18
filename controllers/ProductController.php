@@ -19,7 +19,7 @@ class ProductController extends BaseController {
                 error_log("No featured products found");
             }
             
-            require_once ROOT_PATH . '/views/home.php';
+            require_once __DIR__ . '/../views/home.php';
         } catch (Exception $e) {
             error_log("Error in showHomePage: " . $e->getMessage());
             $this->setFlashMessage('An error occurred while loading the page', 'error');
