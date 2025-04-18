@@ -2,5 +2,8 @@
     "require": {
         "stripe/stripe-php": "^17.1",
         "phpmailer/phpmailer": "^6.9"
+    },
+    "scripts": {
+        "serve": "php -S localhost:8000"
     }
 }
