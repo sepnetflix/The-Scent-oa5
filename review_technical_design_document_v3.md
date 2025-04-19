@@ -1,3 +1,8 @@
+Okay, I have thoroughly reviewed the provided documents: the original specification, the two review/update iterations, and the code snippets from key files (`.htaccess`, `index.php`, `header.php`, `footer.php`, `home.php`, `BaseController.php`, `cart.php`).
+
+Based on this comprehensive analysis, I've identified the current architecture, workflows, and noted inconsistencies (particularly around the Add-to-Cart mechanism). The following is the refined and updated Technical Design Specification (`technical_design_specification_v2.md`), incorporating the latest findings from the code review.
+
+```markdown
 # The Scent – Technical Design Specification (Updated - Rev 2)
 
 ---
@@ -643,3 +648,4 @@ document.querySelectorAll('.remove-item').forEach(btn => {
 **End of Technical Design Specification (Updated - Rev 2)**
 
 This document reflects the analysis of the provided code snippets and aims to accurately represent the project's current state, including noted inconsistencies (e.g., Add-to-Cart mechanism). It should serve as a guide for development and onboarding, highlighting existing patterns and areas needing potential refactoring or clarification.
+```
