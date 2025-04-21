@@ -6,3 +6,8 @@ Now carefully reviewed the attached README.md and technical_design_specification
 please continue to execute according to your plan.
 
 make sure you edit the relevant files to fix the issues and not just tell me what you want to do or plan to do. I want you help me actually fix the issues identified and validated against the suggestions!
+
+---
+Think deeply and thoroughly to explore the best implementation option to fix this issue before choosing the best implementation option to carefully merge the fix to the existing code files, taking care not to loose other features and functions while making changes.
+
+Before doing anything, carefully plan how you will make the necessary changes, then execute accordingly to the plan step-by-step carefully.

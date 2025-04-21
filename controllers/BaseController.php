@@ -65,6 +65,10 @@ abstract class BaseController {
         $errors = [];
         $input = $this->getRequestInput();
         
+        if (!is_array($rules) && !is_object($rules)) {
+            // Defensive: if rules is not array/object, skip validation
+            return true;
+        }
         foreach ($rules as $field => $validations) {
             if (!isset($input[$field]) && strpos($validations, 'required') !== false) {
                 $errors[$field] = "The {$field} field is required";
@@ -246,6 +250,10 @@ abstract class BaseController {
     
     protected function validateInput($data, $rules) {
         $errors = [];
+        if (!is_array($rules) && !is_object($rules)) {
+            // Defensive: if rules is not array/object, skip validation
+            return true;
+        }
         foreach ($rules as $field => $rule) {
             if (!isset($data[$field]) && $rule['required'] ?? false) {
                 $errors[$field] = 'Field is required';

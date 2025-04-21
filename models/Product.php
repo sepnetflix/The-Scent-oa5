@@ -32,7 +32,13 @@ class Product {
     }
     
     public function getById($id) {
-        $stmt = $this->pdo->prepare("SELECT * FROM products WHERE id = ?");
+        $stmt = $this->pdo->prepare("
+            SELECT p.*, c.name as category_name
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.id = ?
+            LIMIT 1
+        ");
         $stmt->execute([$id]);
         return $stmt->fetch();
     }
@@ -188,6 +194,24 @@ class Product {
             LIMIT ?
         ");
         $stmt->execute([$category, $productId, $limit]);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Get related products by category_id, excluding the current product.
+     * @param int $categoryId
+     * @param int $excludeId
+     * @param int $limit
+     * @return array
+     */
+    public function getRelated($categoryId, $excludeId, $limit = 4) {
+        $stmt = $this->pdo->prepare(
+            "SELECT * FROM products WHERE category_id = ? AND id != ? ORDER BY RAND() LIMIT ?"
+        );
+        $stmt->bindValue(1, $categoryId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $excludeId, PDO::PARAM_INT);
+        $stmt->bindValue(3, $limit, PDO::PARAM_INT);
+        $stmt->execute();
         return $stmt->fetchAll();
     }
 

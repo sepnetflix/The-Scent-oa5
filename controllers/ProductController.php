@@ -5,6 +5,7 @@ require_once __DIR__ . '/../models/Product.php';
 class ProductController extends BaseController {
     private $productModel;
     private $itemsPerPage = 12;
+    private $cache = [];
     
     public function __construct($pdo) {
         parent::__construct($pdo);
@@ -115,8 +116,12 @@ class ProductController extends BaseController {
                 return;
             }
             
-            // Get related products
-            $relatedProducts = $this->productModel->getRelated($product['category'], $id, 4);
+            // Use category_id for related products
+            $categoryId = isset($product['category_id']) ? $product['category_id'] : null;
+            $relatedProducts = [];
+            if ($categoryId) {
+                $relatedProducts = $this->productModel->getRelated($categoryId, $id, 4);
+            }
             
             require_once __DIR__ . '/../views/product_detail.php';
             

@@ -6,21 +6,21 @@
             <!-- Product Gallery -->
             <div class="product-gallery" data-aos="fade-right">
                 <div class="main-image">
-                    <img src="<?= htmlspecialchars($product['image_url']) ?>" 
-                         alt="<?= htmlspecialchars($product['name']) ?>"
+                    <img src="<?= htmlspecialchars($product['image_url'] ?? '/images/placeholder.jpg') ?>" 
+                         alt="<?= htmlspecialchars($product['name'] ?? 'Product') ?>"
                          id="mainImage">
-                    <?php if ($product['featured']): ?>
+                    <?php if (!empty($product['featured'])): ?>
                         <span class="featured-badge">Featured</span>
                     <?php endif; ?>
                 </div>
                 <?php if (!empty($product['gallery_images'])): ?>
                     <div class="thumbnail-grid">
-                        <img src="<?= htmlspecialchars($product['image_url']) ?>" 
+                        <img src="<?= htmlspecialchars($product['image_url'] ?? '/images/placeholder.jpg') ?>" 
                              alt="Main view"
                              class="active"
                              onclick="updateMainImage(this)">
-                        <?php foreach (json_decode($product['gallery_images'], true) as $image): ?>
-                            <img src="<?= htmlspecialchars($image) ?>" 
+                        <?php foreach ((array)json_decode($product['gallery_images'], true) as $image): ?>
+                            <img src="<?= htmlspecialchars($image ?? '/images/placeholder.jpg') ?>" 
                                  alt="Additional view"
                                  onclick="updateMainImage(this)">
                         <?php endforeach; ?>
@@ -32,23 +32,23 @@
             <div class="product-info" data-aos="fade-left">
                 <nav class="breadcrumb">
                     <a href="index.php?page=products">Products</a> /
-                    <a href="index.php?page=products&category=<?= urlencode($product['category']) ?>">
-                        <?= htmlspecialchars($product['category']) ?>
+                    <a href="index.php?page=products&category=<?= urlencode($product['category'] ?? '') ?>">
+                        <?= htmlspecialchars($product['category'] ?? 'N/A') ?>
                     </a> /
-                    <span><?= htmlspecialchars($product['name']) ?></span>
+                    <span><?= htmlspecialchars($product['name'] ?? 'Product') ?></span>
                 </nav>
                 
-                <h1><?= htmlspecialchars($product['name']) ?></h1>
-                <p class="price">$<?= number_format($product['price'], 2) ?></p>
+                <h1><?= htmlspecialchars($product['name'] ?? 'Product') ?></h1>
+                <p class="price">$<?= isset($product['price']) ? number_format($product['price'], 2) : 'N/A' ?></p>
                 
                 <div class="product-description">
-                    <?= nl2br(htmlspecialchars($product['description'])) ?>
+                    <?= nl2br(htmlspecialchars($product['description'] ?? '')) ?>
                 </div>
                 
                 <div class="benefits">
                     <h3>Benefits</h3>
                     <ul>
-                        <?php foreach (json_decode($product['benefits'] ?? '[]', true) as $benefit): ?>
+                        <?php foreach ((array)json_decode($product['benefits'] ?? '[]', true) as $benefit): ?>
                             <li><i class="fas fa-check"></i> <?= htmlspecialchars($benefit) ?></li>
                         <?php endforeach; ?>
                     </ul>
@@ -60,7 +60,7 @@
                 </div>
                 
                 <form class="add-to-cart-form" action="index.php?page=cart&action=add" method="POST">
-                    <input type="hidden" name="product_id" value="<?= $product['id'] ?>">
+                    <input type="hidden" name="product_id" value="<?= $product['id'] ?? '' ?>">
                     <div class="quantity-selector">
                         <button type="button" class="quantity-btn minus">-</button>
                         <input type="number" name="quantity" value="1" min="1" max="99">
@@ -164,20 +164,20 @@
                     <?php foreach ($relatedProducts as $relatedProduct): ?>
                         <div class="product-card">
                             <div class="product-image">
-                                <a href="index.php?page=products&id=<?= $relatedProduct['id'] ?>">
-                                    <img src="<?= htmlspecialchars($relatedProduct['image_url']) ?>" 
-                                         alt="<?= htmlspecialchars($relatedProduct['name']) ?>">
+                                <a href="index.php?page=products&id=<?= $relatedProduct['id'] ?? '' ?>">
+                                    <img src="<?= htmlspecialchars($relatedProduct['image_url'] ?? '/images/placeholder.jpg') ?>" 
+                                         alt="<?= htmlspecialchars($relatedProduct['name'] ?? 'Product') ?>">
                                 </a>
                             </div>
                             <div class="product-info">
                                 <h3>
-                                    <a href="index.php?page=products&id=<?= $relatedProduct['id'] ?>">
-                                        <?= htmlspecialchars($relatedProduct['name']) ?>
+                                    <a href="index.php?page=products&id=<?= $relatedProduct['id'] ?? '' ?>">
+                                        <?= htmlspecialchars($relatedProduct['name'] ?? 'Product') ?>
                                     </a>
                                 </h3>
-                                <p class="price">$<?= number_format($relatedProduct['price'], 2) ?></p>
+                                <p class="price">$<?= isset($relatedProduct['price']) ? number_format($relatedProduct['price'], 2) : 'N/A' ?></p>
                                 <button class="btn-primary add-to-cart" 
-                                        data-product-id="<?= $relatedProduct['id'] ?>">
+                                        data-product-id="<?= $relatedProduct['id'] ?? '' ?>">
                                     Add to Cart
                                 </button>
                             </div>
