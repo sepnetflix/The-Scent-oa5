@@ -1,249 +1,94 @@
-After carefully reviewing the previously suggested fixes and the redesigned `views/product_detail.php` against the provided database schema in `the_scent_schema.sql`. Here's an updated validation and refinement of the suggestions:
+# Product Detail Page: Image Fix and Layout Enhancement (v2.0)
 
-# Product Detail Page: Schema Validation & Refined Fixes (v1.1)
-
-## 1. Validation Summary
-
-The previous analysis suggested fixes for the product detail page, including resolving image path issues and enhancing the layout. This document validates those suggestions against the provided `the_scent_schema.sql.txt` database schema.
-
-**Confirmed Consistencies:**
-
-*   **Image Path:** The fix to use `$product['image']` instead of `$product['image_url']` in `views/product_detail.php` **is consistent** with the schema, which defines an `image` column in the `products` table. This remains the correct fix for the placeholder image issue.
-*   **Core Fields:** Fields like `id`, `name`, `description`, `price`, `category_id`, `is_featured`, `stock_quantity`, and `low_stock_threshold` used in the revised view exist in the `products` schema.
-*   **Category Name:** The use of `$product['category_name']` is achievable via a `LEFT JOIN` from `products.category_id` to `categories.id` and selecting `categories.name`.
-
-**Identified Inconsistencies & Missing Fields:**
-
-Several fields used in the *enhanced* `views/product_detail.php` suggestion are **missing** from the provided `products` table schema:
-
-1.  `short_description`: Schema only has `description`.
-2.  `benefits`: Schema does not have a dedicated field for benefits (expected to be JSON/text).
-3.  `ingredients`: Schema does not have this field (expected to be TEXT).
-4.  `gallery_images`: Schema does not have this field (expected to be JSON/text).
-5.  `size`: Schema does not have this field (expected to be VARCHAR).
-6.  `scent_profile`: Schema does not have this field directly. The `product_attributes` table has `scent_type`, `mood_effect`, `intensity_level` which could be combined or used instead, requiring a JOIN.
-7.  `origin`: Schema does not have this field (expected to be VARCHAR).
-8.  `sku`: Schema does not have this field (expected to be VARCHAR).
-9.  `usage_instructions`: Schema does not have this field (expected to be TEXT).
-10. `backorder_allowed`: Schema does not have this field (expected to be TINYINT). Relied upon by the suggested view's stock logic.
-11. `benefits_list`: Used in the older `product_detail.php`, seems redundant if `benefits` is added.
-
-**Redundancy:**
-
-*   The `products` table contains both `stock` and `stock_quantity` columns. This is redundant. Based on the view code using `stock_quantity` and `low_stock_threshold`, it's likely `stock_quantity` is the intended primary field. The `stock` column should probably be removed.
-
-## 2. Refined Solutions
-
-To fully implement the *enhanced* product detail page as suggested previously, the database schema and controller queries need updates.
-
-### Solution Option A: Modify Schema (Recommended for Full Feature Set)
-
-This approach adds the missing fields to the database for the richest product detail display.
-
-1.  **Update Database Schema:** Execute the following `ALTER TABLE` statements (or integrate them into your schema management).
-
-    ```sql
-    -- Add missing columns to the products table
-    ALTER TABLE products
-      ADD COLUMN short_description TEXT COLLATE utf8mb4_unicode_ci NULL AFTER description,
-      ADD COLUMN benefits JSON NULL AFTER price, -- Or TEXT if JSON type not supported/preferred
-      ADD COLUMN ingredients TEXT COLLATE utf8mb4_unicode_ci NULL AFTER benefits,
-      ADD COLUMN usage_instructions TEXT COLLATE utf8mb4_unicode_ci NULL AFTER ingredients,
-      ADD COLUMN gallery_images JSON NULL AFTER image, -- Or TEXT
-      ADD COLUMN size VARCHAR(50) COLLATE utf8mb4_unicode_ci NULL AFTER stock_quantity,
-      ADD COLUMN scent_profile VARCHAR(255) COLLATE utf8mb4_unicode_ci NULL AFTER size, -- Add if a simple text profile is preferred over joining product_attributes
-      ADD COLUMN origin VARCHAR(100) COLLATE utf8mb4_unicode_ci NULL AFTER scent_profile,
-      ADD COLUMN sku VARCHAR(100) COLLATE utf8mb4_unicode_ci NULL AFTER origin,
-      ADD COLUMN backorder_allowed TINYINT(1) DEFAULT 0 NULL AFTER reorder_point; -- Added nullable for existing rows
-
-    -- Add a unique constraint to SKU if desired
-    ALTER TABLE products
-      ADD CONSTRAINT sku_unique UNIQUE (sku);
-
-    -- Remove the redundant 'stock' column if 'stock_quantity' is authoritative
-    ALTER TABLE products
-      DROP COLUMN stock;
-
-    -- Optional: Add indexes for new filterable/searchable fields if needed
-    -- ALTER TABLE products ADD INDEX idx_sku (sku);
-    ```
-
-2.  **Update Controller Query (`ProductController::showProduct` / `Product::getById`):** Modify the database query to select the newly added fields and perform the JOIN for `category_name`.
-
-    ```php
-    // Inside ProductController::showProduct() or Model Product::getById()
-    // Conceptual Query Update:
-    $stmt = $this->pdo->prepare("
-        SELECT
-            p.id, p.name, p.description, p.image, p.price, p.category_id,
-            p.is_featured, p.created_at, p.low_stock_threshold, p.updated_at,
-            p.highlight_text, p.stock_quantity,
-            -- Newly added fields for the enhanced view --
-            p.short_description,
-            p.benefits, -- Fetched as JSON string or TEXT
-            p.ingredients,
-            p.usage_instructions,
-            p.gallery_images, -- Fetched as JSON string or TEXT
-            p.size,
-            p.scent_profile, -- If added directly to products table
-            p.origin,
-            p.sku,
-            p.backorder_allowed,
-            -- Joined field --
-            c.name as category_name
-            -- Optionally JOIN product_attributes if not using p.scent_profile --
-            -- pa.scent_type, pa.mood_effect, pa.intensity_level --
-        FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
-        -- Optional JOIN for product_attributes if needed:
-        -- LEFT JOIN product_attributes pa ON p.id = pa.product_id
-        WHERE p.id = ?
-        LIMIT 1
-    ");
-    $stmt->execute([$id]);
-    $product = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    // Potentially decode JSON fields after fetching if stored as JSON
-    if ($product && isset($product['benefits'])) {
-        $product['benefits'] = json_decode($product['benefits'], true) ?? []; // Handle potential decode errors
-    }
-    if ($product && isset($product['gallery_images'])) {
-        $product['gallery_images'] = json_decode($product['gallery_images'], true) ?? [];
-    }
-
-    return $product; // Return the comprehensive product data
-    ```
-
-3.  **Update View (`views/product_detail.php`):** The enhanced view provided previously should now work correctly as it expects these fields (e.g., `$product['short_description']`, `$product['benefits']`, `$product['ingredients']`, etc.). Ensure JSON fields like `benefits` and `gallery_images` are handled appropriately (e.g., checking `is_array` before looping).
-
-### Solution Option B: Adapt View to Existing Schema (Less Ideal)
-
-If modifying the database schema is not feasible immediately, adapt the enhanced `views/product_detail.php` to work *without* the missing fields.
-
-1.  **No Schema Changes.**
-2.  **Update Controller Query:** Only select existing fields (`id`, `name`, `description`, `image`, `price`, `category_id`, `is_featured`, `stock_quantity`, `low_stock_threshold`, etc.) and JOIN `categories` for `category_name`. Optionally JOIN `product_attributes`.
-3.  **Update View (`views/product_detail.php`):**
-    *   Remove sections or display placeholder text for missing data (`short_description`, `benefits`, `ingredients`, `gallery_images`, `size`, `scent_profile`, `origin`, `sku`, `usage_instructions`).
-    *   Remove or adapt logic relying on `$product['backorder_allowed']`.
-    *   If joining `product_attributes`, display `scent_type`, `mood_effect`, `intensity_level` instead of `scent_profile`.
-    *   Example Adaptation (removing `short_description` section):
-        ```php
-        <!-- Remove this section if short_description column is not added -->
-        <?php /* if (!empty($product['short_description'])): ?>
-        <p class="text-gray-700 text-lg"><?= nl2br(htmlspecialchars($product['short_description'])) ?></p>
-        <?php endif; */ ?>
-
-        <!-- Modify stock logic if backorder_allowed is not available -->
-        <?php if (isset($product['stock_quantity']) && $product['stock_quantity'] > 0): ?>
-            <button type="submit" class="btn btn-primary ...">Add to Cart</button>
-             <?php if (isset($product['low_stock_threshold']) && $product['stock_quantity'] <= $product['low_stock_threshold']): ?>
-                 <p class="text-sm text-yellow-600 ...">Low Stock!</p>
-             <?php endif; ?>
-        <?php else: ?>
-             <button type="button" class="btn btn-disabled ..." disabled>Out of Stock</button>
-        <?php endif; ?>
-        ```
-
-## 3. Recommendation
-
-**Option A (Modify Schema)** is strongly recommended. It allows the product detail page to be truly informative and utilize the enhanced design effectively. It brings the database structure in line with the data requirements of a modern e-commerce product display.
-
-Regardless of the option chosen, ensure the following are addressed:
-
-*   **Image Path:** Consistently use `$product['image']` in all relevant view files (`product_detail.php`, `products.php`, verify `home.php`).
-*   **Stock Redundancy:** Decide whether `stock` or `stock_quantity` is the correct field and remove the other from the `products` table and any code referencing it. (`stock_quantity` seems preferred).
-*   **Controller Queries:** Ensure the queries in `ProductController` and the `Product` model fetch all required fields for the chosen display option.
-*   **AJAX Fix:** Implement the previously suggested fix for the Add-to-Cart AJAX handling (`index.php` returning JSON) as the enhanced view's JavaScript relies on it.
-
-By aligning the database schema, controller queries, and view code, you can resolve the image issue and successfully implement the improved, visually consistent, and informative product detail page.
-
----
-# Product Detail Page: Image and Layout Fixes (v1.0)
+**Document Version:** 2.0
+**Date:** 2024-05-16
 
 ## 1. Problem Summary
 
-The product detail page (e.g., for product ID 1) currently exhibits two main issues:
+The product detail page, specifically `/index.php?page=product&id=1` (output shown in `view_details_product_id-1.html`), has two primary issues:
 
-1.  **Missing Product Images:** It displays a generic `/images/placeholder.jpg` instead of the actual product image, despite efforts to update image paths in the database.
-2.  **Suboptimal Layout & Design:** The page layout is basic, lacks visual appeal, doesn't present product information effectively (many fields are empty in the example output), and is inconsistent with the more polished design of the main landing page.
+1.  **Missing Product Image:** The page displays the generic `/images/placeholder.jpg` instead of the actual product image stored in the database.
+2.  **Inconsistent & Suboptimal Layout:** The page's design and structure are basic, lack visual appeal, don't effectively present information (many fields appear empty), and are inconsistent with the modern, polished design of the main landing page (`current_landing_page.html`).
 
-This document outlines the causes and suggests fixes to resolve the image issue and significantly enhance the layout and design of the product detail page.
+This document provides the solution for the image path issue and recommends adopting the previously suggested enhanced layout for a consistent and improved user experience.
 
-## 2. Issue 1: Missing Product Images
-
-### Analysis
-
-1.  **Database Path Update:** The provided SQL (`modify_product_image_paths.sql`) updates a database column named `image` to a path like `/images/products/1.jpg`. This assumes the `products` table has an `image` column.
-2.  **View Code Expectation:** The `views/product_detail.php` file attempts to display the main product image using the variable `$product['image_url']`:
-    ```php
-    <img src="<?= htmlspecialchars($product['image_url'] ?? '/images/placeholder.jpg') ?>" ... >
-    ```
-3.  **Related Files:** Other files like `views/products.php` and `views/home.php` (based on its code structure using `$product['image']`) might also be referencing product images. The `views/products.php` file currently uses `$product['image_url']`, while `views/home.php` uses `$product['image']`. This inconsistency needs to be addressed.
-4.  **Likely Cause:** The core issue is a mismatch between the database column name (`image`) and the variable key used in the product detail view (`image_url`). Since `$product['image_url']` is likely `null` or not set based on the database query result (which fetches the `image` column), the null coalescing operator (`??`) correctly falls back to `/images/placeholder.jpg`.
-
-### Solution
-
-Align the PHP code with the actual database column name (`image`). This requires modifying the view files that display product images.
-
-1.  **Modify `views/product_detail.php`:** Change `$product['image_url']` to `$product['image']`.
-
-    ```php
-    // Inside views/product_detail.php - Main Image
-    <img src="<?= htmlspecialchars($product['image'] ?? '/images/placeholder.jpg') ?>"
-         alt="<?= htmlspecialchars($product['name'] ?? 'Product') ?>"
-         id="mainImage">
-
-    // Inside views/product_detail.php - Thumbnail Grid (Main Image Thumbnail)
-    <img src="<?= htmlspecialchars($product['image'] ?? '/images/placeholder.jpg') ?>"
-         alt="Main view"
-         class="active"
-         onclick="updateMainImage(this)">
-
-    // Inside views/product_detail.php - Related Products Loop
-    <img src="<?= htmlspecialchars($relatedProduct['image'] ?? '/images/placeholder.jpg') ?>"
-         alt="<?= htmlspecialchars($relatedProduct['name'] ?? 'Product') ?>">
-    ```
-
-2.  **Modify `views/products.php`:** Change `$product['image_url']` to `$product['image']` for consistency.
-
-    ```php
-    // Inside views/products.php - Products Grid Loop
-    <img src="<?= htmlspecialchars($product['image'] ?? '/images/placeholder.jpg') ?>"
-         alt="<?= htmlspecialchars($product['name']) ?>">
-    ```
-
-3.  **Verify `views/home.php`:** The provided `views/home.php` code already seems to correctly use `$product['image']`. No change needed there based on the provided snippet.
-
-    ```php
-    // Inside views/home.php - Featured Products Loop (Already correct)
-    <img src="<?= htmlspecialchars($product['image'] ?? '/images/placeholder.jpg') ?>"
-         alt="<?= htmlspecialchars($product['name']) ?>"
-         class="w-full h-64 object-cover" loading="lazy">
-    ```
-
-### Database Consideration
-
-*   Ensure the `image` column in the `products` table exists and contains the correct *relative* web paths to the images (e.g., `/images/products/1.jpg`, `/images/products/2.jpg`, etc.).
-*   Ensure the image files themselves exist at these locations within your web root's `images/products/` directory.
-
-## 3. Issue 2: Layout and Design Enhancement
+## 2. Issue 1: Fixing the Missing Product Image
 
 ### Analysis
 
-The current product detail page (`view_details_product_id-1.html`) lacks the visual polish and structure of the landing page (`current_landing_page.html`). It uses basic HTML structure without leveraging Tailwind CSS effectively for layout, typography, and styling. Key information sections (Benefits, Ingredients, Usage) are present in the PHP file but appear empty in the output, indicating missing data, but the layout itself needs improvement regardless.
+*   **Database:** The `the_scent_schema.sql.txt` schema defines the product image column as `image` in the `products` table. Database updates likely populated this column with paths like `/images/products/1.jpg`.
+*   **View Code (`views/product_detail.php` - Original):** The code attempts to display the image using `$product['image_url']`.
+*   **Cause:** There's a mismatch. The code looks for `$product['image_url']`, but the database query (presumably fetching data based on the `products` table schema via `Product::getById`) provides the data under the key `$product['image']`. Since `$product['image_url']` is unset, the code falls back to the placeholder image (`?? '/images/placeholder.jpg'`).
+*   **Consistency Check:** Other views like `views/products.php` might also incorrectly use `image_url`, while `views/home.php` correctly uses `image`.
 
 ### Solution
 
-Revamp `views/product_detail.php` to use Tailwind CSS classes extensively, mirroring the design language of the landing page. This involves restructuring the HTML, applying utility classes for layout, spacing, typography, colors, and incorporating elements like improved tabs and styled related product cards.
+Standardize the variable key used in all view templates to match the database schema column name: `image`.
 
-### Code Snippet: Revised `views/product_detail.php`
+1.  **Modify `views/product_detail.php` (Original or Redesigned):** Ensure the `img` tag uses `$product['image']`. *Note: The redesigned code snippet in section 3 already incorporates this fix.*
 
-This revised version aims for a modern, informative, and visually appealing layout consistent with the landing page.
+    ```php
+    // Change this:
+    // <img src="<?= htmlspecialchars($product['image_url'] ?? '/images/placeholder.jpg') ?>" ... >
+
+    // To this:
+    <img src="<?= htmlspecialchars($product['image'] ?? '/images/placeholder.jpg') ?>" ... >
+    ```
+    Apply this change to the main image display, the main image thumbnail (if present), and the related product image loop.
+
+2.  **Modify `views/products.php`:** Update the product grid loop to use `$product['image']`.
+
+    ```php
+    // In views/products.php - Products Grid Loop
+    // Change this:
+    // <img src="<?= htmlspecialchars($product['image_url']) ?>" ... >
+
+    // To this:
+    <img src="<?= htmlspecialchars($product['image'] ?? '/images/placeholder.jpg') ?>"
+         alt="<?= htmlspecialchars($product['name'] ?? 'Product') ?>">
+    ```
+
+3.  **Verify `views/home.php`:** The provided code for `home.php` already uses `$product['image']` correctly.
+
+### Verification Steps
+
+*   Confirm the `image` column exists in your `products` table.
+*   Verify that the `image` column contains the correct, *relative* web paths (e.g., `/images/products/1.jpg`).
+*   Ensure the actual image files (e.g., `1.jpg`, `2.jpg`) exist in the `/images/products/` directory within your project's web root.
+*   Check that the database query within `ProductController::showProduct` (or `Product::getById` model method) selects the `image` column.
+
+## 3. Issue 2: Enhancing Layout and Design
+
+### Analysis
+
+The current product detail page lacks the structure, styling, and modern feel of the landing page. It doesn't effectively use Tailwind CSS and presents information poorly.
+
+### Solution: Adopt Redesigned View
+
+The most effective way to achieve a consistent and improved design is to **replace the content of your existing `views/product_detail.php` with the enhanced version provided in the reference document `suggestions_for_improvement_images.md` (section 3, "Code Snippet: Revised `views/product_detail.php`")**.
+
+This redesigned code provides:
+
+*   **Consistent Styling:** Uses Tailwind CSS extensively, matching the landing page's fonts, colors (`primary`, `secondary`, `accent`), spacing, and button styles.
+*   **Modern Layout:** Implements a responsive two-column layout (gallery left, info right) using Tailwind Grid.
+*   **Improved Gallery:** Features a main image display with optional badges (Featured, Out of Stock, Low Stock) and interactive thumbnails below.
+*   **Clear Information Hierarchy:** Better organization of title, price, descriptions, benefits, ingredients, etc., using appropriate typography and spacing.
+*   **Enhanced Tabs:** Styles the product detail tabs (Details, Usage, Shipping, Reviews) for better usability.
+*   **AJAX Add-to-Cart:** Includes JavaScript for the main "Add to Cart" button to submit via AJAX for a smoother experience (requires backend JSON response).
+*   **Styled Related Products:** Uses the same visually appealing card style as the landing page for related products.
+*   **Image Path Fix:** Already incorporates the necessary `$product['image']` fix identified in Issue 1.
+
+### Code Implementation
+
+**Replace the entire content** of your current `views/product_detail.php` file with the code block found under "Code Snippet: Revised `views/product_detail.php`" in the `suggestions_for_improvement_images.md` file.
+
+**(The full code snippet from that document is embedded here again for convenience):**
 
 ```php
 <?php
 // Ensure BaseController or similar provides $this->getCsrfToken() or make $_SESSION['csrf_token'] available directly
-$csrfToken = $_SESSION['csrf_token'] ?? '';
+// *** IMPORTANT: Ensure CSRF token generation is fixed first (see suggested_improvements_and_fixes.md) ***
+$csrfToken = $_SESSION['csrf_token'] ?? ''; // Make sure this actually has a value
 require_once __DIR__ . '/layout/header.php'; // Includes <head>, Tailwind config, main nav
 ?>
 
@@ -257,9 +102,10 @@ require_once __DIR__ . '/layout/header.php'; // Includes <head>, Tailwind config
                     <a href="index.php?page=products" class="hover:text-primary">Products</a>
                     <svg class="fill-current w-3 h-3 mx-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><path d="M285.476 272.971L91.132 467.314c-9.373 9.373-24.569 9.373-33.941 0l-22.667-22.667c-9.357-9.357-9.375-24.522-.04-33.901L188.505 256 34.484 101.255c-9.335-9.379-9.317-24.544.04-33.901l22.667-22.667c9.373-9.373 24.569-9.373 33.941 0L285.475 239.03c9.373 9.372 9.373 24.568.001 33.941z"/></svg>
                 </li>
-                <?php if (!empty($product['category_name'])): ?>
+                <?php // Use category_id for link consistency, category_name for display ?>
+                <?php if (!empty($product['category_name']) && !empty($product['category_id'])): ?>
                 <li class="flex items-center">
-                    <a href="index.php?page=products&category=<?= urlencode($product['category_name']) ?>" class="hover:text-primary">
+                    <a href="index.php?page=products&category=<?= urlencode($product['category_id']) ?>" class="hover:text-primary">
                         <?= htmlspecialchars($product['category_name']) ?>
                     </a>
                     <svg class="fill-current w-3 h-3 mx-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><path d="M285.476 272.971L91.132 467.314c-9.373 9.373-24.569 9.373-33.941 0l-22.667-22.667c-9.357-9.357-9.375-24.522-.04-33.901L188.505 256 34.484 101.255c-9.335-9.379-9.317-24.544.04-33.901l22.667-22.667c9.373-9.373 24.569-9.373 33.941 0L285.475 239.03c9.373 9.372 9.373 24.568.001 33.941z"/></svg>
@@ -276,26 +122,33 @@ require_once __DIR__ . '/layout/header.php'; // Includes <head>, Tailwind config
             <!-- Product Gallery -->
             <div class="product-gallery space-y-4" data-aos="fade-right">
                 <div class="main-image relative overflow-hidden rounded-lg shadow-lg aspect-square">
+                    <?php // *** IMAGE PATH FIX APPLIED HERE *** ?>
                     <img src="<?= htmlspecialchars($product['image'] ?? '/images/placeholder.jpg') ?>"
                          alt="<?= htmlspecialchars($product['name'] ?? 'Product') ?>"
                          id="mainImage" class="w-full h-full object-cover transition-transform duration-300 ease-in-out hover:scale-105">
                     <?php if (!empty($product['is_featured'])): ?>
                         <span class="absolute top-3 left-3 bg-accent text-white text-xs font-semibold px-3 py-1 rounded-full shadow">Featured</span>
                     <?php endif; ?>
-                     <?php if (isset($product['stock_quantity']) && $product['stock_quantity'] <= 0 && empty($product['backorder_allowed'])): ?>
+                     <?php // Check using backorder_allowed if available, otherwise just stock_quantity ?>
+                     <?php
+                       $isOutOfStock = (!isset($product['stock_quantity']) || $product['stock_quantity'] <= 0) && empty($product['backorder_allowed']);
+                       $isLowStock = !$isOutOfStock && isset($product['low_stock_threshold']) && isset($product['stock_quantity']) && $product['stock_quantity'] <= $product['low_stock_threshold'];
+                     ?>
+                     <?php if ($isOutOfStock): ?>
                          <span class="absolute top-3 right-3 bg-red-600 text-white text-xs font-semibold px-3 py-1 rounded-full shadow">Out of Stock</span>
-                    <?php elseif (isset($product['low_stock_threshold']) && isset($product['stock_quantity']) && $product['stock_quantity'] <= $product['low_stock_threshold']): ?>
+                    <?php elseif ($isLowStock): ?>
                          <span class="absolute top-3 right-3 bg-yellow-500 text-white text-xs font-semibold px-3 py-1 rounded-full shadow">Low Stock</span>
                     <?php endif; ?>
                 </div>
                 <?php
-                    // Attempt to decode gallery images - assumes JSON array string or null
-                    $galleryImages = json_decode($product['gallery_images'] ?? '[]', true);
+                    // Attempt to decode gallery images - requires 'gallery_images' column in DB (see Dependencies)
+                    $galleryImages = isset($product['gallery_images']) ? (json_decode($product['gallery_images'], true) ?? []) : [];
                 ?>
                 <?php if (!empty($galleryImages) && is_array($galleryImages)): ?>
                     <div class="thumbnail-grid grid grid-cols-4 gap-3">
                         <!-- Thumbnail for Main Image -->
                         <div class="border-2 border-primary rounded overflow-hidden cursor-pointer aspect-square">
+                             <?php // *** IMAGE PATH FIX APPLIED HERE *** ?>
                              <img src="<?= htmlspecialchars($product['image'] ?? '/images/placeholder.jpg') ?>"
                                   alt="View 1"
                                   class="w-full h-full object-cover active"
@@ -303,7 +156,7 @@ require_once __DIR__ . '/layout/header.php'; // Includes <head>, Tailwind config
                          </div>
                         <!-- Thumbnails for Gallery Images -->
                         <?php foreach ($galleryImages as $index => $imagePath): ?>
-                            <?php if (!empty($imagePath)): ?>
+                            <?php if (!empty($imagePath) && is_string($imagePath)): // Basic validation ?>
                             <div class="border rounded overflow-hidden cursor-pointer aspect-square">
                                 <img src="<?= htmlspecialchars($imagePath) ?>"
                                      alt="View <?= $index + 2 ?>"
@@ -313,46 +166,57 @@ require_once __DIR__ . '/layout/header.php'; // Includes <head>, Tailwind config
                             <?php endif; ?>
                         <?php endforeach; ?>
                     </div>
+                 <?php // Optionally show a single thumbnail if gallery is empty but main image exists ?>
+                 <?php elseif (empty($galleryImages) && !empty($product['image']) && $product['image'] !== '/images/placeholder.jpg'): ?>
+                     <div class="thumbnail-grid grid grid-cols-4 gap-3">
+                          <div class="border-2 border-primary rounded overflow-hidden cursor-pointer aspect-square">
+                               <img src="<?= htmlspecialchars($product['image']) ?>" alt="View 1" class="w-full h-full object-cover active">
+                          </div>
+                     </div>
                 <?php endif; ?>
             </div>
 
             <!-- Product Info -->
             <div class="product-info space-y-6" data-aos="fade-left">
-                <h1 class="text-3xl md:text-4xl font-bold font-heading text-primary"><?= htmlspecialchars($product['name'] ?? 'Product') ?></h1>
+                <h1 class="text-3xl md:text-4xl font-bold font-heading text-primary"><?= htmlspecialchars($product['name'] ?? 'Product Name Unavailable') ?></h1>
 
                 <p class="text-2xl font-semibold text-accent font-accent">$<?= isset($product['price']) ? number_format($product['price'], 2) : 'N/A' ?></p>
 
-                <!-- Short Description -->
+                <!-- Short Description - Requires 'short_description' column in DB -->
                 <?php if (!empty($product['short_description'])): ?>
                 <p class="text-gray-700 text-lg"><?= nl2br(htmlspecialchars($product['short_description'])) ?></p>
                 <?php endif; ?>
 
-                <!-- Full Description (if different from short) -->
-                 <?php if (!empty($product['description']) && $product['description'] !== ($product['short_description'] ?? '')): ?>
+                <!-- Full Description (Show if different from short, or if short is empty) -->
+                 <?php if (!empty($product['description']) && (empty($product['short_description']) || $product['description'] !== $product['short_description'])): ?>
                  <div class="prose max-w-none text-gray-600">
                     <?= nl2br(htmlspecialchars($product['description'])) ?>
                  </div>
+                 <?php elseif (empty($product['short_description']) && empty($product['description'])): ?>
+                     <p class="text-gray-500 italic">No description available.</p>
                  <?php endif; ?>
 
 
-                <!-- Benefits (Example Display) -->
-                <?php $benefits = json_decode($product['benefits'] ?? '[]', true); ?>
+                <!-- Benefits - Requires 'benefits' column (JSON/TEXT) in DB -->
+                <?php $benefits = isset($product['benefits']) ? (json_decode($product['benefits'], true) ?? []) : []; ?>
                 <?php if (!empty($benefits) && is_array($benefits)): ?>
                 <div class="benefits border-t pt-4">
                     <h3 class="text-lg font-semibold mb-3 text-primary-dark">Benefits</h3>
-                    <ul class="list-disc list-inside space-y-1 text-gray-600">
+                    <ul class="list-none space-y-1 text-gray-600">
                         <?php foreach ($benefits as $benefit): ?>
-                            <li><i class="fas fa-check-circle text-secondary mr-2"></i><?= htmlspecialchars($benefit) ?></li>
+                            <?php if(!empty($benefit) && is_string($benefit)): // Basic validation ?>
+                            <li class="flex items-start"><i class="fas fa-check-circle text-secondary mr-2 mt-1 flex-shrink-0"></i><span><?= htmlspecialchars($benefit) ?></span></li>
+                            <?php endif; ?>
                         <?php endforeach; ?>
                     </ul>
                 </div>
                 <?php endif; ?>
 
-                <!-- Ingredients (Example Display) -->
+                <!-- Ingredients - Requires 'ingredients' column (TEXT) in DB -->
                  <?php if (!empty($product['ingredients'])): ?>
                  <div class="ingredients border-t pt-4">
                      <h3 class="text-lg font-semibold mb-3 text-primary-dark">Key Ingredients</h3>
-                     <p class="text-gray-600"><?= htmlspecialchars($product['ingredients']) ?></p>
+                     <p class="text-gray-600"><?= nl2br(htmlspecialchars($product['ingredients'])) ?></p>
                  </div>
                  <?php endif; ?>
 
@@ -360,22 +224,25 @@ require_once __DIR__ . '/layout/header.php'; // Includes <head>, Tailwind config
                 <!-- Add to Cart Form -->
                 <form class="add-to-cart-form space-y-4 border-t pt-6" action="index.php?page=cart&action=add" method="POST" id="product-detail-add-cart-form">
                     <input type="hidden" name="product_id" value="<?= $product['id'] ?? '' ?>">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) // Ensure $csrfToken has value ?>">
 
                     <div class="flex items-center space-x-4">
-                        <label for="quantity" class="font-semibold">Quantity:</label>
-                        <div class="quantity-selector flex items-center border rounded">
-                            <button type="button" class="quantity-btn minus w-10 h-10 text-lg text-gray-600 hover:bg-gray-100 transition duration-150 ease-in-out">-</button>
-                            <input type="number" id="quantity" name="quantity" value="1" min="1" max="<?= $product['stock_quantity'] ?? 99 ?>" class="w-16 text-center border-l border-r focus:outline-none focus:ring-1 focus:ring-primary">
-                            <button type="button" class="quantity-btn plus w-10 h-10 text-lg text-gray-600 hover:bg-gray-100 transition duration-150 ease-in-out">+</button>
+                        <label for="quantity" class="font-semibold text-gray-700">Quantity:</label>
+                        <div class="quantity-selector flex items-center border border-gray-300 rounded">
+                            <button type="button" class="quantity-btn minus w-10 h-10 text-xl font-light text-gray-600 hover:bg-gray-100 transition duration-150 ease-in-out rounded-l" aria-label="Decrease quantity">-</button>
+                            <?php // Set max based on stock if not backorderable ?>
+                            <input type="number" id="quantity" name="quantity" value="1" min="1" max="<?= (!empty($product['backorder_allowed']) || !isset($product['stock_quantity'])) ? 99 : max(1, $product['stock_quantity']) ?>" class="w-16 h-10 text-center border-l border-r border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary" aria-label="Product quantity">
+                            <button type="button" class="quantity-btn plus w-10 h-10 text-xl font-light text-gray-600 hover:bg-gray-100 transition duration-150 ease-in-out rounded-r" aria-label="Increase quantity">+</button>
                         </div>
                     </div>
 
-                    <?php if (isset($product['stock_quantity']) && $product['stock_quantity'] > 0): ?>
+                    <?php // Use $isOutOfStock flag calculated earlier ?>
+                    <?php if (!$isOutOfStock): ?>
                         <button type="submit" class="btn btn-primary w-full py-3 text-lg add-to-cart">
                             <i class="fas fa-shopping-cart mr-2"></i> Add to Cart
                         </button>
-                        <?php if (isset($product['low_stock_threshold']) && $product['stock_quantity'] <= $product['low_stock_threshold']): ?>
+                        <?php // Use $isLowStock flag calculated earlier ?>
+                        <?php if ($isLowStock): ?>
                              <p class="text-sm text-yellow-600 text-center mt-2">Limited quantity available!</p>
                          <?php endif; ?>
                     <?php else: ?>
@@ -389,7 +256,7 @@ require_once __DIR__ . '/layout/header.php'; // Includes <head>, Tailwind config
                 <div class="additional-info flex flex-wrap justify-around border-t pt-6 text-center text-sm text-gray-600">
                     <div class="info-item p-2 w-1/3">
                         <i class="fas fa-shipping-fast text-2xl text-secondary mb-2 block"></i>
-                        <span>Free shipping over $50</span>
+                        <span>Free shipping over $<?= number_format(FREE_SHIPPING_THRESHOLD ?? 50, 2) ?></span>
                     </div>
                     <div class="info-item p-2 w-1/3">
                         <i class="fas fa-undo text-2xl text-secondary mb-2 block"></i>
@@ -405,103 +272,125 @@ require_once __DIR__ . '/layout/header.php'; // Includes <head>, Tailwind config
 
         <!-- Product Details Tabs -->
         <div class="product-tabs mt-16 md:mt-24" data-aos="fade-up">
-            <div class="tabs-header border-b mb-8 flex space-x-8">
-                <button class="tab-btn py-3 px-1 border-b-2 border-transparent text-lg font-medium text-gray-500 hover:text-primary hover:border-primary focus:outline-none active" data-tab="details">Details</button>
-                <button class="tab-btn py-3 px-1 border-b-2 border-transparent text-lg font-medium text-gray-500 hover:text-primary hover:border-primary focus:outline-none" data-tab="usage">How to Use</button>
-                <button class="tab-btn py-3 px-1 border-b-2 border-transparent text-lg font-medium text-gray-500 hover:text-primary hover:border-primary focus:outline-none" data-tab="shipping">Shipping</button>
-                <button class="tab-btn py-3 px-1 border-b-2 border-transparent text-lg font-medium text-gray-500 hover:text-primary hover:border-primary focus:outline-none" data-tab="reviews">Reviews</button>
+            <div class="tabs-header border-b border-gray-200 mb-8 flex space-x-8">
+                <?php // Determine which tabs have content to show ?>
+                <?php $hasDetails = !empty($product['size']) || !empty($product['scent_profile']) || !empty($product['origin']) || !empty($product['sku']); ?>
+                <?php $hasUsage = !empty($product['usage_instructions']); ?>
+                <?php $hasShipping = true; // Always show shipping info ?>
+                <?php $hasReviews = true; // Always show reviews section (even if empty) ?>
+
+                <?php $activeTab = $hasDetails ? 'details' : ($hasUsage ? 'usage' : ($hasShipping ? 'shipping' : 'reviews')); // Set default active tab ?>
+
+                <?php if ($hasDetails): ?>
+                <button class="tab-btn py-3 px-1 border-b-2 text-lg font-medium focus:outline-none <?= $activeTab === 'details' ? 'text-primary border-primary' : 'text-gray-500 border-transparent hover:text-primary hover:border-gray-300' ?>" data-tab="details">Details</button>
+                <?php endif; ?>
+                <?php if ($hasUsage): ?>
+                <button class="tab-btn py-3 px-1 border-b-2 text-lg font-medium focus:outline-none <?= $activeTab === 'usage' ? 'text-primary border-primary' : 'text-gray-500 border-transparent hover:text-primary hover:border-gray-300' ?>" data-tab="usage">How to Use</button>
+                 <?php endif; ?>
+                <?php if ($hasShipping): ?>
+                <button class="tab-btn py-3 px-1 border-b-2 text-lg font-medium focus:outline-none <?= $activeTab === 'shipping' ? 'text-primary border-primary' : 'text-gray-500 border-transparent hover:text-primary hover:border-gray-300' ?>" data-tab="shipping">Shipping</button>
+                <?php endif; ?>
+                 <?php if ($hasReviews): ?>
+                <button class="tab-btn py-3 px-1 border-b-2 text-lg font-medium focus:outline-none <?= $activeTab === 'reviews' ? 'text-primary border-primary' : 'text-gray-500 border-transparent hover:text-primary hover:border-gray-300' ?>" data-tab="reviews">Reviews</button>
+                <?php endif; ?>
             </div>
 
-            <div class="tab-content">
-                <div id="details" class="tab-pane active prose max-w-none">
-                    <h3 class="text-xl font-semibold mb-4 text-primary-dark">Product Details</h3>
-                    <table class="details-table w-full text-left text-gray-600">
-                        <tbody>
-                            <?php if (!empty($product['size'])): ?>
-                            <tr class="border-b"><th class="py-2 pr-4 font-medium">Size</th><td class="py-2"><?= htmlspecialchars($product['size']) ?></td></tr>
-                            <?php endif; ?>
-                             <?php if (!empty($product['scent_profile'])): ?>
-                            <tr class="border-b"><th class="py-2 pr-4 font-medium">Scent Profile</th><td class="py-2"><?= htmlspecialchars($product['scent_profile']) ?></td></tr>
-                             <?php endif; ?>
-                             <?php if (!empty($product['benefits_list'])): ?>
-                            <tr class="border-b"><th class="py-2 pr-4 font-medium">Key Benefits</th><td class="py-2"><?= htmlspecialchars($product['benefits_list']) ?></td></tr>
-                             <?php endif; ?>
-                            <?php if (!empty($product['origin'])): ?>
-                            <tr class="border-b"><th class="py-2 pr-4 font-medium">Origin</th><td class="py-2"><?= htmlspecialchars($product['origin']) ?></td></tr>
-                             <?php endif; ?>
-                             <?php if (!empty($product['sku'])): ?>
-                             <tr class="border-b"><th class="py-2 pr-4 font-medium">SKU</th><td class="py-2"><?= htmlspecialchars($product['sku']) ?></td></tr>
-                             <?php endif; ?>
-                        </tbody>
-                    </table>
-                    <!-- Display full description here if not shown above -->
-                     <?php if (empty($product['short_description']) && !empty($product['description'])): ?>
-                     <div class="mt-6">
-                        <?= nl2br(htmlspecialchars($product['description'])) ?>
-                     </div>
-                     <?php endif; ?>
-                </div>
-
-                <div id="usage" class="tab-pane prose max-w-none">
-                    <h3 class="text-xl font-semibold mb-4 text-primary-dark">How to Use</h3>
-                    <?php if (!empty($product['usage_instructions'])): ?>
-                        <?= nl2br(htmlspecialchars($product['usage_instructions'])) ?>
+            <div class="tab-content min-h-[200px]">
+                <?php // Details Tab Pane ?>
+                <div id="details" class="tab-pane prose max-w-none text-gray-700 <?= $activeTab === 'details' ? 'active' : '' ?>">
+                    <?php if ($hasDetails): ?>
+                        <h3 class="text-xl font-semibold mb-4 text-primary-dark sr-only">Product Details</h3>
+                        <table class="details-table w-full text-left">
+                            <tbody>
+                                <?php // Requires 'size' column ?>
+                                <?php if (!empty($product['size'])): ?>
+                                <tr class="border-b border-gray-200"><th class="py-2 pr-4 font-medium text-gray-600 w-1/4">Size</th><td class="py-2"><?= htmlspecialchars($product['size']) ?></td></tr>
+                                <?php endif; ?>
+                                <?php // Requires 'scent_profile' column or join from product_attributes ?>
+                                <?php if (!empty($product['scent_profile'])): ?>
+                                <tr class="border-b border-gray-200"><th class="py-2 pr-4 font-medium text-gray-600 w-1/4">Scent Profile</th><td class="py-2"><?= htmlspecialchars($product['scent_profile']) ?></td></tr>
+                                <?php endif; ?>
+                                <?php // Requires 'origin' column ?>
+                                <?php if (!empty($product['origin'])): ?>
+                                <tr class="border-b border-gray-200"><th class="py-2 pr-4 font-medium text-gray-600 w-1/4">Origin</th><td class="py-2"><?= htmlspecialchars($product['origin']) ?></td></tr>
+                                <?php endif; ?>
+                                <?php // Requires 'sku' column ?>
+                                <?php if (!empty($product['sku'])): ?>
+                                <tr class="border-b border-gray-200"><th class="py-2 pr-4 font-medium text-gray-600 w-1/4">SKU</th><td class="py-2"><?= htmlspecialchars($product['sku']) ?></td></tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                        <?php // Display full description here if not shown above and short desc exists ?>
+                         <?php if (!empty($product['short_description']) && !empty($product['description']) && $product['description'] !== $product['short_description']): ?>
+                         <div class="mt-6">
+                            <h4 class="text-lg font-semibold mb-2 text-primary-dark">Full Description</h4>
+                            <?= nl2br(htmlspecialchars($product['description'])) ?>
+                         </div>
+                         <?php endif; ?>
                     <?php else: ?>
-                        <p>Usage instructions are not available for this product.</p>
+                         <p class="text-gray-500 italic">Detailed specifications not available.</p>
                     <?php endif; ?>
                 </div>
 
-                <div id="shipping" class="tab-pane prose max-w-none">
-                    <h3 class="text-xl font-semibold mb-4 text-primary-dark">Shipping Information</h3>
+                 <?php // Usage Tab Pane - Requires 'usage_instructions' column ?>
+                <div id="usage" class="tab-pane prose max-w-none text-gray-700 <?= $activeTab === 'usage' ? 'active' : '' ?>">
+                    <h3 class="text-xl font-semibold mb-4 text-primary-dark sr-only">How to Use</h3>
+                    <?php if ($hasUsage): ?>
+                        <?= nl2br(htmlspecialchars($product['usage_instructions'])) ?>
+                    <?php else: ?>
+                        <p class="text-gray-500 italic">Usage instructions are not available for this product.</p>
+                    <?php endif; ?>
+                </div>
+
+                <?php // Shipping Tab Pane ?>
+                <div id="shipping" class="tab-pane prose max-w-none text-gray-700 <?= $activeTab === 'shipping' ? 'active' : '' ?>">
+                    <h3 class="text-xl font-semibold mb-4 text-primary-dark sr-only">Shipping Information</h3>
                     <div class="shipping-info">
-                        <p><strong>Free Standard Shipping</strong> on orders over $50.</p>
-                        <ul class="list-disc list-inside space-y-1">
-                            <li>Standard Shipping (5-7 business days): $<?= number_format(SHIPPING_COST, 2) ?></li>
+                        <p><strong>Free Standard Shipping</strong> on orders over $<?= number_format(FREE_SHIPPING_THRESHOLD ?? 50, 2) ?>.</p>
+                        <ul class="list-disc list-inside space-y-1 my-4">
+                            <li>Standard Shipping (5-7 business days): $<?= number_format(SHIPPING_COST ?? 5.99, 2) ?></li>
                             <li>Express Shipping (2-3 business days): $12.99</li>
                             <li>Next Day Delivery (order before 2pm): $19.99</li>
                         </ul>
-                        <p>We ship with care to ensure your products arrive safely. International shipping available to select countries (calculated at checkout).</p>
+                        <p>We ship with care to ensure your products arrive safely. Tracking information will be provided once your order ships. International shipping available to select countries (rates calculated at checkout).</p>
+                        <p class="mt-4"><a href="index.php?page=shipping" class="text-primary hover:underline">View Full Shipping Policy</a></p>
                     </div>
                 </div>
 
-                <div id="reviews" class="tab-pane">
-                    <h3 class="text-xl font-semibold mb-4 text-primary-dark">Customer Reviews</h3>
-                    <div class="reviews-summary mb-8 p-6 bg-light rounded-lg flex items-center space-x-6">
+                <?php // Reviews Tab Pane ?>
+                <div id="reviews" class="tab-pane <?= $activeTab === 'reviews' ? 'active' : '' ?>">
+                    <h3 class="text-xl font-semibold mb-4 text-primary-dark sr-only">Customer Reviews</h3>
+                    <div class="reviews-summary mb-8 p-6 bg-light rounded-lg flex flex-col sm:flex-row items-center gap-6">
                         <div class="average-rating text-center">
-                            <span class="block text-4xl font-bold text-accent">4.8</span>
-                             <div class="stars text-yellow-400 text-xl my-1">
-                                 <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star-half-alt"></i>
+                            <?php // TODO: Fetch actual average rating and count ?>
+                            <span class="block text-4xl font-bold text-accent">N/A</span>
+                             <div class="stars text-gray-300 text-xl my-1" title="No reviews yet">
+                                 <i class="far fa-star"></i><i class="far fa-star"></i><i class="far fa-star"></i><i class="far fa-star"></i><i class="far fa-star"></i>
                              </div>
-                             <span class="text-sm text-gray-600">Based on 24 reviews</span>
+                             <span class="text-sm text-gray-600">Based on 0 reviews</span>
                         </div>
-                        <div class="flex-grow">
+                        <div class="flex-grow text-center sm:text-left">
+                            <p class="mb-3 text-gray-700">Share your thoughts with other customers!</p>
                             <button class="btn btn-secondary">Write a Review</button>
-                            <!-- Placeholder for review distribution bars -->
                         </div>
                     </div>
                     <div class="reviews-list space-y-6">
                         <!-- Reviews would be loaded dynamically here -->
-                        <p class="text-center text-gray-500">Be the first to review this product!</p>
-                        <!-- Example review structure:
-                        <div class="review border-b pb-4">
-                            <div class="stars text-yellow-400 mb-1">★★★★★</div>
-                            <h4 class="font-semibold">Amazing scent!</h4>
-                            <p class="text-gray-600 text-sm mb-2">Posted by Jane D. on March 15, 2025</p>
-                            <p class="text-gray-700">This oil is incredibly relaxing. Perfect for my diffuser before bed.</p>
-                        </div>
-                        -->
+                        <p class="text-center text-gray-500 italic py-4">There are no reviews for this product yet.</p>
                     </div>
                 </div>
             </div>
         </div>
 
+
         <!-- Related Products -->
+        <?php // *** IMAGE PATH FIX APPLIED IN RELATED PRODUCTS LOOP *** ?>
         <?php if (!empty($relatedProducts)): ?>
-            <div class="related-products mt-16 md:mt-24 border-t pt-12" data-aos="fade-up">
+            <div class="related-products mt-16 md:mt-24 border-t border-gray-200 pt-12" data-aos="fade-up">
                 <h2 class="text-3xl font-bold text-center mb-12 font-heading text-primary">You May Also Like</h2>
                 <div class="products-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
                     <?php foreach ($relatedProducts as $relatedProduct): ?>
-                        <!-- Use the consistent product card style from home page -->
+                        <!-- Use the consistent product card style -->
                         <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col">
                              <div class="product-image relative h-64 overflow-hidden">
                                  <a href="index.php?page=product&id=<?= $relatedProduct['id'] ?? '' ?>">
@@ -518,12 +407,14 @@ require_once __DIR__ . '/layout/header.php'; // Includes <head>, Tailwind config
                                          <?= htmlspecialchars($relatedProduct['name'] ?? 'Product') ?>
                                      </a>
                                  </h3>
-                                 <?php if (!empty($relatedProduct['category_name'])): ?>
+                                 <?php if (!empty($relatedProduct['category_name'])): // Assuming JOIN provides this ?>
                                      <p class="text-sm text-gray-500 mb-2"><?= htmlspecialchars($relatedProduct['category_name']) ?></p>
                                  <?php endif; ?>
                                  <p class="price text-base font-semibold text-accent mb-4 mt-auto">$<?= isset($relatedProduct['price']) ? number_format($relatedProduct['price'], 2) : 'N/A' ?></p>
                                  <div class="product-actions mt-auto">
-                                     <?php if (isset($relatedProduct['stock_quantity']) && $relatedProduct['stock_quantity'] > 0): ?>
+                                     <?php // Calculate stock status for related product ?>
+                                     <?php $relatedIsOutOfStock = (!isset($relatedProduct['stock_quantity']) || $relatedProduct['stock_quantity'] <= 0) && empty($relatedProduct['backorder_allowed']); ?>
+                                     <?php if (!$relatedIsOutOfStock): ?>
                                          <button class="btn btn-secondary add-to-cart-related w-full"
                                                  data-product-id="<?= $relatedProduct['id'] ?? '' ?>">
                                              Add to Cart
@@ -541,120 +432,180 @@ require_once __DIR__ . '/layout/header.php'; // Includes <head>, Tailwind config
     </div>
 </section>
 
-<!-- Keep existing JS block, ensure selectors still match -->
+<!-- JavaScript (Ensure necessary functions are available) -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // --- Gallery Logic ---
     const mainImage = document.getElementById('mainImage');
     const thumbnails = document.querySelectorAll('.thumbnail-grid img');
+    const thumbnailContainers = document.querySelectorAll('.thumbnail-grid div'); // Select container divs
 
     function updateMainImage(thumbnailElement) {
         if (mainImage && thumbnailElement) {
             mainImage.src = thumbnailElement.src;
             mainImage.alt = thumbnailElement.alt.replace('View', 'Main view');
 
-            thumbnails.forEach(img => {
-                img.parentElement.classList.remove('border-primary'); // Target parent div for border
-                img.parentElement.classList.add('border');
-                img.classList.remove('active'); // Keep active class on img if needed elsewhere
+            // Reset borders on all containers
+            thumbnailContainers.forEach(div => {
+                div.classList.remove('border-primary', 'border-2');
+                div.classList.add('border'); // Ensure default border class if needed
             });
-            thumbnailElement.parentElement.classList.add('border-primary');
-            thumbnailElement.parentElement.classList.remove('border');
+             // Apply active border to the clicked thumbnail's container
+            thumbnailElement.closest('div').classList.add('border-primary', 'border-2');
+            thumbnailElement.closest('div').classList.remove('border');
+
+            // Optional: Keep active class on image itself if styles depend on it
+             thumbnails.forEach(img => img.classList.remove('active'));
              thumbnailElement.classList.add('active');
         }
     }
-    // Make updateMainImage globally accessible if called via onclick attribute
+    // Make updateMainImage globally accessible for inline onclick
     window.updateMainImage = updateMainImage;
 
     // --- Quantity Selector Logic ---
     const quantityInput = document.querySelector('.quantity-selector input');
-    const quantityMax = parseInt(quantityInput?.getAttribute('max') || '99');
-    document.querySelectorAll('.quantity-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            if (!quantityInput) return;
-            let value = parseInt(quantityInput.value);
-            if (this.classList.contains('plus')) {
-                if (value < quantityMax) quantityInput.value = value + 1;
-            } else if (this.classList.contains('minus')) {
-                if (value > 1) quantityInput.value = value - 1;
-            }
+    if (quantityInput) {
+        const quantityMax = parseInt(quantityInput.getAttribute('max') || '99');
+        document.querySelectorAll('.quantity-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                let value = parseInt(quantityInput.value);
+                if (isNaN(value)) value = 1; // Handle non-numeric input
+
+                if (this.classList.contains('plus')) {
+                    if (value < quantityMax) quantityInput.value = value + 1;
+                     else quantityInput.value = quantityMax; // Prevent exceeding max
+                } else if (this.classList.contains('minus')) {
+                    if (value > 1) quantityInput.value = value - 1;
+                }
+            });
         });
-    });
+         // Validate input on change
+         quantityInput.addEventListener('change', function() {
+              let value = parseInt(this.value);
+              if (isNaN(value) || value < 1) {
+                  this.value = 1;
+              } else if (value > quantityMax) {
+                   this.value = quantityMax;
+              }
+         });
+    }
+
 
     // --- Tab Switching Logic ---
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabPanes = document.querySelectorAll('.tab-pane');
     tabBtns.forEach(btn => {
-        btn.addEventListener('click', function() {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault(); // Prevent potential page jump if buttons were links
             const tabId = this.dataset.tab;
+
             // Update button active states
-            tabBtns.forEach(b => b.classList.remove('active', 'text-primary', 'border-primary'));
-            tabBtns.forEach(b => b.classList.add('text-gray-500', 'border-transparent')); // Reset all buttons
-            this.classList.add('active', 'text-primary', 'border-primary'); // Activate clicked button
-            this.classList.remove('text-gray-500', 'border-transparent');
+            tabBtns.forEach(b => {
+                b.classList.remove('active', 'text-primary', 'border-primary');
+                b.classList.add('text-gray-500', 'border-transparent', 'hover:text-primary', 'hover:border-gray-300');
+            });
+            this.classList.add('active', 'text-primary', 'border-primary');
+            this.classList.remove('text-gray-500', 'border-transparent', 'hover:text-primary', 'hover:border-gray-300');
+
 
             // Update pane active states
-            tabPanes.forEach(pane => pane.classList.remove('active'));
-            const activePane = document.getElementById(tabId);
-            if(activePane) activePane.classList.add('active');
+            tabPanes.forEach(pane => {
+                // Use a class like 'hidden' or 'active' toggling
+                // Assuming 'active' class controls visibility (e.g., via CSS display block/none)
+                if (pane.id === tabId) {
+                    pane.classList.add('active');
+                     pane.classList.remove('hidden'); // Example if using hidden
+                } else {
+                    pane.classList.remove('active');
+                     pane.classList.add('hidden'); // Example if using hidden
+                }
+            });
         });
+         // Ensure initial active tab's pane is visible
+         const initialActiveTab = document.querySelector('.tab-btn.active');
+         if(initialActiveTab) {
+             const initialTabId = initialActiveTab.dataset.tab;
+             tabPanes.forEach(pane => {
+                  if (pane.id === initialTabId) {
+                       pane.classList.add('active');
+                       pane.classList.remove('hidden');
+                  } else {
+                       pane.classList.remove('active');
+                       pane.classList.add('hidden');
+                  }
+             });
+         }
     });
 
     // --- Add to Cart Form Submission (AJAX) ---
+    // (Ensure the fetch code provided previously is included here)
+    // ... fetch logic for #product-detail-add-cart-form ...
     const addToCartForm = document.getElementById('product-detail-add-cart-form');
     if (addToCartForm) {
         addToCartForm.addEventListener('submit', function(e) {
             e.preventDefault();
             const formData = new FormData(this);
-            const submitButton = this.querySelector('button[type="submit"]');
-            submitButton.disabled = true; // Prevent double-clicks
+            const submitButton = this.querySelector('button[type="submit"].add-to-cart');
+            if (!submitButton || submitButton.disabled) return; // Exit if no button or already submitting
+
+            const originalButtonHtml = submitButton.innerHTML;
+            submitButton.disabled = true;
             submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Adding...';
 
-            fetch(this.action, {
+            fetch(this.action, { // action is index.php?page=cart&action=add
                 method: 'POST',
+                headers: { 'Accept': 'application/json' }, // Indicate we expect JSON back
                 body: new URLSearchParams(formData) // Send as form-encoded
             })
             .then(response => {
-                // Check if response is JSON before parsing
                 const contentType = response.headers.get("content-type");
-                if (contentType && contentType.indexOf("application/json") !== -1) {
+                if (response.ok && contentType && contentType.indexOf("application/json") !== -1) {
                     return response.json();
-                } else {
-                    // If not JSON, likely the redirect is still happening or an error page
-                    return response.text().then(text => {
-                        throw new Error("Received non-JSON response: " + text.substring(0, 200));
-                    });
                 }
+                // Handle non-JSON or error responses
+                return response.text().then(text => {
+                    throw new Error(`Server error ${response.status}: ${text.substring(0, 200)}`);
+                });
              })
             .then(data => {
                 if (data.success) {
-                    // Update cart count in header
                     const cartCountSpan = document.querySelector('.cart-count');
                     if (cartCountSpan) {
                         cartCountSpan.textContent = data.cart_count;
-                        cartCountSpan.style.display = data.cart_count > 0 ? 'inline' : 'none';
+                        cartCountSpan.style.display = data.cart_count > 0 ? 'inline-block' : 'none'; // Use inline-block or similar
                     }
-                    // Use the standardized flash message function
                     showFlashMessage(data.message || 'Product added to cart!', 'success');
-                    // Optionally: Update stock status display if needed based on data.stock_status
+                     // Optionally update stock status display based on data.stock_status
+                     if(data.stock_status === 'out_of_stock') {
+                        submitButton.classList.remove('btn-primary');
+                        submitButton.classList.add('btn-disabled');
+                        submitButton.innerHTML = '<i class="fas fa-times-circle mr-2"></i> Out of Stock';
+                        // Keep disabled
+                     } else {
+                          submitButton.innerHTML = originalButtonHtml; // Restore button text
+                          submitButton.disabled = false; // Re-enable ONLY if not out of stock
+                     }
                 } else {
                      showFlashMessage(data.message || 'Could not add product.', 'error');
+                     submitButton.innerHTML = originalButtonHtml; // Restore button text
+                     submitButton.disabled = false; // Re-enable on failure
                 }
             })
             .catch(error => {
                 console.error('Error adding to cart:', error);
-                showFlashMessage('An error occurred while adding the product. Please try again.', 'error');
-            })
-            .finally(() => {
-                 // Re-enable button
-                 submitButton.disabled = false;
-                 submitButton.innerHTML = '<i class="fas fa-shopping-cart mr-2"></i> Add to Cart';
+                showFlashMessage('An error occurred. Please try again.', 'error');
+                 if (submitButton) {
+                    submitButton.innerHTML = originalButtonHtml; // Restore button text
+                    submitButton.disabled = false; // Re-enable on error
+                 }
             });
         });
     }
 
 
     // --- Related Products Add to Cart (AJAX) ---
+    // (Ensure the fetch code provided previously is included here)
+    // ... fetch logic for .add-to-cart-related ...
     document.querySelectorAll('.add-to-cart-related').forEach(button => {
         button.addEventListener('click', function() {
             const productId = this.dataset.productId;
@@ -665,6 +616,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 showFlashMessage('Security token not found. Please refresh.', 'error');
                 return;
             }
+            if (this.disabled) return;
 
             const originalButtonText = this.innerHTML;
             this.disabled = true;
@@ -672,126 +624,139 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const formData = new URLSearchParams();
             formData.append('product_id', productId);
-            formData.append('quantity', '1'); // Add quantity 1 for related products
+            formData.append('quantity', '1');
             formData.append('csrf_token', csrfToken);
 
-            fetch('index.php?page=cart&action=add', { // Point to the correct endpoint
+            fetch('index.php?page=cart&action=add', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
+                 headers: { 'Accept': 'application/json' },
                 body: formData
             })
             .then(response => {
-                // Similar JSON check as above
                  const contentType = response.headers.get("content-type");
-                 if (contentType && contentType.indexOf("application/json") !== -1) {
+                 if (response.ok && contentType && contentType.indexOf("application/json") !== -1) {
                      return response.json();
-                 } else {
-                     return response.text().then(text => {
-                         throw new Error("Received non-JSON response: " + text.substring(0, 200));
-                     });
                  }
+                 return response.text().then(text => {
+                      throw new Error(`Server error ${response.status}: ${text.substring(0, 200)}`);
+                 });
             })
             .then(data => {
                 if (data.success) {
                     const cartCountSpan = document.querySelector('.cart-count');
                     if (cartCountSpan) {
                         cartCountSpan.textContent = data.cart_count;
-                         cartCountSpan.style.display = data.cart_count > 0 ? 'inline' : 'none';
+                         cartCountSpan.style.display = data.cart_count > 0 ? 'inline-block' : 'none';
                     }
                     showFlashMessage(data.message || 'Product added to cart!', 'success');
+                    // Update button if stock runs out
+                    if(data.stock_status === 'out_of_stock') {
+                        this.classList.remove('btn-secondary');
+                        this.classList.add('btn-disabled');
+                        this.innerHTML = 'Out of Stock';
+                        // Keep disabled
+                    } else {
+                        this.innerHTML = originalButtonText;
+                        this.disabled = false;
+                    }
                 } else {
                      showFlashMessage(data.message || 'Could not add product.', 'error');
+                     this.innerHTML = originalButtonText;
+                     this.disabled = false;
                 }
             })
             .catch(error => {
                 console.error('Error adding related product:', error);
                 showFlashMessage('An error occurred. Please try again.', 'error');
-            })
-             .finally(() => {
-                 // Re-enable button
-                 this.disabled = false;
                  this.innerHTML = originalButtonText;
-             });
+                 this.disabled = false;
+            });
         });
     });
 
-    // --- Flash Message Helper Function (Ensure this is loaded, potentially from a global JS file) ---
-    function showFlashMessage(message, type = 'info') {
+    // --- Flash Message Helper Function (Ensure this is defined) ---
+    // (Ensure the function provided previously is included here or globally)
+    window.showFlashMessage = function(message, type = 'info') { // Make it global
         let flashContainer = document.querySelector('.flash-message-container');
         if (!flashContainer) {
             flashContainer = document.createElement('div');
-            flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full'; // Added max-w etc.
+            // Apply Tailwind classes for positioning and styling
+            flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100] w-full max-w-sm space-y-2';
             document.body.appendChild(flashContainer);
         }
+        const flashId = 'flash-' + Date.now() + Math.random().toString(36).substring(2); // Unique ID
         const flashDiv = document.createElement('div');
+        flashDiv.id = flashId;
         const colorMap = {
-            success: 'bg-green-100 border-green-400 text-green-700',
-            error: 'bg-red-100 border-red-400 text-red-700',
-            info: 'bg-blue-100 border-blue-400 text-blue-700',
-            warning: 'bg-yellow-100 border-yellow-400 text-yellow-700'
+            success: 'bg-green-100 border-green-400 text-green-800', // Adjusted colors for better contrast
+            error: 'bg-red-100 border-red-400 text-red-800',
+            info: 'bg-blue-100 border-blue-400 text-blue-800',
+            warning: 'bg-yellow-100 border-yellow-400 text-yellow-800'
         };
-        flashDiv.className = `border px-4 py-3 rounded relative shadow-md mb-2 ${colorMap[type] || colorMap['info']} transition-opacity duration-300 ease-out opacity-0`; // Start hidden
+        // Add Tailwind classes for base styling, border, padding, shadow, and transition
+        flashDiv.className = `border px-4 py-3 rounded-md relative shadow-lg mb-2 ${colorMap[type] || colorMap['info']} transition-all duration-300 ease-out opacity-0 transform translate-x-4`; // Start off-screen and transparent
         flashDiv.setAttribute('role', 'alert');
+        flashDiv.setAttribute('aria-live', 'polite'); // Announce message
 
         const messageSpan = document.createElement('span');
         messageSpan.className = 'block sm:inline';
         messageSpan.textContent = message;
         flashDiv.appendChild(messageSpan);
 
-        const closeButton = document.createElement('button'); // Use button for accessibility
+        const closeButton = document.createElement('button');
         closeButton.type = 'button';
-        closeButton.className = 'absolute top-0 bottom-0 right-0 px-4 py-3 text-inherit'; // Inherit color
+        closeButton.className = 'absolute top-1 right-1 p-1 text-inherit opacity-75 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-current rounded-full'; // Subtle styling
         closeButton.setAttribute('aria-label', 'Close');
-        closeButton.innerHTML = '<svg class="fill-current h-6 w-6" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>';
-        closeButton.onclick = () => {
+         closeButton.innerHTML = '<svg class="fill-current h-5 w-5" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>';
+
+         // Close handler
+        const closeFlash = () => {
              flashDiv.style.opacity = '0';
-             setTimeout(() => flashDiv.remove(), 300); // Remove after fade out
+             flashDiv.style.transform = 'translateX(1rem)'; // Move out
+             setTimeout(() => flashDiv.remove(), 300); // Remove after fade/move out
         };
+        closeButton.onclick = closeFlash;
         flashDiv.appendChild(closeButton);
 
         flashContainer.appendChild(flashDiv);
 
-        // Fade in
+        // Trigger fade-in and slide-in animation
         requestAnimationFrame(() => {
-           flashDiv.style.opacity = '1';
+            flashDiv.style.opacity = '1';
+            flashDiv.style.transform = 'translateX(0)';
         });
 
         // Auto-remove after 5 seconds
-        setTimeout(() => {
-             if (flashDiv && flashDiv.parentElement) { // Check if still exists
-                 flashDiv.style.opacity = '0';
-                 setTimeout(() => flashDiv.remove(), 300);
-             }
-        }, 5000);
-    }
+        const timeoutId = setTimeout(closeFlash, 5000);
+
+        // Optional: Clear timeout if closed manually
+         flashDiv.addEventListener('mouseenter', () => clearTimeout(timeoutId)); // Pause on hover
+         flashDiv.addEventListener('mouseleave', () => setTimeout(closeFlash, 5000)); // Resume timer on leave
+
+    }; // End of showFlashMessage
+
 });
 </script>
 
-<?php require_once __DIR__ . '/layout/footer.php'; // Includes closing tags, scripts like AOS init ?>
-
+<?php require_once __DIR__ . '/layout/footer.php'; // Includes closing tags, potentially AOS init ?>
 ```
 
-### Controller/Model Data Requirement
+## 4. Crucial Dependencies & Next Steps
 
-*   For the redesigned page to display fully, ensure the `ProductController::showProduct` method fetches and passes all necessary fields from the `products` table (or related tables) to the `$product` variable. This includes:
-    *   `name`, `price`, `image`, `description`, `short_description`
-    *   `category_name` (via JOIN)
-    *   `benefits` (potentially JSON string)
-    *   `ingredients` (text)
-    *   `usage_instructions` (text)
-    *   `size`, `scent_profile`, `origin`, `sku` (text/varchar)
-    *   `gallery_images` (potentially JSON string containing an array of image paths)
-    *   `stock_quantity`, `low_stock_threshold`, `backorder_allowed`
-    *   `is_featured`
-*   Update the `Product` model (`getById`, `getRelated`) methods if necessary to fetch these fields.
+For the redesigned product detail page to function correctly:
 
-## 4. Conclusion
+1.  **Database Schema:** You **must** ensure the `products` table contains the necessary columns expected by the view code. This includes `image` (corrected from `image_url`), `name`, `price`, `description`, `stock_quantity`, `low_stock_threshold`, `is_featured`, `category_id`.
+    *   **Optional but Recommended:** To enable the *full* potential of the enhanced design, add the *missing* columns (`short_description`, `benefits` (JSON/TEXT), `ingredients`, `usage_instructions`, `gallery_images` (JSON/TEXT), `size`, `scent_profile`, `origin`, `sku`, `backorder_allowed`) to your `products` table as detailed in `suggestions_for_improvement_images.md` (Solution Option A).
+    *   **Stock Column:** Remove the redundant `stock` column if `stock_quantity` is the authoritative source.
+2.  **Controller Data:** Update `ProductController::showProduct` (and the `Product::getById` model method) to SELECT and fetch all the required columns (including any newly added ones and joining `categories` for `category_name`) and pass the complete `$product` array (and `$relatedProducts`) to the view. Handle potential JSON decoding for fields like `benefits` and `gallery_images` in the controller after fetching.
+3.  **AJAX Backend:** Verify the `index.php?page=cart&action=add` endpoint (handled by `CartController::addToCart`) correctly processes the request and **returns a JSON response** indicating success/failure, message, and the updated `cart_count`. The `index.php` provided suggests this is already the case via `jsonResponse()`.
+4.  **CSRF Protection:** The forms and AJAX requests in the redesigned view include a `csrf_token` field. You **must** implement the fix suggested in `suggested_improvements_and_fixes.md` to ensure a valid CSRF token is generated and outputted in the form. Without this, the AJAX requests and form submissions will fail CSRF validation.
 
-Fixing the image display requires a simple alignment between the database column name (`image`) and the PHP variable key used in the views (`$product['image']`). The layout enhancement involves replacing the existing `views/product_detail.php` content with the provided revised code, which utilizes Tailwind CSS for a modern, informative, and visually consistent presentation, matching the landing page's style.
+## 5. Conclusion
 
-Remember to populate the relevant database fields for the best results on the redesigned product detail page. Crucially, ensure the "Add to Cart" backend logic in `index.php` and `CartController` returns JSON as discussed in the previous analysis (`suggested_improvements_and_fixes.md`) for the AJAX functionality in the redesigned view to work correctly.
-```
+By correcting the image path reference from `$product['image_url']` to `$product['image']` in your view files (`product_detail.php`, `products.php`), you will resolve the missing image issue.
 
-https://drive.google.com/file/d/1-WiLh5Zg2Mu0phUt5kYQqcFeEhVbpt6L/view?usp=sharing, https://drive.google.com/file/d/1AsS95XaSWY6WBf_jV9iW6bCHWpV7kp60/view?usp=sharing, https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221B3TJ1fceeZ-8JA4RDJFKQfOIAMmSZu3Y%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1DOZxEVVkEqGWgTuFu7vwc0tj6nghwQeo/view?usp=sharing, https://drive.google.com/file/d/1QxN9ViAFcryjDOKPnaabfOOL4VT2K07B/view?usp=sharing, https://drive.google.com/file/d/1nHO65WEA4y_lat7DFNFqjMli8_XTgBtT/view?usp=sharing, https://drive.google.com/file/d/1oUwfoXJkaLQgMDE7D8Bt8Ojm7NGGZVre/view?usp=sharing, https://drive.google.com/file/d/1ps_dzhh_IOZDfLhRiGpCJfiQR3p6Qrib/view?usp=sharing, https://drive.google.com/file/d/1vZ-b9E3ccEsuILfc619PbsrdVpvyZtaQ/view?usp=sharing
+Adopting the redesigned `views/product_detail.php` code provided will significantly enhance the page's layout and design, bringing it in line with the main landing page. However, realizing the full potential of this enhanced view requires ensuring the corresponding data fields exist in your database and are fetched by the controller. Addressing the dependencies, particularly fixing CSRF token handling and ensuring the controller provides the necessary data, is crucial for the redesigned page to function correctly and securely.  
+
+---
+https://drive.google.com/file/d/10gCnL8NJp79PUjHWxDtMcW4-Nj5In661/view?usp=sharing, https://drive.google.com/file/d/126KjzuTW6OQd1YXyc5oKi7XUArOEP96m/view?usp=sharing, https://drive.google.com/file/d/1BM2Pr-Q-dRs2lQtzFYIABmcqcFVllSsN/view?usp=sharing, https://drive.google.com/file/d/1Bp0-5HMlGKICNb4U_YbJ_mFD35T2YfOf/view?usp=sharing, https://drive.google.com/file/d/1FXsDOP7FCoP1cUYxDI4hEC4AXRGjQwAC/view?usp=sharing, https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221Tsva1prccYU-Un90emc34sB2sHhMLXja%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1XyxEK8Yb9GQZ0Ahk1P_Wf-FkfF965Omj/view?usp=sharing, https://drive.google.com/file/d/1bDNZgMUeBQNrCoO8Sr-w5Z0N0dCFDJjU/view?usp=sharing, https://drive.google.com/file/d/1eUiM9-m0SALwdiqcRWmeYkDz-17JUIoj/view?usp=sharing, https://drive.google.com/file/d/1tcI9kfjgyvoAe8xjYs0xfOxpCYYFYp0H/view?usp=sharing
