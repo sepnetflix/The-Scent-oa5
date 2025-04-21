@@ -1,157 +1,480 @@
-# The Scent — Immersive Aromatherapy Landing Page 🌿
+# 🌿 The Scent - Premium Aromatherapy E-commerce Platform
 
-> **A next-generation e-commerce landing page for “The Scent”, a global aromatherapy and wellness brand.  
-> This project fuses modern web artistry, multi-sensory interaction, and premium design principles to create true digital brand immersion.**
+Welcome to **The Scent**, a modern, full-featured, and beautifully crafted e-commerce platform built to showcase and sell premium natural aromatherapy products. This project is designed from the ground up for extensibility, security, and seamless user experience.
 
----
-
-![Hero Screenshot](./screenshot-hero.jpg)
+> 🧘 “Find your moment of calm” – Discover your perfect scent and enhance your well-being.
 
 ---
 
-## ✨ Overview
+## 🚀 Live Demo
 
-**The Scent** is more than a storefront—it's a journey for the senses.  
-From animated aroma mist and global storytelling to interactive quizzes and glowing CTAs, every pixel is crafted to evoke calm, luxury, and authentic connection.
-
-**Live Demo:** [View on GitHub Pages ⟶](https://nordeim.github.io/The-Scent-oa5/)  
-**Designer/Developer:** [YourName](https://github.com/copilot/share/081d0110-40e4-8881-9041-d040406268ff)
+[🌐 Click here to view the demo](#) *(Coming Soon)*
 
 ---
 
-## 🎨 Design Highlights
+## 🔖 Badges
 
-- **Full-Screen Animated Hero**  
-  Drift into a world of aroma with a video hero and SVG “mist trails”—visualizing scent, calm, and movement.
-- **Global About Section**  
-  Parallax imagery and interactive ingredient maps connect artisan craft to source, rooted in authenticity.
-- **Interactive Scent Quiz**  
-  Multi-step, animated quiz personalizes the user journey and recommends products in real time.
-- **Modern Product Grid**  
-  Soft shadows, lively hover states, and iconography echo the brand’s premium, nature-inspired feel.
-- **Floating, Animated “Shop Now” CTA**  
-  Always visible, never intrusive—gently pulses to invite action.
-- **Ambient Soundscape**  
-  Optional nature sound enhances immersion, with user-friendly controls.
-- **Dark/Light Mode**  
-  Instantly shifts palette and mood, supporting accessibility and serenity.
-- **Glowing, Accessible Footer**  
-  Grid-based, featuring social/contact blocks and payment icons, with refined typography and color harmony.
+![PHP](https://img.shields.io/badge/PHP-8.0+-blue?logo=php)
+![MySQL](https://img.shields.io/badge/MySQL-5.7+-orange?logo=mysql)
+![Apache](https://img.shields.io/badge/Apache-2.4+-red?logo=apache)
+![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-2.x-blue?logo=tailwindcss)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
 
-## 💡 Inspiration & Methodology
+## 📚 Table of Contents
 
-### Inspiration
-
-- **Multisensory Brands:** (Aesop, Lush, Le Labo) — sensory-rich, narrative-driven digital experiences.
-- **Nature & Minimalism:**  
-  Soft overlays, earth-inspired palettes, subtle animation, and tactile layering.
-- **User-Centered Wellness:**  
-  Every design decision supports calm, clarity, and trust.
-
-### Design Thought Process
-
-1. **Empathy First**  
-   Designed for users seeking a moment of calm and delight in a busy world.
-2. **Immersion**  
-   Hero, ambient audio, and animated mist create a multi-sensory welcome.
-3. **Narrative Flow**  
-   Ingredient origins and testimonials build authenticity and human connection.
-4. **Personalization Loop**  
-   Interactive scent quiz and sticky CTAs keep users engaged and rewarded.
-5. **Modern Accessibility**  
-   Semantic HTML, focus states, ARIA labels, and color contrast for every user.
-6. **Performance & Responsiveness**  
-   All animations are CSS-based and respect user’s motion preferences. Layout is fluid from mobile to widescreen.
+1. [🌟 Introduction](#-introduction)
+2. [🎯 Features](#-features)
+3. [🖼️ Screenshots](#-screenshots)
+4. [🧱 Architecture](#-system-architecture)
+5. [⚙️ Technology Stack](#-technology-stack)
+6. [📁 Folder Structure](#-folder-structure)
+7. [🗃️ Database Schema](#-database-schema)
+8. [📦 Installation Instructions](#-installation-instructions)
+9. [🚀 Deployment Guide Summary](#-deployment-guide-summary)
+10. [🧪 Scent Finder Quiz](#-scent-quiz)
+11. [🛡️ Security Best Practices](#-security-best-practices)
+12. [🔧 Customization & Extensibility](#-customization--extensibility)
+13. [🤝 Contributing](#-contributing)
+14. [📄 License](#-license)
+15. [🙏 Credits](#-credits)
+16. [📎 Appendix](#-appendix)
 
 ---
 
-## 🧩 Key Design Elements
+## 🌟 Introduction
 
-- **Typography**  
-  - ‘Cormorant Garamond’ (headings): Modern, luxurious, and classic.
-  - ‘Montserrat’ (body): Clean, readable, and contemporary.
-  - ‘Raleway’ (accents): For CTAs, navigation, and buttons.
+**The Scent** is more than just an e-commerce platform — it’s an experience. Built specifically to support the sale and recommendation of **premium aromatherapy products**, the platform integrates:
 
-- **Color System**  
-  - Spa-inspired neutrals with deep teals, soothing creams, and nature accents.
-  - CTA buttons use a vibrant coral, for attention without harshness.
-  - Dark mode: Warm, low-light palette for evening browsing.
+- A clean, modern, responsive UI/UX
+- Personalized shopping via a scent quiz
+- Dynamic product catalog and featured collections
+- Flexible cart and order system
+- Modular codebase for easy customization and future growth
 
-- **Buttons & Icons**  
-  - Rounded, pulsing CTAs and modern Font Awesome 6 icons for instant recognition and delight.
-  - Buttons are large, touch-friendly, and visually inviting.
-
-- **Section Transitions**  
-  - SVG curves and organic separators create visual flow and organic harmony.
-
-- **Footer**  
-  - Grid structure, social icons, contact and support, payment method icons.
-  - Harmonized color and typography, dark/light mode aware.
-
-- **Animations**  
-  - Animated SVG mist trails, testimonial fade-ins, button pulses, and parallax effects make the site feel alive, gentle, and interactive.
-
-- **Quiz Integration**  
-  - Designed to be fun, visually rewarding, and to instantly recommend the right products for the user.
+Designed for extensibility, performance, and user-centric experience, The Scent is a robust foundation for wellness or natural product businesses.
 
 ---
 
-## 🛠️ Technologies
+## 🎯 Features
 
-- **HTML5 + CSS3**  
-  Custom properties (CSS variables), Flexbox, Grid, keyframes for smooth animations.
-- **Vanilla JavaScript**  
-  For UI interactivity (dark mode, audio, quiz, parallax).
-- **Font Awesome 6.x**  
-  Rich iconography, consistent brand visuals.
-- **Google Fonts:**  
-  ‘Cormorant Garamond’, ‘Montserrat’, ‘Raleway’.
-- **No build step:** just open `index.html`
-- *All assets are open source or client-supplied*
+### 🛍️ Core E-commerce
+- **Modern Landing Page** with video and animated hero
+- **Essential Oil & Soap Catalog** with categories and featured items
+- **Personalized Scent Finder Quiz**
+- **Product Recommendations**
+- **Responsive Design (Mobile-Friendly)**
 
----
+### 🔐 User Management
+- **User Authentication (Login/Register)**
+- **Password Reset System**
+- **User Profile Management**
+- **Order History & Tracking**
 
-## 🚀 Quick Start
+### 🛒 Shopping Experience
+- **Real-time Shopping Cart** (AJAX updates)
+- **Stock Validation**
+- **Price Calculations**
+- **Secure Checkout Process**
+- **Order Confirmation**
 
-1. **Clone this repository:**
-   ```bash
-   git clone https://github.com/yourusername/the-scent-landing.git
-   ```
-2. **Open `index.html` in your browser.**
+### 💼 Business Features *(partially implemented / extensible)*
+- **Inventory Management**
+- **Tax System**
+- **Coupon System** *(planned)*
 
-_No server or build required. (Optional: deploy on GitHub Pages, Netlify, or Vercel.)_
+### 📧 Communication
+- **Email Notification System** (Order confirmation, password reset, newsletter)
+- **Newsletter Signup with AJAX**
 
----
-
-## 📱 Responsive & Accessible
-
-- **Fluid layouts**: Mobile, tablet, and widescreen friendly.
-- **Keyboard navigation**: All controls/focus states accessible by keyboard.
-- **Color contrast & alt text**: Meticulously checked.
-- **Animations**: Respect `prefers-reduced-motion` user settings.
-- **ARIA roles/labels**: For all major interactive elements.
-
----
-
-## 👤 Credits & License
-
-- **Images:** The Scent artwork & high quality stock (Pixabay, Unsplash, Pexels)
-- **Font Awesome:** [CDN](https://fontawesome.com)
-- **Google Fonts:** [Cormorant Garamond](https://fonts.google.com), [Montserrat](https://fonts.google.com), [Raleway](https://fonts.google.com)
-- **Ambient Audio:** Pixabay open license  
-- **Design & Code:** [Your Name/Username here]
-
-_This project is a creative design showcase. Please respect image licensing for any commercial use._
+### 👑 Admin Features *(modular, basic implementation; dashboard expansion planned)*
+- **Product Management**
+- **Order Processing**
+- **User Management**
+- **Inventory Control**
 
 ---
 
-## 🤝 Want to Collaborate?
+## 🖼️ Screenshots
 
-- Fork, remix, or reach out if you want to co-create, or need freelance/design/UX help!
-- Let’s create digital experiences with true presence and soul.
+> 📸 Full resolution screenshots are available in the `/images/screenshots/` folder.
+
+| Page | Screenshot |
+|------|------------|
+| Landing Page | ![Home](images/screenshots/home.png) |
+| Product Details | ![Product](images/screenshots/product.png) |
+| Quiz Intro | ![Quiz](images/screenshots/quiz.png) |
+| Quiz Results | ![Results](images/screenshots/results.png) |
+| Cart Page | ![Cart](images/screenshots/cart.png) |
+
+*(If these files are missing, please add screenshots or update/remove this section.)*
 
 ---
 
-**Breathe. Scroll. Discover. Enjoy "The Scent".**
+## 🧱 System Architecture
+
+**Custom MVC-Inspired Modular PHP Architecture:**
+
+```
+[Browser/Client]
+   ↓
+[Apache2 Server]
+   ↓
+[index.php] → [Controllers] → [Models (optional/planned)] → [MySQL DB]
+        ↓
+     [Views] 
+        ↓
+   [Includes (header, footer, db, auth, security)]
+        ↓
+    [Sessions, CSRF, Middleware]
+```
+
+- `Controllers`: Business logic and request routing (Cart, Product, Quiz, Account, etc.)
+- `Models`: (Optional/Planned) Database abstraction
+- `Views`: Server-rendered HTML templates
+- `Includes`: Shared core (header, footer, authentication, database, security)
+- ``: Web root for assets and entry point
+
+---
+
+## ⚙️ Technology Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | HTML5, Tailwind CSS, Custom CSS, AOS.js, Particles.js, Font Awesome |
+| Backend | PHP 8.0+, Apache2 |
+| Database | MySQL 5.7+ |
+| Animations | AOS.js (fade/slide), Particles.js |
+| Version Control | Git |
+| Optional | Docker, Composer |
+
+---
+
+## 📁 Folder Structure
+
+```
+/cdrom/project/The-Scent-oa5  # Web root, assets, entry point
+├── index.php             # Main entry/routing script
+├── css/                  # Main CSS (style.css)
+├── images/               # Product, hero, and UI images
+├── videos/               # Hero background video(s)
+├── particles.json        # Particles.js settings
+└── .htaccess             # URL rewriting
+├── includes/                 # Shared PHP scripts
+│   ├── auth.php
+│   ├── db.php
+│   ├── SecurityMiddleware.php
+│   └── ErrorHandler.php
+├── controllers/              # Business logic controllers
+│   ├── ProductController.php
+│   ├── CartController.php
+│   ├── QuizController.php
+│   └── ... (others)
+├── models/                   # (Optional/Planned) DB abstraction
+├── views/                    # HTML templates
+│   ├── home.php
+│   ├── layout/
+│   │   ├── header.php
+│   │   └── footer.php
+│   └── ... (others)
+├── admin/                    # (Basic, extensible) Admin dashboard
+├── db/                       # Database schema and seed data
+│   └── schema.sql
+├── config.php                # DB and app configuration
+├── .env                      # (Optional) Environment variables
+├── README.md                 # Project documentation
+├── technical_design_specification.md
+├── deployment_guide.md
+└── LICENSE
+```
+
+---
+
+## 🗃️ Database Schema
+
+### ➕ Core Tables
+
+- `users` – Authentication, roles
+- `products` – Product catalog
+- `categories` – Product categories
+- `orders` – Order headers
+- `order_items` – Order lines
+- `cart_items` – Shopping cart (user/session)
+- `quiz_results` – Scent quiz results
+- `newsletter_subscribers` – Newsletter opt-ins
+
+### 🔑 ER Diagram (Simplified)
+
+```
+users ───< orders ───< order_items >─── products
+products >─── categories
+users ───< quiz_results
+```
+
+See [`db/schema.sql`](db/schema.sql) for full schema.
+
+---
+
+## 📦 Installation Instructions
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/sepnetflix/The-Scent-gpt6.git
+cd The-Scent-gpt6
+```
+
+### 2. Set up the database
+
+```sql
+CREATE DATABASE the_scent;
+GRANT ALL ON the_scent.* TO 'scent_user'@'localhost' IDENTIFIED BY 'your_password';
+```
+
+Then import the schema:
+
+```bash
+mysql -u scent_user -p the_scent < db/schema.sql
+```
+
+### 3. Configure `/config.php`
+
+Set your DB and app config:
+
+```php
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'the_scent');
+define('DB_USER', 'scent_user');
+define('DB_PASS', 'your_password');
+```
+
+### 4. Set permissions
+
+```bash
+chmod -R 755 uploads
+chown -R www-data:www-data uploads
+```
+
+### 5. Set up Apache
+
+- Enable `mod_rewrite`
+- Set `DocumentRoot` to `/public`
+- Make sure `.htaccess` is enabled
+
+---
+
+## 🚀 Deployment Guide Summary
+
+See [`deployment_guide.md`](deployment_guide.md) for full instructions.
+
+### Basic LAMP Deployment
+
+- Apache VirtualHost with `DocumentRoot /public`
+- Enable `mod_rewrite`
+- Secure `includes/`, `models/`, `config.php`
+
+### Optional Docker Setup
+
+```bash
+docker-compose up -d
+```
+
+Includes:
+- PHP + Apache
+- MySQL
+- Volume mounting
+- Exposed ports
+
+---
+
+## 🧪 Scent Quiz
+
+The scent quiz is a unique feature that helps users discover personalized product recommendations by selecting their **mood or need** (Relaxation, Energy, Focus, Sleep, Balance, etc.).
+
+- Quiz logic is implemented in `/controllers/QuizController.php` and `/views/quiz.php`.
+- Results are mapped to product recommendations.
+- Results can be emailed or stored for logged-in users.
+
+---
+
+## 🛡️ Security Best Practices
+
+Security is a top priority in *The Scent*. The platform includes several measures to protect user data and maintain safe operations across the stack.
+
+### 🔐 Authentication
+
+- Passwords are hashed using `password_hash()` (bcrypt).
+- Login uses `password_verify()` with secure session handling.
+
+### 🛡️ Input Sanitization
+
+- All inputs are validated and sanitized.
+- Output is escaped via `htmlspecialchars()` to prevent XSS.
+- Prepared statements and PDO are used to prevent SQL injection.
+
+### 🔄 CSRF Protection
+
+- CSRF tokens are generated per session and validated on all POST forms (including AJAX).
+- Example:
+
+```php
+<input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+```
+
+### 🔒 File Permissions
+
+- `config.php` permissions are set to `640`
+- Upload directories like `uploads` are restricted for webserver use only
+
+```bash
+chmod 640 config.php
+chown www-data:www-data config.php
+```
+
+### 🏦 Rate Limiting
+
+- Login, registration, and sensitive flows are rate-limited to prevent brute force.
+
+---
+
+## 🔧 Customization & Extensibility
+
+The codebase is modular and easy to extend.
+
+### ➕ Add a New Product
+
+Add via the admin dashboard (if enabled) or directly to the `products` table:
+
+```sql
+INSERT INTO products (name, price, image, category_id, stock_quantity, short_description)
+VALUES ('New Scent Oil', 29.99, '/images/scent9.jpg', 1, 50, 'A calming blend...');
+```
+
+Set `is_featured = 1` to feature it on the homepage.
+
+### ➕ Add a New Quiz Option
+
+Update quiz mapping logic in `/controllers/QuizController.php`:
+
+```php
+// Example mapping
+'confidence' => [9, 10] // New mood mapping
+```
+
+Update the quiz form in `/views/quiz.php`.
+
+### 🔐 Add Admin Roles
+
+Add an `admin` role in `users` table and restrict admin URLs:
+
+```sql
+ALTER TABLE users ADD COLUMN role ENUM('user', 'admin') DEFAULT 'user';
+```
+
+```php
+if ($_SESSION['user']['role'] !== 'admin') {
+    die("Access Denied");
+}
+```
+
+### 💳 Integrate Stripe or PayPal *(planned/future)*
+
+Payment integration points are in place in the checkout flow for future Stripe/PayPal modules.
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions from the community!
+
+### 🧾 Code Standards
+
+- Follow PSR-12 PHP coding standards
+- Use semantic HTML5
+- TailwindCSS utility classes and custom CSS for styling
+- Reusable components (header/footer)
+
+### 🛠️ How to Contribute
+
+1. Fork the repository
+2. Create a new branch (`feature/my-enhancement`)
+3. Make your changes
+4. Commit with descriptive messages
+5. Push to your fork
+6. Open a PR
+
+### 📌 Issues & Bugs
+
+Please use the [Issues](https://github.com/sepnetflix/The-Scent-gpt6/issues) tab to report bugs or request features.
+
+---
+
+## 📄 License
+
+Distributed under the **MIT License**.  
+You are free to use, modify, and distribute this code with attribution.
+
+See the [LICENSE](LICENSE) file for full text.
+
+---
+
+## 🙏 Credits
+
+This project wouldn’t be possible without:
+
+- **Tailwind CSS** – Utility-first CSS framework
+- **AOS.js** – Animate on scroll library
+- **Particles.js** – Beautiful background effects
+- **Font Awesome** – Icon library
+- **Unsplash & Pexels** – Background imagery
+- **OpenAI ChatGPT** – Assisted architectural planning and documentation
+- **PHP + MySQL Community** – For decades of server-side inspiration
+
+---
+
+## 📎 Appendix
+
+### 📘 Related Documentation
+
+- [`technical_design_specification.md`](./technical_design_specification.md)
+- [`deployment_guide.md`](./deployment_guide.md)
+
+### 🧪 Testing Scenarios
+
+- ✅ Can register and sign in as a user
+- ✅ Can browse featured products
+- ✅ Can take the scent quiz
+- ✅ Can add items to cart and checkout
+- ✅ Can access restricted admin panel (if role = admin)
+- ✅ Can subscribe to newsletter
+
+### 🔮 Future Enhancements
+
+- Stripe/PayPal payment integration (planned)
+- Email receipts and order tracking
+- Advanced scent quiz (multi-step logic)
+- Admin panel with analytics and audit trails
+- RESTful API for mobile apps
+- React/Vue frontend version
+
+---
+
+## 📫 Contact
+
+Have questions or feedback?
+
+- Email: support@thescent.com
+- Twitter: [@thescentaroma](https://twitter.com/thescentaroma)
+- GitHub Issues: [Submit Bug](https://github.com/sepnetflix/The-Scent-gpt6/issues)
+
+---
+
+## 🚀 Final Words
+
+> *“The Scent is not just a store — it’s a journey into serenity, balance, and well-being.”*
+
+Built with ❤️ to help people discover the power of aromatherapy.
+
+Thank you for checking out this project.  
+Please consider ⭐ starring the repo if you found it useful!

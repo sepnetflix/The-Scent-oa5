@@ -1,0 +1,3 @@
+https://g.co/gemini/share/36d8445b28e0
+
+https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221ApVmOqejblDhUTwnuL3K906Gx8dgDMeF%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1PUZg_EVhUIPeLb3zBXnybvKX1E9t8J3p/view?usp=sharing, https://drive.google.com/file/d/1TTg3sbcP_5hHGF9MvSfRjAL4tAcw33UD/view?usp=sharing, https://drive.google.com/file/d/1kKTnKqD6_4ZexyBSIDrPzdSSJvXV3Y3f/view?usp=sharing, https://drive.google.com/file/d/1mKEDQ4gX8rZa8gYb4azVHEfYGieTeQ8S/view?usp=sharing

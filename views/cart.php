@@ -13,6 +13,7 @@
                 </div>
             <?php else: ?>
                 <form id="cartForm" action="index.php?page=cart&action=update" method="POST">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
                     <div class="cart-items">
                         <?php foreach ($cartItems as $item): ?>
                             <div class="cart-item" data-product-id="<?= $item['product']['id'] ?>">
@@ -98,13 +99,13 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.remove-item').forEach(btn => {
         btn.addEventListener('click', function() {
             const productId = this.dataset.productId;
-            
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
             fetch('index.php?page=cart&action=remove', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: `product_id=${productId}`
+                body: `product_id=${productId}&csrf_token=${encodeURIComponent(csrfToken)}`
             })
             .then(response => response.json())
             .then(data => {
@@ -112,14 +113,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     this.closest('.cart-item').remove();
                     updateCartTotal();
                     updateCartCount(data.cartCount);
-                    
-                    // If cart is empty, refresh page
                     if (data.cartCount === 0) {
                         location.reload();
                     }
+                    showFlashMessage(data.message || 'Product removed from cart', 'success');
+                } else {
+                    showFlashMessage(data.message || 'Error removing item', 'error');
                 }
             })
-            .catch(error => console.error('Error:', error));
+            .catch(error => {
+                console.error('Error:', error);
+                showFlashMessage('Error removing item', 'error');
+            });
         });
     });
     
@@ -168,10 +173,52 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 updateCartTotal();
                 updateCartCount(data.cartCount);
+                showFlashMessage(data.message || 'Cart updated', 'success');
+            } else {
+                showFlashMessage(data.message || 'Error updating cart', 'error');
             }
         })
-        .catch(error => console.error('Error:', error));
+        .catch(error => {
+            console.error('Error:', error);
+            showFlashMessage('Error updating cart', 'error');
+        });
     });
+
+    // Flash message helper (reuse from home.php/footer.php)
+    function showFlashMessage(message, type = 'info') {
+        let flashContainer = document.querySelector('.flash-message-container');
+        if (!flashContainer) {
+            flashContainer = document.createElement('div');
+            flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100]';
+            document.body.appendChild(flashContainer);
+        }
+        const flashDiv = document.createElement('div');
+        const colorMap = {
+            success: 'bg-green-100 border-green-400 text-green-700',
+            error: 'bg-red-100 border-red-400 text-red-700',
+            info: 'bg-blue-100 border-blue-400 text-blue-700',
+            warning: 'bg-yellow-100 border-yellow-400 text-yellow-700'
+        };
+        flashDiv.className = `flash-message border px-4 py-3 rounded relative shadow-md mb-2 ${colorMap[type] || colorMap['info']}`;
+        flashDiv.setAttribute('role', 'alert');
+        const messageSpan = document.createElement('span');
+        messageSpan.className = 'block sm:inline';
+        messageSpan.textContent = message;
+        flashDiv.appendChild(messageSpan);
+        const closeButton = document.createElement('span');
+        closeButton.className = 'absolute top-0 bottom-0 right-0 px-4 py-3';
+        closeButton.innerHTML = '<svg class="fill-current h-6 w-6 text-current" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>';
+        closeButton.onclick = () => flashDiv.remove();
+        flashDiv.appendChild(closeButton);
+        flashContainer.appendChild(flashDiv);
+        setTimeout(() => {
+             if (flashDiv) {
+                 flashDiv.style.opacity = '0';
+                 flashDiv.style.transition = 'opacity 0.5s ease-out';
+                 setTimeout(() => flashDiv.remove(), 500);
+             }
+        }, 5000);
+    }
 });
 </script>
 

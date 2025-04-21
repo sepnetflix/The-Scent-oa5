@@ -37,10 +37,7 @@ require_once __DIR__ . '/../../includes/auth.php';
         }
     </script>
     <link rel="stylesheet" href="/css/style.css">
-    
-    <!-- Scripts -->
-    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
-    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    <!-- Scripts: Only mobile menu JS here, remove AOS/Particles.js init from header -->
     <script>
         // Initialize mobile menu functionality
         document.addEventListener('DOMContentLoaded', function() {

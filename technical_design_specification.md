@@ -1,4 +1,4 @@
-# The Scent – Technical Design Specification (Updated - Rev 2)
+# The Scent – Technical Design Specification (April 21, 2025)
 
 ---
 
@@ -124,7 +124,7 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 8.  **View Rendering:** The included view file (`views/*.php`) generates HTML output, often including layout partials (`views/layout/header.php`, `views/layout/footer.php`). Data is accessed via variables set before the include or passed via `BaseController::renderView`. Output is escaped using `htmlspecialchars()`.
 9.  **Response:** Output (HTML, CSS, JS) is sent to the browser.
 10. **Client-Side Execution:** The browser renders HTML, applies CSS (from `/css/style.css` and Tailwind CDN), and executes JavaScript (AOS, Particles, mobile menu, AJAX for newsletter/cart updates/cart removal).
-11. **AJAX Interactions:** Client-side JS sends `fetch` requests (typically POST) back to `index.php` with appropriate `page` and `action` parameters for tasks like newsletter subscription or cart updates/removal. The corresponding controller action handles the request and usually responds with JSON (using `jsonResponse` helper from `BaseController`). **(Inconsistency Note):** The Add-to-Cart functionality currently has frontend JS expecting AJAX/JSON but backend PHP performing a redirect.
+11. **AJAX Interactions:** Client-side JS sends `fetch` requests (typically POST) back to `index.php` with appropriate `page` and `action` parameters for tasks like newsletter subscription or cart updates/removal. The corresponding controller action handles the request and usually responds with JSON (using `jsonResponse` helper from `BaseController`).
 
 ---
 
@@ -209,7 +209,7 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 *   **controllers/*Controller.php**: Specific controllers handling logic for different application modules (Products, Cart, Checkout, Account, Quiz, etc.). Instantiated in `index.php`, extend `BaseController`.
 *   **models/*.php**: Classes representing data entities (Product, User, Order, Quiz) and potentially containing database interaction logic specific to those entities.
 *   **views/layout/header.php**: Generates common site header (logo, navigation, icons), includes CSS/JS assets (CDNs, custom CSS), handles dynamic elements like login status and cart count (from `$_SESSION['cart_count']`), displays server-side flash messages (from `$_SESSION['flash_message']`).
-*   **views/layout/footer.php**: Generates common site footer (links, newsletter, social icons, copyright), includes/initializes JavaScript (AOS, Particles, custom AJAX handlers for newsletter). Contains a non-functional Add-to-Cart AJAX handler.
+*   **views/layout/footer.php**: Generates common site footer (links, newsletter, social icons, copyright), includes/initializes JavaScript (AOS, Particles, custom AJAX handlers for newsletter). 
 *   **views/*.php**: Individual page templates combining HTML and PHP to display content. Included by `index.php` or controller methods (e.g., `BaseController::renderView`).
 
 ---
@@ -306,9 +306,9 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
         *   *Cart Quantity Update (`cart.php`):* Form (`#cartForm`) submission via AJAX POST to `index.php?page=cart&action=update`, expecting JSON. Updates totals, header count. +/- buttons update input value client-side.
     *   **Flash Messages:** Multiple mechanisms exist:
         *   Server-side: `$_SESSION['flash_message']` set by controllers (e.g., using `BaseController::setFlashMessage`), displayed/unset by `header.php`.
-        *   Client-side (`home.php`): `showFlashMessage()` function used by add-to-cart AJAX handler (though handler is mismatched with backend).
+        *   Client-side (`home.php`): `showFlashMessage()` function used by add-to-cart AJAX handler.
         *   Client-side (`footer.php`): Newsletter AJAX uses `alert()`.
-    *   **(Inconsistency) Add-to-Cart:** JS handlers (`.add-to-cart` in `home.php`/`footer.php`) attempt AJAX POST to `index.php?page=cart&action=add`, expecting JSON and using `showFlashMessage` or `alert`. However, the backend code in `index.php` for this action performs a server-side redirect (`header('Location: index.php?page=cart'); exit;`). Therefore, clicking "Add to Cart" buttons currently results in a **page redirect**, not an AJAX update, making the frontend JS handlers non-functional for this action.
+    *   **Add-to-Cart:** JS handlers (`.add-to-cart` in `home.php`/`footer.php`) trigger AJAX POST to `index.php?page=cart&action=add`, expecting JSON and using `showFlashMessage`.
 
 ---
 
@@ -320,7 +320,7 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 *   Expects `$featuredProducts` array from `ProductController::showHomePage()`.
 *   Uses `htmlspecialchars()` for product data.
 *   Conditionally shows "Add to Cart" (`.add-to-cart`, `data-product-id`) or "Out of Stock" based on `stock_quantity`.
-*   Contains JS for AOS, Particles, sticky header, newsletter AJAX (`alert`), and the mismatched Add-to-Cart AJAX handler (`showFlashMessage`).
+*   Contains JS for AOS, Particles, sticky header, newsletter AJAX (`alert`), and the Add-to-Cart AJAX handler (`showFlashMessage`).
 
 ### 7.2 Header and Navigation (views/layout/header.php)
 
@@ -334,13 +334,12 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 ### 7.3 Footer and Newsletter (views/layout/footer.php)
 
 *   Generates footer with links, contact info, newsletter form (`#newsletter-form-footer`), social icons, copyright, payment icons.
-*   Includes JS for AOS/Particles init, newsletter form AJAX (`alert`), and a non-functional Add-to-Cart AJAX handler (`alert`).
+*   Includes JS for AOS/Particles init, newsletter form AJAX (`alert`), and Add-to-Cart AJAX handler (`showFlashMessage`).
 
 ### 7.4 Product Grid & Cards
 
 *   Used on Home page and likely Product Listing page. Responsive grid via Tailwind.
 *   Card shows image, name, category/desc, "View Details" link, and conditional "Add to Cart" (`.add-to-cart`, `data-product-id`) or "Out of Stock" button.
-*   **Functionality Note:** Clicking `.add-to-cart` currently triggers a non-AJAX redirect due to backend logic in `index.php`.
 
 ### 7.5 Shopping Cart (views/cart.php)
 
@@ -418,7 +417,7 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 *(Provides plausible SQL CREATE TABLE statements for key entities. Requires validation against actual schema file.)*
 
 ### 9.3 Data Flow Examples
-*   **Add to Cart:** POST to `cart/add`. `CartController::addToCart`. Backend performs redirect to `cart` page. (Frontend JS expects AJAX/JSON but is mismatched).
+*   **Add to Cart:** AJAX POST to `cart/add`. `CartController::addToCart`. Backend responds with JSON. JS updates UI.
 *   **Update Cart:** AJAX POST to `cart/update`. `CartController::updateCart`. Backend responds with JSON. JS updates UI.
 *   **Remove Cart Item:** AJAX POST to `cart/remove`. `CartController::removeCartItem`. Backend responds with JSON. JS updates UI.
 *   **Place Order:** POST to `checkout/process`. `CheckoutController::processCheckout`. Creates DB records, clears cart, processes payment, redirects.
@@ -518,7 +517,7 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 | `models/*.php`              | Data entity representation and DB interaction logic                                   |
 | `views/*.php`               | HTML/PHP templates for rendering pages                                               |
 | `views/layout/header.php`   | Sitewide header, navigation, asset loading, session flash/cart display                 |
-| `views/layout/footer.php`   | Sitewide footer, JS initialization, newsletter AJAX, (non-functional add-to-cart JS)   |
+| `views/layout/footer.php`   | Sitewide footer, JS initialization, newsletter AJAX, Add-to-Cart AJAX handler          |
 
 ### B. Glossary
 *(Standard terms: MVC, CSRF, XSS, SQLi, AOS.js, Particles.js, Tailwind, PDO, Session, Flash Message, CDN, AJAX, .htaccess)*
@@ -539,9 +538,8 @@ case 'cart':
           $quantity = SecurityMiddleware::validateInput($_POST['quantity'] ?? 1, 'int');
           // Delegate logic to controller method
           $controller->addToCart($productId, $quantity);
-          // Actual behavior: Redirect after adding to cart
-          header('Location: index.php?page=cart');
-          exit;
+          // Respond with JSON for AJAX
+          $controller->jsonResponse(['success' => true, 'message' => 'Product added to cart', 'cart_count' => $_SESSION['cart_count']]);
      } else if ($action === 'update' && $_SERVER['REQUEST_METHOD'] === 'POST') {
           // Assumes updateCart handles AJAX via BaseController::jsonResponse
           $controller->updateCart($_POST['quantities'] ?? []); // Expects array like [product_id => quantity]
@@ -640,6 +638,6 @@ document.querySelectorAll('.remove-item').forEach(btn => {
 
 ---
 
-**End of Technical Design Specification (Updated - Rev 2)**
+**End of Technical Design Specification (April 21, 2025)**
 
 This document reflects the analysis of the provided code snippets and aims to accurately represent the project's current state, including noted inconsistencies (e.g., Add-to-Cart mechanism). It should serve as a guide for development and onboarding, highlighting existing patterns and areas needing potential refactoring or clarification.
