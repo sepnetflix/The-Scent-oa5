@@ -33,7 +33,7 @@ class ProductController extends BaseController {
             // Validate and sanitize inputs
             $page = max(1, (int)($this->validateInput($_GET['page'] ?? 1, 'int')));
             $searchQuery = $this->validateInput($_GET['search'] ?? '', 'string');
-            $category = $this->validateInput($_GET['category'] ?? '', 'string');
+            $categoryId = $this->validateInput($_GET['category'] ?? '', 'int');
             $sortBy = $this->validateInput($_GET['sort'] ?? 'name_asc', 'string');
             $minPrice = $this->validateInput($_GET['min_price'] ?? null, 'float');
             $maxPrice = $this->validateInput($_GET['max_price'] ?? null, 'float');
@@ -51,9 +51,9 @@ class ProductController extends BaseController {
                 $params[] = "%{$searchQuery}%";
             }
             
-            if ($category) {
-                $conditions[] = "category = ?";
-                $params[] = $category;
+            if ($categoryId) {
+                $conditions[] = "category_id = ?";
+                $params[] = $categoryId;
             }
             
             if ($minPrice !== null) {
@@ -85,7 +85,7 @@ class ProductController extends BaseController {
             // Set page title
             $pageTitle = $searchQuery ? 
                 "Search Results for \"" . htmlspecialchars($searchQuery) . "\"" : 
-                ($category ? htmlspecialchars($category) . " Products" : "All Products");
+                ($categoryId ? "Category Products" : "All Products");
             
             require_once __DIR__ . '/../views/products.php';
             

@@ -1,3 +1,216 @@
+# controllers/CartController.php  
+```php
+<?php
+require_once __DIR__ . '/BaseController.php';
+require_once __DIR__ . '/../models/Product.php';
+
+class CartController extends BaseController {
+    private $productModel;
+    
+    public function __construct($pdo) {
+        parent::__construct($pdo);
+        $this->productModel = new Product($pdo);
+        $this->initCart();
+    }
+    
+    private function initCart() {
+        if (!isset($_SESSION['cart'])) {
+            $_SESSION['cart'] = [];
+        }
+    }
+    
+    public function showCart() {
+        $cartItems = [];
+        $total = 0;
+        
+        // Get full product details for cart items
+        foreach ($_SESSION['cart'] as $productId => $quantity) {
+            $product = $this->productModel->getById($productId);
+            if ($product) {
+                $cartItems[] = [
+                    'product' => $product,
+                    'quantity' => $quantity,
+                    'subtotal' => $product['price'] * $quantity
+                ];
+                $total += $product['price'] * $quantity;
+            }
+        }
+        
+        require_once __DIR__ . '/../views/cart.php';
+    }
+    
+    public function addToCart() {
+        $this->validateAjax();
+        $this->validateCSRF();
+        
+        $productId = $this->validateInput($_POST['product_id'] ?? null, 'int');
+        $quantity = (int)$this->validateInput($_POST['quantity'] ?? 1, 'int');
+        
+        if (!$productId || $quantity < 1) {
+            $this->jsonResponse(['success' => false, 'message' => 'Invalid product or quantity'], 400);
+        }
+        
+        $product = $this->productModel->getById($productId);
+        if (!$product) {
+            $this->jsonResponse(['success' => false, 'message' => 'Product not found'], 404);
+        }
+        
+        // Check stock availability
+        if (!$this->productModel->isInStock($productId, $quantity)) {
+            $stockInfo = $this->productModel->checkStock($productId);
+            $stockStatus = 'out_of_stock';
+            $this->jsonResponse([
+                'success' => false,
+                'message' => 'Insufficient stock',
+                'cart_count' => array_sum($_SESSION['cart']),
+                'stock_status' => $stockStatus
+            ], 400);
+        }
+        
+        // Add or update quantity
+        if (isset($_SESSION['cart'][$productId])) {
+            $newQuantity = $_SESSION['cart'][$productId] + $quantity;
+            // Recheck stock for total quantity
+            if (!$this->productModel->isInStock($productId, $newQuantity)) {
+                $stockInfo = $this->productModel->checkStock($productId);
+                $stockStatus = 'out_of_stock';
+                $this->jsonResponse([
+                    'success' => false,
+                    'message' => 'Insufficient stock for requested quantity',
+                    'cart_count' => array_sum($_SESSION['cart']),
+                    'stock_status' => $stockStatus
+                ], 400);
+            }
+            $_SESSION['cart'][$productId] = $newQuantity;
+        } else {
+            $_SESSION['cart'][$productId] = $quantity;
+        }
+        
+        $cartCount = array_sum($_SESSION['cart']);
+        $_SESSION['cart_count'] = $cartCount;
+        
+        // Determine stock status for response
+        $stockInfo = $this->productModel->checkStock($productId);
+        $currentStock = $stockInfo ? ($stockInfo['stock_quantity'] - $_SESSION['cart'][$productId]) : 0;
+        $stockStatus = 'in_stock';
+        if ($stockInfo) {
+            if (!$stockInfo['backorder_allowed']) {
+                if ($currentStock <= 0) {
+                    $stockStatus = 'out_of_stock';
+                } elseif ($stockInfo['low_stock_threshold'] && $currentStock <= $stockInfo['low_stock_threshold']) {
+                    $stockStatus = 'low_stock';
+                }
+            }
+        }
+        
+        $this->jsonResponse([
+            'success' => true,
+            'message' => htmlspecialchars($product['name']) . ' added to cart',
+            'cart_count' => $cartCount,
+            'stock_status' => $stockStatus
+        ]);
+    }
+    
+    public function updateCart() {
+        $this->validateAjax();
+        $this->validateCSRF();
+        
+        $updates = $_POST['updates'] ?? [];
+        $stockErrors = [];
+        
+        foreach ($updates as $productId => $quantity) {
+            $productId = $this->validateInput($productId, 'int');
+            $quantity = (int)$this->validateInput($quantity, 'int');
+            
+            if ($quantity > 0) {
+                // Validate stock
+                if (!$this->productModel->isInStock($productId, $quantity)) {
+                    $product = $this->productModel->getById($productId);
+                    $stockErrors[] = "{$product['name']} has insufficient stock";
+                    continue;
+                }
+                $_SESSION['cart'][$productId] = $quantity;
+            } else {
+                unset($_SESSION['cart'][$productId]);
+            }
+        }
+        
+        $this->jsonResponse([
+            'success' => empty($stockErrors),
+            'message' => empty($stockErrors) ? 'Cart updated' : 'Some items have insufficient stock',
+            'cartCount' => array_sum($_SESSION['cart']),
+            'errors' => $stockErrors
+        ]);
+    }
+    
+    public function removeFromCart() {
+        $this->validateAjax();
+        $this->validateCSRF();
+        
+        $productId = $this->validateInput($_POST['product_id'] ?? null, 'int');
+        
+        if (!$productId || !isset($_SESSION['cart'][$productId])) {
+            $this->jsonResponse(['success' => false, 'message' => 'Product not found in cart'], 404);
+        }
+        
+        unset($_SESSION['cart'][$productId]);
+        
+        $this->jsonResponse([
+            'success' => true,
+            'message' => 'Product removed from cart',
+            'cartCount' => array_sum($_SESSION['cart'])
+        ]);
+    }
+    
+    public function clearCart() {
+        $_SESSION['cart'] = [];
+        
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->validateAjax();
+            $this->validateCSRF();
+            $this->jsonResponse([
+                'success' => true,
+                'message' => 'Cart cleared',
+                'cartCount' => 0
+            ]);
+        } else {
+            $this->redirect('cart');
+        }
+    }
+    
+    public function validateCartStock() {
+        $errors = [];
+        
+        foreach ($_SESSION['cart'] as $productId => $quantity) {
+            if (!$this->productModel->isInStock($productId, $quantity)) {
+                $product = $this->productModel->getById($productId);
+                $errors[] = "{$product['name']} has insufficient stock";
+            }
+        }
+        
+        return $errors;
+    }
+    
+    public function getCartItems() {
+        $this->initCart();
+        $cartItems = [];
+        
+        foreach ($_SESSION['cart'] as $productId => $quantity) {
+            $product = $this->productModel->getById($productId);
+            if ($product) {
+                $cartItems[] = [
+                    'product' => $product,
+                    'quantity' => $quantity,
+                    'subtotal' => $product['price'] * $quantity
+                ];
+            }
+        }
+        
+        return $cartItems;
+    }
+}
+```
+
 # controllers/ProductController.php  
 ```php
 <?php
@@ -35,7 +248,7 @@ class ProductController extends BaseController {
             // Validate and sanitize inputs
             $page = max(1, (int)($this->validateInput($_GET['page'] ?? 1, 'int')));
             $searchQuery = $this->validateInput($_GET['search'] ?? '', 'string');
-            $category = $this->validateInput($_GET['category'] ?? '', 'string');
+            $categoryId = $this->validateInput($_GET['category'] ?? '', 'int');
             $sortBy = $this->validateInput($_GET['sort'] ?? 'name_asc', 'string');
             $minPrice = $this->validateInput($_GET['min_price'] ?? null, 'float');
             $maxPrice = $this->validateInput($_GET['max_price'] ?? null, 'float');
@@ -53,9 +266,9 @@ class ProductController extends BaseController {
                 $params[] = "%{$searchQuery}%";
             }
             
-            if ($category) {
-                $conditions[] = "category = ?";
-                $params[] = $category;
+            if ($categoryId) {
+                $conditions[] = "category_id = ?";
+                $params[] = $categoryId;
             }
             
             if ($minPrice !== null) {
@@ -87,7 +300,7 @@ class ProductController extends BaseController {
             // Set page title
             $pageTitle = $searchQuery ? 
                 "Search Results for \"" . htmlspecialchars($searchQuery) . "\"" : 
-                ($category ? htmlspecialchars($category) . " Products" : "All Products");
+                ($categoryId ? "Category Products" : "All Products");
             
             require_once __DIR__ . '/../views/products.php';
             
@@ -553,36 +766,170 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById(tabId).classList.add('active');
         });
     });
-    
-    // Add to cart functionality
-    const addToCartForm = document.querySelector('.add-to-cart-form');
-    addToCartForm.addEventListener('submit', function(e) {
-        e.preventDefault();
+});
+</script>
+
+<?php require_once __DIR__ . '/layout/footer.php'; ?>
+```
+
+# views/products.php  
+```php
+<?php require_once __DIR__ . '/layout/header.php'; ?>
+
+<section class="products-section">
+    <div class="container">
+        <div class="products-header" data-aos="fade-up">
+            <h1><?= $pageTitle ?></h1>
+            
+            <!-- Search Bar -->
+            <form action="index.php" method="GET" class="search-form">
+                <input type="hidden" name="page" value="products">
+                <div class="search-input">
+                    <input type="text" name="search" placeholder="Search products..."
+                           value="<?= htmlspecialchars($searchQuery ?? '') ?>">
+                    <button type="submit">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
         
-        const formData = new FormData(this);
-        fetch(this.action, {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update cart count
-                const cartCount = document.querySelector('.cart-count');
-                if (cartCount) {
-                    cartCount.textContent = data.cartCount;
-                    cartCount.style.display = 'inline';
-                }
+        <div class="products-grid-container">
+            <!-- Filters Sidebar -->
+            <aside class="filters-sidebar" data-aos="fade-right">
+                <div class="filters-section">
+                    <h2>Categories</h2>
+                    <ul class="category-list">
+                        <li>
+                            <a href="index.php?page=products" 
+                               class="<?= empty($_GET['category']) ? 'active' : '' ?>">
+                                All Products
+                            </a>
+                        </li>
+                        <?php foreach ($categories as $cat): ?>
+                            <li>
+                                <a href="index.php?page=products&category=<?= urlencode($cat['id']) ?>"
+                                   class="<?= (isset($_GET['category']) && $_GET['category'] == $cat['id']) ? 'active' : '' ?>">
+                                    <?= htmlspecialchars($cat['name']) ?>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
                 
-                // Show success message
-                alert('Product added to cart!');
-            }
-        })
-        .catch(error => console.error('Error:', error));
+                <div class="filters-section">
+                    <h2>Price Range</h2>
+                    <div class="price-range">
+                        <div class="range-inputs">
+                            <input type="number" id="minPrice" placeholder="Min" min="0"
+                                   value="<?= $_GET['min_price'] ?? '' ?>">
+                            <span>to</span>
+                            <input type="number" id="maxPrice" placeholder="Max" min="0"
+                                   value="<?= $_GET['max_price'] ?? '' ?>">
+                        </div>
+                        <button type="button" class="btn-secondary apply-price-filter">Apply</button>
+                    </div>
+                </div>
+            </aside>
+            
+            <!-- Products Grid -->
+            <div class="products-content">
+                <div class="products-toolbar" data-aos="fade-up">
+                    <div class="showing-products">
+                        Showing <?= count($products) ?> products
+                    </div>
+                    
+                    <div class="sort-options">
+                        <label for="sort">Sort by:</label>
+                        <select id="sort" name="sort">
+                            <option value="name_asc" <?= ($sortBy === 'name_asc') ? 'selected' : '' ?>>
+                                Name (A-Z)
+                            </option>
+                            <option value="name_desc" <?= ($sortBy === 'name_desc') ? 'selected' : '' ?>>
+                                Name (Z-A)
+                            </option>
+                            <option value="price_asc" <?= ($sortBy === 'price_asc') ? 'selected' : '' ?>>
+                                Price (Low to High)
+                            </option>
+                            <option value="price_desc" <?= ($sortBy === 'price_desc') ? 'selected' : '' ?>>
+                                Price (High to Low)
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                
+                <?php if (empty($products)): ?>
+                    <div class="no-products" data-aos="fade-up">
+                        <i class="fas fa-search"></i>
+                        <p>No products found matching your criteria.</p>
+                        <a href="index.php?page=products" class="btn-primary">View All Products</a>
+                    </div>
+                <?php else: ?>
+                    <div class="products-grid">
+                        <?php foreach ($products as $index => $product): ?>
+                            <div class="product-card" data-aos="fade-up" data-aos-delay="<?= $index * 100 ?>">
+                                <div class="product-image">
+                                    <a href="index.php?page=products&id=<?= $product['id'] ?>">
+                                        <img src="<?= htmlspecialchars($product['image_url']) ?>" 
+                                             alt="<?= htmlspecialchars($product['name']) ?>">
+                                    </a>
+                                    <?php if ($product['featured']): ?>
+                                        <span class="featured-badge">Featured</span>
+                                    <?php endif; ?>
+                                </div>
+                                
+                                <div class="product-info">
+                                    <h3>
+                                        <a href="index.php?page=products&id=<?= $product['id'] ?>">
+                                            <?= htmlspecialchars($product['name']) ?>
+                                        </a>
+                                    </h3>
+                                    <p class="product-category">
+                                        <?= htmlspecialchars($product['category_name'] ?? '') ?>
+                                    </p>
+                                    <p class="product-price">$<?= number_format($product['price'], 2) ?></p>
+                                    <div class="product-actions">
+                                        <a href="index.php?page=products&id=<?= $product['id'] ?>" 
+                                           class="btn-secondary">View Details</a>
+                                        <button class="btn-primary add-to-cart" 
+                                                data-product-id="<?= $product['id'] ?>">
+                                            Add to Cart
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle sorting
+    const sortSelect = document.getElementById('sort');
+    sortSelect.addEventListener('change', function() {
+        const url = new URL(window.location.href);
+        url.searchParams.set('sort', this.value);
+        window.location.href = url.toString();
     });
     
-    // Related products add to cart
-    document.querySelectorAll('.related-products .add-to-cart').forEach(button => {
+    // Handle price filter
+    const applyPriceFilter = document.querySelector('.apply-price-filter');
+    applyPriceFilter.addEventListener('click', function() {
+        const minPrice = document.getElementById('minPrice').value;
+        const maxPrice = document.getElementById('maxPrice').value;
+        
+        const url = new URL(window.location.href);
+        if (minPrice) url.searchParams.set('min_price', minPrice);
+        if (maxPrice) url.searchParams.set('max_price', maxPrice);
+        window.location.href = url.toString();
+    });
+    
+    // Handle add to cart
+    document.querySelectorAll('.add-to-cart').forEach(button => {
         button.addEventListener('click', function() {
             const productId = this.dataset.productId;
             
@@ -596,11 +943,14 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
+                    // Update cart count
                     const cartCount = document.querySelector('.cart-count');
                     if (cartCount) {
                         cartCount.textContent = data.cartCount;
                         cartCount.style.display = 'inline';
                     }
+                    
+                    // Show success message
                     alert('Product added to cart!');
                 }
             })
@@ -660,22 +1010,22 @@ class Product {
         return $stmt->fetch();
     }
     
-    public function getByCategory($category) {
-        $stmt = $this->pdo->prepare("SELECT * FROM products WHERE category = ? ORDER BY id DESC");
-        $stmt->execute([$category]);
+    public function getByCategory($categoryId) {
+        $stmt = $this->pdo->prepare("SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.category_id = ? ORDER BY p.id DESC");
+        $stmt->execute([$categoryId]);
         return $stmt->fetchAll();
     }
     
     public function create($data) {
         $stmt = $this->pdo->prepare("
-            INSERT INTO products (name, description, price, category, image_url, featured)
+            INSERT INTO products (name, description, price, category_id, image_url, featured)
             VALUES (?, ?, ?, ?, ?, ?)
         ");
         return $stmt->execute([
             $data['name'],
             $data['description'],
             $data['price'],
-            $data['category'],
+            $data['category_id'],
             $data['image_url'],
             $data['featured'] ?? 0
         ]);
@@ -685,14 +1035,14 @@ class Product {
         $stmt = $this->pdo->prepare("
             UPDATE products 
             SET name = ?, description = ?, price = ?, 
-                category = ?, image_url = ?, featured = ?
+                category_id = ?, image_url = ?, featured = ?
             WHERE id = ?
         ");
         return $stmt->execute([
             $data['name'],
             $data['description'],
             $data['price'],
-            $data['category'],
+            $data['category_id'],
             $data['image_url'],
             $data['featured'] ?? 0,
             $id
@@ -716,37 +1066,42 @@ class Product {
     }
     
     public function getAllCategories() {
-        $stmt = $this->pdo->query("
-            SELECT DISTINCT category 
-            FROM products 
-            ORDER BY category ASC
-        ");
-        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $stmt = $this->pdo->query("SELECT id, name FROM categories ORDER BY name ASC");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
     
-    public function getFiltered($conditions = [], $params = [], $sortBy = 'name_asc') {
-        $sql = "SELECT * FROM products";
-        
-        if (!empty($conditions)) {
-            $sql .= " WHERE " . implode(" AND ", $conditions);
+    public function getFiltered($conditions = [], $params = [], $sortBy = 'name_asc', $limit = null, $offset = null) {
+        // Prefix ambiguous columns in conditions
+        $fixedConditions = array_map(function($cond) {
+            $cond = preg_replace('/\bname\b/', 'p.name', $cond);
+            $cond = preg_replace('/\bdescription\b/', 'p.description', $cond);
+            return $cond;
+        }, $conditions);
+        $sql = "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id";
+        if (!empty($fixedConditions)) {
+            $sql .= " WHERE " . implode(" AND ", $fixedConditions);
         }
-        
         // Add sorting
         switch ($sortBy) {
             case 'price_asc':
-                $sql .= " ORDER BY price ASC";
+                $sql .= " ORDER BY p.price ASC";
                 break;
             case 'price_desc':
-                $sql .= " ORDER BY price DESC";
+                $sql .= " ORDER BY p.price DESC";
                 break;
             case 'name_desc':
-                $sql .= " ORDER BY name DESC";
+                $sql .= " ORDER BY p.name DESC";
                 break;
             case 'name_asc':
             default:
-                $sql .= " ORDER BY name ASC";
+                $sql .= " ORDER BY p.name ASC";
         }
-        
+        if ($limit !== null) {
+            $sql .= " LIMIT " . (int)$limit;
+            if ($offset !== null) {
+                $sql .= " OFFSET " . (int)$offset;
+            }
+        }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
@@ -778,39 +1133,32 @@ class Product {
         return $stmt->fetchAll();
     }
     
-    public function searchWithFilters($query, $category = null, $minPrice = null, $maxPrice = null) {
-        $conditions = ["(name LIKE ? OR description LIKE ?)"]; 
+    public function searchWithFilters($query, $categoryId = null, $minPrice = null, $maxPrice = null) {
+        $conditions = ["(name LIKE ? OR description LIKE ?)"];
         $params = ["%$query%", "%$query%"];
-        
-        if ($category) {
-            $conditions[] = "category = ?";
-            $params[] = $category;
+        if ($categoryId) {
+            $conditions[] = "category_id = ?";
+            $params[] = $categoryId;
         }
-        
         if ($minPrice !== null) {
             $conditions[] = "price >= ?";
             $params[] = $minPrice;
         }
-        
         if ($maxPrice !== null) {
             $conditions[] = "price <= ?";
             $params[] = $maxPrice;
         }
-        
-        $sql = "SELECT * FROM products WHERE " . implode(" AND ", $conditions);
+        $sql = "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE " . implode(" AND ", $conditions);
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
     }
     
-    public function getRelatedProducts($productId, $category, $limit = 4) {
+    public function getRelatedProducts($productId, $categoryId, $limit = 4) {
         $stmt = $this->pdo->prepare("
-            SELECT * FROM products 
-            WHERE category = ? AND id != ?
-            ORDER BY RAND()
-            LIMIT ?
+            SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.category_id = ? AND p.id != ? ORDER BY RAND() LIMIT ?
         ");
-        $stmt->execute([$category, $productId, $limit]);
+        $stmt->execute([$categoryId, $productId, $limit]);
         return $stmt->fetchAll();
     }
 
@@ -879,6 +1227,17 @@ class Product {
             WHERE id = ?
         ");
         return $stmt->execute([$threshold, $backorderAllowed, $id]);
+    }
+
+    public function getCount($conditions = [], $params = []) {
+        $sql = "SELECT COUNT(*) as count FROM products";
+        if (!empty($conditions)) {
+            $sql .= " WHERE " . implode(" AND ", $conditions);
+        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+        return $row ? (int)$row['count'] : 0;
     }
 }
 ```

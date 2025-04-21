@@ -26,15 +26,15 @@
                     <ul class="category-list">
                         <li>
                             <a href="index.php?page=products" 
-                               class="<?= !isset($_GET['category']) ? 'active' : '' ?>">
+                               class="<?= empty($_GET['category']) ? 'active' : '' ?>">
                                 All Products
                             </a>
                         </li>
                         <?php foreach ($categories as $cat): ?>
                             <li>
-                                <a href="index.php?page=products&category=<?= urlencode($cat) ?>"
-                                   class="<?= ($category === $cat) ? 'active' : '' ?>">
-                                    <?= htmlspecialchars($cat) ?>
+                                <a href="index.php?page=products&category=<?= urlencode($cat['id']) ?>"
+                                   class="<?= (isset($_GET['category']) && $_GET['category'] == $cat['id']) ? 'active' : '' ?>">
+                                    <?= htmlspecialchars($cat['name']) ?>
                                 </a>
                             </li>
                         <?php endforeach; ?>
@@ -108,7 +108,9 @@
                                             <?= htmlspecialchars($product['name']) ?>
                                         </a>
                                     </h3>
-                                    <p class="product-category"><?= htmlspecialchars($product['category']) ?></p>
+                                    <p class="product-category">
+                                        <?= htmlspecialchars($product['category_name'] ?? '') ?>
+                                    </p>
                                     <p class="product-price">$<?= number_format($product['price'], 2) ?></p>
                                     <div class="product-actions">
                                         <a href="index.php?page=products&id=<?= $product['id'] ?>" 

@@ -5,6 +5,6 @@ cd /cdrom/project/The-Scent-oa5
 for i in index.php config.php includes/db.php views/home.php views/layout/header.php views/layout/footer.php views/cart.php controllers/BaseController.php ; do (echo -e "# $i  \n\`\`\`php" ; cat $i ; echo -e "\n\`\`\`\n" ) ; done | tee content_of_code_files_1.md
 # for i in index.php config.php includes/db.php views/home.php views/layout/header.php views/layout/footer.php views/cart.php controllers/BaseController.php ; do (echo -e "# $i  \n\`\`\`php" ; cat $i ; echo -e "\n\`\`\`\n" ) ; done | tee content_of_code_files_1.md
 
-for i in controllers/ProductController.php views/product_detail.php models/Product.php  ; do (echo -e "# $i  \n\`\`\`php" ; cat $i ; echo -e "\n\`\`\`\n" ) ; done | tee content_of_code_files_2.md
+for i in controllers/CartController.php controllers/ProductController.php views/product_detail.php views/products.php models/Product.php  ; do (echo -e "# $i  \n\`\`\`php" ; cat $i ; echo -e "\n\`\`\`\n" ) ; done | tee content_of_code_files_2.md
 
 # for i in controllers/ProductController.php views/product_detail.php models/Product.php  ; do (echo -e "# $i  \n\`\`\`php" ; cat $i ; echo -e "\n\`\`\`\n" ) ; done | tee content_of_code_files_2.md

@@ -216,67 +216,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Handle add to cart buttons (Retained from original home.php JS logic)
-    document.querySelectorAll('.add-to-cart').forEach(button => {
-        button.addEventListener('click', async function() {
-            const productId = this.dataset.productId;
-            const isLowStock = this.dataset.lowStock === 'true';
-            
-            const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
-            const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
-
-            if (!csrfToken) {
-                 console.error('CSRF token not found!');
-                 showFlashMessage('Security token missing. Please refresh.', 'error');
-                 return; 
-            }
-
-            try {
-                const response = await fetch('index.php?page=cart&action=add', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: `product_id=${productId}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}` 
-                });
-
-                const contentType = response.headers.get("content-type");
-                if (contentType && contentType.indexOf("application/json") !== -1) {
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        const cartCount = document.querySelector('.cart-count');
-                        if (cartCount) {
-                            cartCount.textContent = data.cart_count; 
-                        }
-                        
-                        showFlashMessage('Product added to cart', 'success');
-                        
-                        if (data.stock_status === 'out_of_stock') {
-                            this.disabled = true;
-                            this.classList.remove('btn-secondary');
-                            this.classList.add('btn-disabled');
-                            this.textContent = 'Out of Stock';
-                        }
-                        
-                        if (data.stock_status === 'low_stock' && !isLowStock) {
-                            showFlashMessage('Limited quantity available', 'info');
-                            this.dataset.lowStock = 'true';
-                        }
-                    } else {
-                        showFlashMessage(data.message || 'Error adding to cart', 'error');
-                    }
-                } else {
-                    console.error('Received non-JSON response:', await response.text());
-                    showFlashMessage('An unexpected error occurred.', 'error');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                showFlashMessage('Error adding to cart', 'error');
-            }
-        });
-    });
-
     // Newsletter form submission
     const newsletterForm = document.getElementById('newsletter-form');
     if (newsletterForm) {
@@ -308,51 +247,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Flash message helper
-    function showFlashMessage(message, type = 'info') {
-        // Try to find an existing flash message container or create one
-        let flashContainer = document.querySelector('.flash-message-container');
-        if (!flashContainer) {
-            flashContainer = document.createElement('div');
-            flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100]'; // High z-index
-            document.body.appendChild(flashContainer);
-        }
-
-        const flashDiv = document.createElement('div');
-        // Map simple types to Tailwind bg colors (adjust as needed)
-        const colorMap = {
-            success: 'bg-green-100 border-green-400 text-green-700',
-            error: 'bg-red-100 border-red-400 text-red-700',
-            info: 'bg-blue-100 border-blue-400 text-blue-700',
-            warning: 'bg-yellow-100 border-yellow-400 text-yellow-700'
-        };
-        flashDiv.className = `flash-message border px-4 py-3 rounded relative shadow-md mb-2 ${colorMap[type] || colorMap['info']}`;
-        flashDiv.setAttribute('role', 'alert');
-        
-        const messageSpan = document.createElement('span');
-        messageSpan.className = 'block sm:inline';
-        messageSpan.textContent = message;
-        flashDiv.appendChild(messageSpan);
-
-        const closeButton = document.createElement('span');
-        closeButton.className = 'absolute top-0 bottom-0 right-0 px-4 py-3';
-        closeButton.innerHTML = '<svg class="fill-current h-6 w-6 text-current" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>';
-        closeButton.onclick = () => flashDiv.remove();
-        flashDiv.appendChild(closeButton);
-        
-        flashContainer.appendChild(flashDiv);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-             if (flashDiv) {
-                 flashDiv.style.opacity = '0';
-                 flashDiv.style.transition = 'opacity 0.5s ease-out';
-                 setTimeout(() => flashDiv.remove(), 500);
-             }
-        }, 5000);
-    }
-
-     // Sticky Header Logic (Add if not already present globally)
+    // Sticky Header Logic (Add if not already present globally)
     const header = document.querySelector('.sample-header'); // Target the header nav
     if (header) {
         const stickyPoint = header.offsetTop + 100; // Adjust offset as needed

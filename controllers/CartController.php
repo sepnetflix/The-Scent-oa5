@@ -48,9 +48,21 @@ class CartController extends BaseController {
             $this->jsonResponse(['success' => false, 'message' => 'Invalid product or quantity'], 400);
         }
         
+        $product = $this->productModel->getById($productId);
+        if (!$product) {
+            $this->jsonResponse(['success' => false, 'message' => 'Product not found'], 404);
+        }
+        
         // Check stock availability
         if (!$this->productModel->isInStock($productId, $quantity)) {
-            $this->jsonResponse(['success' => false, 'message' => 'Insufficient stock'], 400);
+            $stockInfo = $this->productModel->checkStock($productId);
+            $stockStatus = 'out_of_stock';
+            $this->jsonResponse([
+                'success' => false,
+                'message' => 'Insufficient stock',
+                'cart_count' => array_sum($_SESSION['cart']),
+                'stock_status' => $stockStatus
+            ], 400);
         }
         
         // Add or update quantity
@@ -58,9 +70,13 @@ class CartController extends BaseController {
             $newQuantity = $_SESSION['cart'][$productId] + $quantity;
             // Recheck stock for total quantity
             if (!$this->productModel->isInStock($productId, $newQuantity)) {
+                $stockInfo = $this->productModel->checkStock($productId);
+                $stockStatus = 'out_of_stock';
                 $this->jsonResponse([
-                    'success' => false, 
-                    'message' => 'Insufficient stock for requested quantity'
+                    'success' => false,
+                    'message' => 'Insufficient stock for requested quantity',
+                    'cart_count' => array_sum($_SESSION['cart']),
+                    'stock_status' => $stockStatus
                 ], 400);
             }
             $_SESSION['cart'][$productId] = $newQuantity;
@@ -68,10 +84,28 @@ class CartController extends BaseController {
             $_SESSION['cart'][$productId] = $quantity;
         }
         
+        $cartCount = array_sum($_SESSION['cart']);
+        $_SESSION['cart_count'] = $cartCount;
+        
+        // Determine stock status for response
+        $stockInfo = $this->productModel->checkStock($productId);
+        $currentStock = $stockInfo ? ($stockInfo['stock_quantity'] - $_SESSION['cart'][$productId]) : 0;
+        $stockStatus = 'in_stock';
+        if ($stockInfo) {
+            if (!$stockInfo['backorder_allowed']) {
+                if ($currentStock <= 0) {
+                    $stockStatus = 'out_of_stock';
+                } elseif ($stockInfo['low_stock_threshold'] && $currentStock <= $stockInfo['low_stock_threshold']) {
+                    $stockStatus = 'low_stock';
+                }
+            }
+        }
+        
         $this->jsonResponse([
             'success' => true,
-            'message' => 'Product added to cart',
-            'cartCount' => array_sum($_SESSION['cart'])
+            'message' => htmlspecialchars($product['name']) . ' added to cart',
+            'cart_count' => $cartCount,
+            'stock_status' => $stockStatus
         ]);
     }
     

@@ -76,76 +76,12 @@
             }
         });
 
-        // Newsletter Form
-        document.getElementById('newsletter-form')?.addEventListener('submit', handleNewsletterSubmit);
-        document.getElementById('newsletter-form-footer')?.addEventListener('submit', handleNewsletterSubmit);
-
-        function handleNewsletterSubmit(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-
-            fetch('index.php?page=newsletter&action=subscribe', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams(formData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    this.innerHTML = '<p class="success">Thank you for subscribing!</p>';
-                } else {
-                    alert(data.message || 'Subscription failed. Please try again.');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Subscription failed. Please try again.');
-            });
-        }
-
-        // Add to Cart functionality with CSRF protection
-        document.querySelectorAll('.add-to-cart')?.forEach(button => {
-            button.addEventListener('click', function() {
-                const productId = this.dataset.productId;
-                const formData = new FormData();
-                formData.append('product_id', productId);
-                formData.append('quantity', '1');
-                formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
-
-                fetch('index.php?page=cart&action=add', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: new URLSearchParams(formData)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const cartCount = document.querySelector('.cart-count');
-                        if (cartCount) {
-                            cartCount.textContent = data.cartCount;
-                        }
-                        showFlashMessage('Product added to cart!', 'success');
-                    } else {
-                        showFlashMessage(data.message || 'Failed to add product to cart.', 'error');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showFlashMessage('Failed to add product to cart. Please try again.', 'error');
-                });
-            });
-        });
-
-        // Flash message helper (reuse from home.php)
-        function showFlashMessage(message, type = 'info') {
+        // Canonical flash message helper
+        window.showFlashMessage = function(message, type = 'info') {
             let flashContainer = document.querySelector('.flash-message-container');
             if (!flashContainer) {
                 flashContainer = document.createElement('div');
-                flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100]';
+                flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full';
                 document.body.appendChild(flashContainer);
             }
             const flashDiv = document.createElement('div');
@@ -163,18 +99,76 @@
             flashDiv.appendChild(messageSpan);
             const closeButton = document.createElement('span');
             closeButton.className = 'absolute top-0 bottom-0 right-0 px-4 py-3';
-            closeButton.innerHTML = '<svg class="fill-current h-6 w-6 text-current" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>';
+            closeButton.innerHTML = '&times;';
             closeButton.onclick = () => flashDiv.remove();
             flashDiv.appendChild(closeButton);
             flashContainer.appendChild(flashDiv);
             setTimeout(() => {
-                 if (flashDiv) {
-                     flashDiv.style.opacity = '0';
-                     flashDiv.style.transition = 'opacity 0.5s ease-out';
-                     setTimeout(() => flashDiv.remove(), 500);
-                 }
+                if (flashDiv) {
+                    flashDiv.style.opacity = '0';
+                    flashDiv.style.transition = 'opacity 0.5s ease-out';
+                    setTimeout(() => flashDiv.remove(), 500);
+                }
             }, 5000);
-        }
+        };
+
+        // Canonical Add-to-Cart handler (event delegation)
+        document.body.addEventListener('click', function(e) {
+            const btn = e.target.closest('.add-to-cart');
+            if (!btn) return;
+            e.preventDefault();
+            if (btn.disabled) return;
+            const productId = btn.dataset.productId;
+            const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
+            const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
+            if (!csrfToken) {
+                showFlashMessage('Security token missing. Please refresh.', 'error');
+                return;
+            }
+            btn.disabled = true;
+            const originalText = btn.textContent;
+            btn.textContent = 'Adding...';
+            fetch('index.php?page=cart&action=add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `product_id=${encodeURIComponent(productId)}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const cartCount = document.querySelector('.cart-count');
+                    if (cartCount) {
+                        cartCount.textContent = data.cart_count;
+                        cartCount.style.display = data.cart_count > 0 ? 'inline' : 'none';
+                    }
+                    showFlashMessage(data.message || 'Product added to cart', 'success');
+                    if (data.stock_status === 'out_of_stock') {
+                        btn.disabled = true;
+                        btn.classList.remove('btn-secondary');
+                        btn.classList.add('btn-disabled');
+                        btn.textContent = 'Out of Stock';
+                    } else if (data.stock_status === 'low_stock') {
+                        showFlashMessage('Limited quantity available', 'info');
+                        btn.dataset.lowStock = 'true';
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                    } else {
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                    }
+                } else {
+                    showFlashMessage(data.message || 'Error adding to cart', 'error');
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showFlashMessage('Error adding to cart', 'error');
+                btn.textContent = originalText;
+                btn.disabled = false;
+            });
+        });
     </script>
 </body>
 </html>

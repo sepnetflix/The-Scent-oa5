@@ -43,22 +43,22 @@ class Product {
         return $stmt->fetch();
     }
     
-    public function getByCategory($category) {
-        $stmt = $this->pdo->prepare("SELECT * FROM products WHERE category = ? ORDER BY id DESC");
-        $stmt->execute([$category]);
+    public function getByCategory($categoryId) {
+        $stmt = $this->pdo->prepare("SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.category_id = ? ORDER BY p.id DESC");
+        $stmt->execute([$categoryId]);
         return $stmt->fetchAll();
     }
     
     public function create($data) {
         $stmt = $this->pdo->prepare("
-            INSERT INTO products (name, description, price, category, image_url, featured)
+            INSERT INTO products (name, description, price, category_id, image_url, featured)
             VALUES (?, ?, ?, ?, ?, ?)
         ");
         return $stmt->execute([
             $data['name'],
             $data['description'],
             $data['price'],
-            $data['category'],
+            $data['category_id'],
             $data['image_url'],
             $data['featured'] ?? 0
         ]);
@@ -68,14 +68,14 @@ class Product {
         $stmt = $this->pdo->prepare("
             UPDATE products 
             SET name = ?, description = ?, price = ?, 
-                category = ?, image_url = ?, featured = ?
+                category_id = ?, image_url = ?, featured = ?
             WHERE id = ?
         ");
         return $stmt->execute([
             $data['name'],
             $data['description'],
             $data['price'],
-            $data['category'],
+            $data['category_id'],
             $data['image_url'],
             $data['featured'] ?? 0,
             $id
@@ -99,37 +99,42 @@ class Product {
     }
     
     public function getAllCategories() {
-        $stmt = $this->pdo->query("
-            SELECT DISTINCT category 
-            FROM products 
-            ORDER BY category ASC
-        ");
-        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $stmt = $this->pdo->query("SELECT id, name FROM categories ORDER BY name ASC");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
     
-    public function getFiltered($conditions = [], $params = [], $sortBy = 'name_asc') {
-        $sql = "SELECT * FROM products";
-        
-        if (!empty($conditions)) {
-            $sql .= " WHERE " . implode(" AND ", $conditions);
+    public function getFiltered($conditions = [], $params = [], $sortBy = 'name_asc', $limit = null, $offset = null) {
+        // Prefix ambiguous columns in conditions
+        $fixedConditions = array_map(function($cond) {
+            $cond = preg_replace('/\bname\b/', 'p.name', $cond);
+            $cond = preg_replace('/\bdescription\b/', 'p.description', $cond);
+            return $cond;
+        }, $conditions);
+        $sql = "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id";
+        if (!empty($fixedConditions)) {
+            $sql .= " WHERE " . implode(" AND ", $fixedConditions);
         }
-        
         // Add sorting
         switch ($sortBy) {
             case 'price_asc':
-                $sql .= " ORDER BY price ASC";
+                $sql .= " ORDER BY p.price ASC";
                 break;
             case 'price_desc':
-                $sql .= " ORDER BY price DESC";
+                $sql .= " ORDER BY p.price DESC";
                 break;
             case 'name_desc':
-                $sql .= " ORDER BY name DESC";
+                $sql .= " ORDER BY p.name DESC";
                 break;
             case 'name_asc':
             default:
-                $sql .= " ORDER BY name ASC";
+                $sql .= " ORDER BY p.name ASC";
         }
-        
+        if ($limit !== null) {
+            $sql .= " LIMIT " . (int)$limit;
+            if ($offset !== null) {
+                $sql .= " OFFSET " . (int)$offset;
+            }
+        }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
@@ -161,39 +166,32 @@ class Product {
         return $stmt->fetchAll();
     }
     
-    public function searchWithFilters($query, $category = null, $minPrice = null, $maxPrice = null) {
-        $conditions = ["(name LIKE ? OR description LIKE ?)"]; 
+    public function searchWithFilters($query, $categoryId = null, $minPrice = null, $maxPrice = null) {
+        $conditions = ["(name LIKE ? OR description LIKE ?)"];
         $params = ["%$query%", "%$query%"];
-        
-        if ($category) {
-            $conditions[] = "category = ?";
-            $params[] = $category;
+        if ($categoryId) {
+            $conditions[] = "category_id = ?";
+            $params[] = $categoryId;
         }
-        
         if ($minPrice !== null) {
             $conditions[] = "price >= ?";
             $params[] = $minPrice;
         }
-        
         if ($maxPrice !== null) {
             $conditions[] = "price <= ?";
             $params[] = $maxPrice;
         }
-        
-        $sql = "SELECT * FROM products WHERE " . implode(" AND ", $conditions);
+        $sql = "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE " . implode(" AND ", $conditions);
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
     }
     
-    public function getRelatedProducts($productId, $category, $limit = 4) {
+    public function getRelatedProducts($productId, $categoryId, $limit = 4) {
         $stmt = $this->pdo->prepare("
-            SELECT * FROM products 
-            WHERE category = ? AND id != ?
-            ORDER BY RAND()
-            LIMIT ?
+            SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.category_id = ? AND p.id != ? ORDER BY RAND() LIMIT ?
         ");
-        $stmt->execute([$category, $productId, $limit]);
+        $stmt->execute([$categoryId, $productId, $limit]);
         return $stmt->fetchAll();
     }
 
@@ -262,5 +260,16 @@ class Product {
             WHERE id = ?
         ");
         return $stmt->execute([$threshold, $backorderAllowed, $id]);
+    }
+
+    public function getCount($conditions = [], $params = []) {
+        $sql = "SELECT COUNT(*) as count FROM products";
+        if (!empty($conditions)) {
+            $sql .= " WHERE " . implode(" AND ", $conditions);
+        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+        return $row ? (int)$row['count'] : 0;
     }
 }

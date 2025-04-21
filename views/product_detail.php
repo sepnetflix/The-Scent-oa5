@@ -233,60 +233,6 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById(tabId).classList.add('active');
         });
     });
-    
-    // Add to cart functionality
-    const addToCartForm = document.querySelector('.add-to-cart-form');
-    addToCartForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const formData = new FormData(this);
-        fetch(this.action, {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update cart count
-                const cartCount = document.querySelector('.cart-count');
-                if (cartCount) {
-                    cartCount.textContent = data.cartCount;
-                    cartCount.style.display = 'inline';
-                }
-                
-                // Show success message
-                alert('Product added to cart!');
-            }
-        })
-        .catch(error => console.error('Error:', error));
-    });
-    
-    // Related products add to cart
-    document.querySelectorAll('.related-products .add-to-cart').forEach(button => {
-        button.addEventListener('click', function() {
-            const productId = this.dataset.productId;
-            
-            fetch('index.php?page=cart&action=add', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `product_id=${productId}&quantity=1`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const cartCount = document.querySelector('.cart-count');
-                    if (cartCount) {
-                        cartCount.textContent = data.cartCount;
-                        cartCount.style.display = 'inline';
-                    }
-                    alert('Product added to cart!');
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        });
-    });
 });
 </script>
 

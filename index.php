@@ -14,9 +14,6 @@ ErrorHandler::init();
 SecurityMiddleware::apply();
 
 try {
-    // Load core dependencies
-    require_once __DIR__ . '/controllers/ProductController.php';
-    
     // Handle routing
     $page = SecurityMiddleware::validateInput($_GET['page'] ?? 'home', 'string');
     $action = SecurityMiddleware::validateInput($_GET['action'] ?? 'index', 'string');
@@ -27,28 +24,30 @@ try {
     }
     
     // Route to appropriate controller/action
-    $productController = new ProductController($pdo);
     switch ($page) {
         case 'home':
+            require_once __DIR__ . '/controllers/ProductController.php';
+            $productController = new ProductController($pdo);
             $productController->showHomePage();
             break;
         case 'product':
+            require_once __DIR__ . '/controllers/ProductController.php';
+            $productController = new ProductController($pdo);
             $productController->showProduct($_GET['id'] ?? null);
             break;
         case 'products':
+            require_once __DIR__ . '/controllers/ProductController.php';
+            $productController = new ProductController($pdo);
             $productController->showProductList();
             break;
-            
         case 'cart':
             require_once __DIR__ . '/controllers/CartController.php';
             $controller = new CartController($pdo);
             
-            if ($action === 'add') {
-                $productId = SecurityMiddleware::validateInput($_POST['product_id'] ?? null, 'int');
-                $quantity = SecurityMiddleware::validateInput($_POST['quantity'] ?? 1, 'int');
-                $controller->addToCart($productId, $quantity);
-                header('Location: index.php?page=cart');
-                exit;
+            if ($action === 'add' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+                // AJAX Add to Cart endpoint
+                $controller->addToCart();
+                // jsonResponse will exit
             }
             
             $cartItems = $controller->getCartItems();
@@ -115,7 +114,6 @@ try {
             $section = SecurityMiddleware::validateInput($_GET['section'] ?? 'dashboard', 'string');
             
             switch ($section) {
-                // ...existing sections...
                 case 'quiz_analytics':
                     require_once __DIR__ . '/controllers/QuizController.php';
                     $controller = new QuizController($pdo);
@@ -127,8 +125,6 @@ try {
                     break;
             }
             break;
-            
-        // Add other routes as needed...
             
         default:
             http_response_code(404);
