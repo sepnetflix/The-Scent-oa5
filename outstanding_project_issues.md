@@ -15,7 +15,7 @@ $ curl -Lk 'https://the-scent.com/index.php?page=products' -o shop_products.html
   
   
 # Issues found:    
-1. the output HTML page from the link 'https://the-scent.com/index.php?page=products' (shop_products.html) looks messy and not consistent with the UI appearance of the main landing page or the individual product detail page.  
+1. the output HTML page from the "SHOP" tab on the header navigation bar with link 'https://the-scent.com/index.php?page=products' (shop_products.html) looks messy and does not show any product. It should list 15 products in a nice list format as how most beautifully designed e-commerce sites would list their products with typical product details. If there are more products matching user-selectable criteria for filtering (like newest or most popular sorting criteria), then have a list of pages in a bar at the bottom for the user to scroll through the pages or jump to a certain page.
   
 2. "Add to cart" button on the main landing page failed with the message "Error adding to cart". Is because there is no product ID passed as the product to add to the cart on both the main landing page or the product detail page ("https://the-scent.com/index.php?page=product&id=1") ?  
   

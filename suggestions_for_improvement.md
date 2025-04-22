@@ -1,337 +1,320 @@
-# Suggested Improvements and Fixes for The Scent E-commerce Platform
+You will thoroughly review the project description, design documents (`README.md`, `technical_design_specification.md v3`), the codebase file structure, database schema in `the_scent_schema.sql`), the provided PHP code files in includes, views, controllers and models sub-directories, starting with index.php and .htaccess files, and the current HTML outputs (`current_landing_page.html`, `view_details_product_id-1.html`, `shop_products.html`).
 
-**Document Version:** 1.1
-**Date:** 2025-04-22
+Use the following information as your guide to confirm your own independent careful code review and findings. After validating the issues and suggestions mentioned below, you can use the information below as your guide to think deeply and systematically to explore thoroughly the best implementation option before choosing the most optimal implementation option for making the necessary code changes. But before doing anything, first create a detailed step-by-step execution plan. Then proceed cautiously according to your well-thought-out execution plan to effect the code changes, taking care not to affect any of the existing features and functionalities of the application:
 
-## 1. Project Overview & Current State
+# Suggested Improvements and Fixes for "The Scent" E-commerce Platform (use as your reference for your own independent code review and validation)
 
-**The Scent** is a custom-built PHP e-commerce platform designed for selling aromatherapy products. It employs an MVC-inspired architecture without a formal framework, relying on a front controller (`index.php`), controllers (`controllers/`), models (`models/`), and PHP-based views (`views/`). Key technologies include PHP, MySQL, Apache (`.htaccess` for routing), Tailwind CSS (via CDN), and JavaScript libraries like AOS.js and Particles.js for frontend effects.
+## 1. Project Overview and Current State
 
-**Core functionalities observed:**
-*   Product browsing (Homepage featured, Product Listing, Product Detail).
-*   Session-based shopping cart with AJAX updates (Add, Update, Remove).
-*   User Authentication (Login/Register - basic structure present).
-*   Scent Finder Quiz.
-*   Newsletter Subscription (AJAX).
+**Project:** "The Scent" is a premium aromatherapy e-commerce platform.
+**Technology Stack:** PHP (custom MVC-like structure, no major framework), MySQL, Apache, Tailwind CSS (via CDN), JavaScript (vanilla, AOS.js, Particles.js).
+**Architecture:** Follows an MVC-inspired pattern with `index.php` as the front controller/router, explicit controller includes, `BaseController` for shared logic, Models for DB interaction (e.g., `Product.php`), and PHP-based Views. Security features like CSRF protection and input validation are implemented via `SecurityMiddleware.php` and `BaseController.php`.
+**Database:** Uses MySQL with tables for users, products, categories, orders, cart (potentially unused), quiz results, etc., as defined in `the_scent_schema.sql.txt`.
+**Current State:** The core application seems functional, rendering pages like the landing page and product details. Key features include product display, a scent quiz, and AJAX-based cart interactions. A CSRF protection mechanism exists but is **inconsistently applied** during the rendering of views via GET requests, leading to failures in subsequent AJAX POST requests originating from those pages. Specific issues related to product listing display and add-to-cart functionality have been identified.
 
-**Code Analysis indicates:**
-*   Modular structure with controllers extending a `BaseController`.
-*   PDO used for database interaction, often within Model classes (`Product.php`).
-*   Session management is handled, including cart data (`$_SESSION['cart']`).
-*   Security measures like input validation (`SecurityMiddleware.php`, `BaseController`) and prepared statements are used. `SecurityMiddleware.php` also includes CSRF generation/validation logic, secure session/cookie handling, and basic anomaly detection.
-*   AJAX is used for enhancing user experience in the cart and newsletter signup.
-*   Significant reliance on JavaScript within `views/layout/footer.php` for global event handling (Add-to-Cart, Newsletter).
+## 2. Issue Analysis
 
-**Known Issues (from previous analysis/TDS & current prompt):**
-*   **CSRF Protection:** Intended and correctly implemented on the server-side (`SecurityMiddleware::validateCSRF`), but failing due to tokens not being consistently outputted in HTML views and sent by client-side JavaScript. This is identified as critical.
-*   **UI Inconsistencies:** Styling differences exist between pages (specifically the product listing page).
-*   **Add-to-Cart Failure:** Users experience errors, and server logs show `400 Bad Request` errors for the cart addition endpoint, confirmed to be caused by the CSRF validation failure.
-*   **CSP Header:** The Content-Security-Policy header is currently commented out in `SecurityMiddleware.php`, reducing XSS protection.
+Based on the provided HTML outputs, logs, and code review (including `AccountController`, `NewsletterController`, `CheckoutController`):
 
-This document focuses on addressing the two specific issues raised: the inconsistent UI of the Product Listing page (`shop_products.html`) and the failing "Add to Cart" functionality due to the CSRF issue.
+### Issue 1: Products Page (`shop_products.html`) Display
 
-## 2. Issue 1: Product Listing Page UI Inconsistency
+*   **Observation:** The page rendered for `index.php?page=products&search=1` shows "Search Results for "1"", "Showing 0 products", and the "No products found..." message. The user described this as "messy" and lacking products.
+*   **Analysis:**
+    *   The `ProductController::showProductList()` correctly processed the request and filtered based on the search term "1", which yielded no database results. This is accurately reflected in the output.
+    *   The core issue is not broken HTML/CSS, but rather:
+        1.  The page correctly shows the "No products found" message when the search/filters yield empty results.
+        2.  The page **lacks pagination**, making it impossible to browse the full catalog effectively when many products *are* present.
+*   **Root Cause:** No matching products for the specific search term `1`, combined with the absence of pagination functionality.
 
-**Problem:**
-The product listing page (`index.php?page=products`, rendered by `views/products.php`, resulting in `shop_products.html`) displays product cards that are visually inconsistent with the cards shown on the homepage (`current_landing_page.html`) and in the "Related Products" section of the product detail page (`view_details_product_id-1.html`). The cards on the shop page appear less styled, lacking the rounded corners, shadows, and refined layout seen elsewhere.
+### Issue 2: AJAX Failures (e.g., "Add to Cart") due to Missing CSRF Token
 
-**Analysis:**
-Comparing `views/products.php` with `views/home.php` and `views/product_detail.php` reveals different HTML structures and CSS classes used for the product cards:
-*   `views/products.php`: Uses a basic `<div class="product-card">` with custom classes like `product-category` and `product-price`. It lacks the more descriptive Tailwind utility classes for background, padding, shadow, rounded corners, and hover effects used in other views.
-*   `views/home.php` & `views/product_detail.php` (Related Products): Utilize Tailwind classes extensively (e.g., `bg-white`, `rounded-lg`, `shadow-md`, `overflow-hidden`, `transition-shadow`, `hover:shadow-xl`) applied to a structure like `<div class="product-card sample-card ...">`, resulting in a more polished appearance.
-*   **Data Availability:** The `ProductController::showProductList()` method fetches data using `Product::getFiltered()`, which selects `p.*, c.name as category_name`. This confirms that all necessary fields from the `products` table (including `image`, `stock_quantity`, `short_description`, etc., based on the latest schema) and the `category_name` are available to the view for the improved UI.
+*   **Observation:** Clicking "Add to Cart" buttons (especially on the landing page) results in "Error adding to cart". Apache logs show POST requests to `index.php?page=cart&action=add` returning HTTP 400. Similar issues likely affect other AJAX POSTs originating from pages like the home page or account pages (e.g., footer newsletter).
+*   **Analysis:**
+    *   **Server-Side Validation:** CSRF validation *is* correctly implemented and called via `$this->validateCSRF()` within the controllers handling the *target* POST requests (e.g., `CartController::addToCart`, `NewsletterController::subscribe`, `AccountController::updateProfile`). This part is sound.
+    *   **Client-Side Token Reading:** The global AJAX handlers in `views/layout/footer.php` correctly attempt to read the CSRF token from a hidden input with `id="csrf-token-value"`.
+    *   **Server-Side Token Provisioning (GET Requests):** This is the weak point. Controllers responsible for rendering pages via GET requests (e.g., `ProductController::showHomePage`, `CheckoutController::showCheckout`, `AccountController::showProfile`) **do not consistently** retrieve the CSRF token using `$this->getCsrfToken()` and pass it to their respective views.
+    *   **HTML Output:** Consequently, the necessary `<input type="hidden" id="csrf-token-value" ...>` element is often **missing** from the final rendered HTML on pages like `home.php` or `checkout.php`. While it *is* present on `products.php` and inside the form on `product_detail.php`, its absence on other key pages breaks AJAX actions relying on the global handler in `footer.php`.
+*   **Root Cause:** Failure of server-side controllers (handling GET requests) to consistently generate and pass the CSRF token to their views, leading to the required hidden input (`#csrf-token-value`) being absent in the rendered HTML, preventing client-side JavaScript from including the token in AJAX POST requests, and causing server-side CSRF validation to fail.
 
-**Suggestion:**
-Refactor the product card loop within `views/products.php` to adopt the more modern and consistent structure and styling used in the related products section of `views/product_detail.php`. This involves using Tailwind utility classes directly.
+## 3. Suggested Fixes
 
-**Code Fix (`views/products.php`):**
+### Fix 1: Products Page - Improve Display and Add Pagination
 
-Replace the `products-grid` loop:
+*   **Goal:** Ensure the products page displays products correctly when available and provides pagination for large catalogs.
+*   **Changes:**
+    *   **Controller (`controllers/ProductController.php`):** Modify `showProductList` to calculate pagination variables (`currentPage`, `totalPages`, `baseUrl` including filters) and pass them to the view.
+    *   **View (`views/products.php`):** Add HTML structure (e.g., using Tailwind utility classes) to display pagination links based on the controller data. Improve the "No products found" message context.
 
-```php
-<?php // Existing code before the loop... ?>
+*   **Code Snippets:**
 
-<?php if (empty($products)): ?>
-    <div class="no-products" data-aos="fade-up">
-        <i class="fas fa-search"></i>
-        <p>No products found matching your criteria.</p>
-        <a href="index.php?page=products" class="btn-primary">View All Products</a>
-    </div>
-<?php else: ?>
-    <div class="products-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"> <?php // Adjusted grid columns for consistency ?>
-        <?php foreach ($products as $index => $product): ?>
-            <?php
-                // Determine stock status for button logic
-                // Use backorder_allowed from schema if needed
-                $isOutOfStock = (!isset($product['stock_quantity']) || $product['stock_quantity'] <= 0) && empty($product['backorder_allowed']);
-                $isLowStock = !$isOutOfStock && isset($product['low_stock_threshold']) && isset($product['stock_quantity']) && $product['stock_quantity'] <= $product['low_stock_threshold'];
-            ?>
-            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col"
-                 data-aos="fade-up" data-aos-delay="<?= ($index % 4) * 100 ?>"> <?php // Use modulo for delay reset per row ?>
+    **a) `controllers/ProductController.php` (Inside `showProductList` method):**
 
-                <div class="product-image relative h-64 overflow-hidden">
-                    <a href="index.php?page=product&id=<?= $product['id'] ?? '' ?>">
-                        <?php // Use 'image' field based on schema/detail view, default to placeholder ?>
-                        <img src="<?= htmlspecialchars($product['image'] ?? '/images/placeholder.jpg') ?>"
-                             alt="<?= htmlspecialchars($product['name'] ?? 'Product') ?>" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
-                    </a>
-                    <?php if (!empty($product['is_featured'])): // Schema uses is_featured ?>
-                        <span class="absolute top-2 left-2 bg-accent text-white text-xs font-semibold px-2 py-0.5 rounded-full shadow">Featured</span>
-                    <?php endif; ?>
-                    <?php if ($isOutOfStock): ?>
-                        <span class="absolute top-2 right-2 bg-red-600 text-white text-xs font-semibold px-3 py-1 rounded-full shadow">Out of Stock</span>
-                    <?php elseif ($isLowStock): ?>
-                         <span class="absolute top-2 right-2 bg-yellow-500 text-white text-xs font-semibold px-3 py-1 rounded-full shadow">Low Stock</span>
-                    <?php endif; ?>
-                     <?php if (!empty($product['highlight_text'])): ?>
-                         <span class="absolute bottom-2 left-2 bg-primary text-white text-xs font-semibold px-2 py-0.5 rounded-full shadow"><?= htmlspecialchars($product['highlight_text']) ?></span>
-                    <?php endif; ?>
-                </div>
+    ```php
+    // ... (after getting $products and $totalProducts)
 
-                <div class="product-info p-4 flex flex-col flex-grow text-center">
-                    <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                        <a href="index.php?page=product&id=<?= $product['id'] ?? '' ?>">
-                            <?= htmlspecialchars($product['name'] ?? 'Product Name') ?>
-                        </a>
-                    </h3>
-                    <?php if (!empty($product['category_name'])): ?>
-                        <p class="text-sm text-gray-500 mb-2"><?= htmlspecialchars($product['category_name']) ?></p>
-                    <?php endif; ?>
-                     <?php if (!empty($product['short_description'])): ?>
-                        <p class="text-xs text-gray-600 mb-3 flex-grow"><?= htmlspecialchars($product['short_description']) ?></p>
-                    <?php else: // Add a placeholder div to maintain height consistency if no description ?>
-                        <div class="flex-grow mb-3"></div>
-                    <?php endif; ?>
-                    <p class="price text-base font-semibold text-accent mb-4 mt-auto">$<?= isset($product['price']) ? number_format($product['price'], 2) : 'N/A' ?></p>
+    // Calculate pagination
+    $totalPages = ceil($totalProducts / $this->itemsPerPage);
+    $currentPage = $page; // Already validated $page variable
 
-                    <div class="product-actions mt-auto space-y-2">
-                        <a href="index.php?page=product&id=<?= $product['id'] ?? '' ?>" class="btn btn-primary w-full block">View Details</a>
-                        <?php if (!$isOutOfStock): ?>
-                            <button class="btn btn-secondary add-to-cart w-full block"
-                                    data-product-id="<?= $product['id'] ?? '' ?>"
-                                    <?= $isLowStock ? 'data-low-stock="true"' : '' ?>>
-                                Add to Cart
-                            </button>
-                        <?php else: ?>
-                            <button class="btn btn-disabled w-full block" disabled>Out of Stock</button>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-        <?php endforeach; ?>
-    </div>
-<?php endif; ?>
+    // Get categories for filter menu
+    $categories = $this->productModel->getAllCategories();
 
-<?php // Existing code after the loop... (Ensure closing tags are correct) ?>
-```
-
-**Explanation of UI Fix:**
-*   Applies consistent Tailwind classes (`bg-white`, `rounded-lg`, `shadow-md`, hover effects, etc.).
-*   Uses `flex flex-col` and `flex-grow` to ensure cards have equal height and content aligns properly.
-*   Adjusts grid columns for responsiveness.
-*   Uses consistent field names based on schema (`image`, `is_featured`).
-*   Adds stock status logic (`isOutOfStock`, `isLowStock`) mirroring other views.
-*   Displays optional fields like `short_description` and `highlight_text`.
-*   Adds a placeholder `div` if `short_description` is missing to help maintain card height consistency.
-
-## 3. Issue 2: Failing "Add to Cart" Functionality (CSRF Failure)
-
-**Problem:**
-Clicking "Add to Cart" buttons triggers a client-side error message and results in an `HTTP 400 Bad Request` from the server. This is due to failed CSRF token validation.
-
-**Analysis:**
-*   **Server-Side:** `SecurityMiddleware::validateCSRF()` correctly checks `$_POST['csrf_token']` against `$_SESSION['csrf_token']` using `hash_equals`.
-*   **Client-Side:** The JavaScript handler in `footer.php` attempts to find *any* input named `csrf_token` on the page.
-*   **The Gap:** HTML views (specifically `views/products.php`, and potentially others depending on context) were not consistently outputting the CSRF token generated by the server (`SecurityMiddleware::generateCSRFToken()` via `BaseController::getCsrfToken()`). The JS therefore sends a missing or incorrect token, causing server validation to fail.
-*   **Controller Check:** `ProductController::showHomePage()` and `ProductController::showProduct()` *do* generate and pass the CSRF token to their respective views (`home.php`, `product_detail.php`). However, `ProductController::showProductList()` *did not* pass the token to `views/products.php`.
-
-**Suggestion:**
-Implement CSRF token handling correctly and consistently:
-
-1.  **Generate & Pass Token (Controller Fix):** Ensure *all* controller methods rendering views with CSRF-protected actions (like Add-to-Cart buttons) fetch the token using `$this->getCsrfToken()` and pass it to the view. Specifically update `ProductController::showProductList()`.
-2.  **Output Token Reliably (View Fix):** Add a *single*, consistently placed hidden input field with `id="csrf-token-value"` in views needing it, outputting the passed token.
-3.  **Update AJAX Handler (JavaScript Fix):** Modify the global Add-to-Cart JavaScript handler in `footer.php` to reliably select the token using its ID and send it with the AJAX request.
-
-**Code Fixes:**
-
-**Step 1: Update Controller (`controllers/ProductController.php`)**
-
-Modify `showProductList()` to generate and pass the token:
-
-```php
-<?php // In controllers/ProductController.php
-
-    public function showProductList() {
-        try {
-            // ... [existing code to validate inputs, calculate pagination, set conditions/params] ...
-
-            // Get total count for pagination
-            $totalProducts = $this->productModel->getCount($conditions, $params);
-            $totalPages = ceil($totalProducts / $this->itemsPerPage);
-
-            // Get paginated products
-            $products = $this->productModel->getFiltered(
-                $conditions,
-                $params,
-                $sortBy,
-                $this->itemsPerPage,
-                $offset
-            );
-
-            // Get categories for filter menu
-            $categories = $this->productModel->getAllCategories();
-
-            // Set page title
-            $pageTitle = $searchQuery ?
-                "Search Results for \"" . htmlspecialchars($searchQuery) . "\"" :
-                ($categoryId ? "Category Products" : "All Products");
-
-            // *** ADD THIS LINE ***
-            $csrfToken = $this->getCsrfToken(); // Generate/retrieve the CSRF token
-
-            // Now include the view, $csrfToken will be available in its scope
-            require_once __DIR__ . '/../views/products.php';
-
-        } catch (Exception $e) {
-            error_log("Error loading product list: " . $e->getMessage());
-            $this->setFlashMessage('Error loading products', 'error');
-            $this->redirect('error');
+    // Set page title
+    // Find category name if filtering by category
+    $categoryName = null;
+    if ($categoryId) {
+        foreach ($categories as $cat) {
+            if ($cat['id'] == $categoryId) {
+                $categoryName = $cat['name'];
+                break;
+            }
         }
     }
+    $pageTitle = $searchQuery ?
+        "Search Results for \"" . htmlspecialchars($searchQuery) . "\"" :
+        ($categoryId ? ($categoryName ? htmlspecialchars($categoryName) . " Products" : "Category Products") : "All Products");
 
-    // Ensure showHomePage() and showProduct() also continue to pass $csrfToken correctly
-    // (They already do based on the provided code)
-?>
-```
+    $csrfToken = $this->getCsrfToken(); // Ensure token is fetched for the view
 
-**Step 2: Output CSRF Token in Views (Example: `views/products.php`)**
+    // Prepare pagination data
+    $paginationData = [
+        'currentPage' => $currentPage,
+        'totalPages' => $totalPages,
+        'baseUrl' => 'index.php?page=products' // Base URL for links
+    ];
 
-Add the hidden input inside the main container.
+    // Add current filters to pagination base URL to preserve them
+    $queryParams = $_GET;
+    unset($queryParams['page']); // Remove page param itself
+    if (!empty($queryParams)) {
+        $paginationData['baseUrl'] .= '&' . http_build_query($queryParams);
+    }
 
-```html
-<!-- In views/products.php (and similarly in home.php, product_detail.php if not already present reliably) -->
-<section class="products-section">
-    <div class="container">
-         <?php // Add this hidden input near the top ?>
-         <input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+    // Load the view - Make $paginationData accessible
+    require_once __DIR__ . '/../views/products.php';
 
-        <div class="products-header" data-aos="fade-up">
-            <h1><?= $pageTitle ?></h1>
-            <?php // ... rest of header ... ?>
-        </div>
+    // ... (rest of the method, including catch block)
+    ```
 
-        <div class="products-grid-container">
-           <?php // ... sidebar and content ... ?>
-           <?php // The $csrfToken variable passed from ProductController is now used here ?>
-        </div>
-    </div>
-</section>
-```
-*(Make sure this hidden input is present reliably on any page using the global Add-to-Cart JS handler).*
+    **b) `views/products.php` (Add Pagination block and improve No Results message):**
 
-**Step 3: Update Global Add-to-Cart JavaScript Handler (`views/layout/footer.php`)**
+    ```php
+    <?php // Add Pagination block (near the end, inside products-content div) ?>
+    <?php if (isset($paginationData) && $paginationData['totalPages'] > 1): ?>
+        <nav aria-label="Page navigation" class="mt-12 flex justify-center" data-aos="fade-up">
+            <ul class="inline-flex items-center -space-x-px">
+                <?php // Previous Button ?>
+                <li>
+                    <a href="<?= $paginationData['currentPage'] > 1 ? htmlspecialchars($paginationData['baseUrl'] . '&page=' . ($paginationData['currentPage'] - 1)) : '#' ?>"
+                       class="py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 <?= $paginationData['currentPage'] <= 1 ? 'opacity-50 cursor-not-allowed' : '' ?>">
+                        <span class="sr-only">Previous</span>
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
 
-Modify the fetch call to use the token selected by ID.
+                <?php // Page Numbers Logic ?>
+                <?php
+                $numLinks = 2; // Number of links around current page
+                $startPage = max(1, $paginationData['currentPage'] - $numLinks);
+                $endPage = min($paginationData['totalPages'], $paginationData['currentPage'] + $numLinks);
 
-```javascript
-        // Canonical Add-to-Cart handler (event delegation) - UPDATED
-        document.body.addEventListener('click', function(e) {
-            const btn = e.target.closest('.add-to-cart');
-            if (!btn) return;
-            e.preventDefault();
-            if (btn.disabled) return;
-
-            const productId = btn.dataset.productId;
-            // *** USE ID SELECTOR AND CHECK TOKEN ***
-            const csrfTokenInput = document.getElementById('csrf-token-value');
-            const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
-
-            if (!csrfToken) {
-                showFlashMessage('Security token missing. Please refresh the page.', 'error');
-                return;
-            }
-            // *** END TOKEN HANDLING UPDATE ***
-
-            btn.disabled = true;
-            const originalButtonHtml = btn.innerHTML; // Use innerHTML if button contains icons
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Adding...';
-
-            fetch('index.php?page=cart&action=add', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Accept': 'application/json'
-                 },
-                // Ensure correct token is included
-                body: `product_id=${encodeURIComponent(productId)}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}`
-            })
-            .then(response => { // Improved response handling
-                 if (!response.ok) {
-                    return response.json().catch(() => {
-                       throw new Error(`HTTP error ${response.status}`);
-                    }).then(errData => {
-                       throw new Error(errData.message || `Server error ${response.status}`);
-                    });
-                 }
-                 const contentType = response.headers.get("content-type");
-                 if (contentType && contentType.indexOf("application/json") !== -1) {
-                    return response.json();
-                 } else {
-                    throw new Error("Received non-JSON response from server");
-                 }
-            })
-            .then(data => {
-                btn.innerHTML = originalButtonHtml; // Restore button first
-                btn.disabled = false;
-
-                if (data.success) {
-                    const cartCount = document.querySelector('.cart-count');
-                    if (cartCount) {
-                        cartCount.textContent = data.cart_count;
-                        cartCount.style.display = data.cart_count > 0 ? 'inline-block' : 'none';
-                    }
-                    showFlashMessage(data.message || 'Product added to cart', 'success');
-
-                    if (data.stock_status === 'out_of_stock') {
-                        btn.disabled = true;
-                        btn.classList.remove('btn-secondary');
-                        btn.classList.add('btn-disabled');
-                        btn.innerHTML = '<i class="fas fa-times-circle mr-2"></i> Out of Stock';
-                    } else if (data.stock_status === 'low_stock') {
-                        showFlashMessage('Limited quantity available', 'info');
-                        btn.dataset.lowStock = 'true';
-                    } else {
-                         btn.dataset.lowStock = 'false';
-                    }
-                } else {
-                    showFlashMessage(data.message || 'Error adding product.', 'error');
-                     if (data.stock_status === 'out_of_stock') {
-                        btn.disabled = true;
-                        btn.classList.remove('btn-secondary');
-                        btn.classList.add('btn-disabled');
-                        btn.innerHTML = '<i class="fas fa-times-circle mr-2"></i> Out of Stock';
+                // Ellipsis and first page
+                if ($startPage > 1) {
+                    echo '<li><a href="'.htmlspecialchars($paginationData['baseUrl'].'&page=1').'" class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">1</a></li>';
+                    if ($startPage > 2) {
+                         echo '<li><span class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300">...</span></li>';
                     }
                 }
-            })
-            .catch(error => {
-                console.error('Error adding to cart:', error);
-                btn.innerHTML = originalButtonHtml; // Restore on catch
-                btn.disabled = false;
-                showFlashMessage(error.message || 'Could not add product. Please try again.', 'error');
-            });
-        });
-```
 
-## 4. Additional Notes & Recommendations
+                // Links around current page
+                for ($i = $startPage; $i <= $endPage; $i++): ?>
+                    <li>
+                        <a href="<?= htmlspecialchars($paginationData['baseUrl'] . '&page=' . $i) ?>"
+                           class="py-2 px-3 leading-tight <?= $i == $paginationData['currentPage'] ? 'z-10 text-primary bg-secondary border-primary hover:bg-secondary hover:text-primary' : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700' ?>">
+                            <?= $i ?>
+                        </a>
+                    </li>
+                <?php endfor;
 
-*   **SecurityMiddleware:**
-    *   The `preventSQLInjection` function using `preg_replace` and `addslashes` is generally discouraged and unnecessary when using PDO prepared statements correctly (which the project seems to do). Rely on prepared statements as the primary defense against SQLi. Consider removing this function to avoid confusion.
-    *   The Content-Security-Policy header is commented out. It should be re-enabled and configured properly (avoiding `'unsafe-inline'` if possible by refactoring JS/CSS) to enhance XSS protection.
-*   **Consistency:** Apply the CSRF token pattern (pass token, output hidden field, use in JS) to all other forms and AJAX actions requiring protection (e.g., newsletter signup, login, registration, cart updates/removal).
-*   **Error Handling:** The improved `fetch` error handling in the JS example provides better feedback to the user based on the server's response.
+                 // Ellipsis and last page
+                 if ($endPage < $paginationData['totalPages']) {
+                    if ($endPage < $paginationData['totalPages'] - 1) {
+                         echo '<li><span class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300">...</span></li>';
+                    }
+                    echo '<li><a href="'.htmlspecialchars($paginationData['baseUrl'].'&page='.$paginationData['totalPages']).'" class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">'.$paginationData['totalPages'].'</a></li>';
+                }
+                ?>
+
+                <?php // Next Button ?>
+                <li>
+                    <a href="<?= $paginationData['currentPage'] < $paginationData['totalPages'] ? htmlspecialchars($paginationData['baseUrl'] . '&page=' . ($paginationData['currentPage'] + 1)) : '#' ?>"
+                       class="py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 <?= $paginationData['currentPage'] >= $paginationData['totalPages'] ? 'opacity-50 cursor-not-allowed' : '' ?>">
+                        <span class="sr-only">Next</span>
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    <?php endif; ?>
+    <?php // End of Pagination block ?>
+
+    <?php // Improved "No Products Found" message ?>
+    <?php if (empty($products)): ?>
+        <div class="no-products text-center py-16" data-aos="fade-up">
+            <i class="fas fa-shopping-bag text-6xl text-gray-400 mb-4"></i>
+            <p class="text-xl text-gray-600 mb-4">No products found matching your criteria.</p>
+            <?php if (!empty($searchQuery) || !empty($categoryId) || !empty($_GET['min_price']) || !empty($_GET['max_price'])): ?>
+                 <p class="text-gray-500 mb-6">Try adjusting your search terms or filters in the sidebar.</p>
+                 <a href="index.php?page=products" class="btn-secondary mr-2">Clear Filters</a>
+            <?php else: ?>
+                 <p class="text-gray-500 mb-6">Explore our collections or try a different search.</p>
+            <?php endif; ?>
+            <a href="index.php?page=products" class="btn-primary">View All Products</a>
+        </div>
+    <?php endif; ?>
+    ```
+
+### Fix 2: Ensure Consistent CSRF Token Availability for Views and AJAX
+
+*   **Goal:** Make the CSRF token consistently available in the HTML (via `<input id="csrf-token-value">`) for the global JavaScript handler in `footer.php` and other forms/AJAX calls, resolving the failures.
+*   **Changes:**
+    1.  **Controllers (Handling GET requests rendering views):** Ensure controllers generating pages that might contain AJAX POST triggers (like add-to-cart, newsletter) or standard POST forms **always** call `$csrfToken = $this->getCsrfToken();` and pass the `$csrfToken` variable to their view data. This applies to methods using `require_once` directly or those using `$this->renderView()`.
+    2.  **Views:** Ensure that all relevant views (`home.php`, `products.php`, `product_detail.php`, `cart.php`, `checkout.php`, `login.php`, `register.php`, `account/*.php`, etc.) output the token into the specific hidden input: `<input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">`. Placing this early within the `<main>` tag is recommended for consistency.
+
+*   **Code Snippets:**
+
+    **a) Controllers (Ensure this pattern):**
+
+    ```php
+    // ProductController::showHomePage, showProduct, showProductList (as shown in v1.0 fix)
+    // -> MUST call $csrfToken = $this->getCsrfToken(); and pass to view.
+
+    // CheckoutController::showCheckout
+    public function showCheckout() {
+        $this->requireLogin();
+        // ... check cart, get items, calculate totals ...
+        $csrfToken = $this->getCsrfToken(); // *** ADD THIS LINE ***
+        require_once __DIR__ . '/../views/checkout.php'; // $csrfToken is now in scope
+    }
+
+    // AccountController::showProfile (Example using renderView)
+    public function showProfile() {
+        try {
+            $this->requireLogin();
+            $user = $this->getCurrentUser();
+            $csrfToken = $this->getCsrfToken(); // *** ADD THIS LINE ***
+
+            // Pass token in the data array for renderView
+            return $this->renderView('account/profile', [
+                'pageTitle' => 'My Profile - The Scent',
+                'user' => $user,
+                'csrfToken' => $csrfToken // *** PASS TOKEN HERE ***
+            ]);
+
+        } catch (Exception $e) { // ... error handling ... }
+    }
+    // Apply similar pattern to showDashboard, showOrders, etc. in AccountController
+
+    // AccountController::login (Already correct when rendering view)
+    public function login() {
+        // ... POST handling ...
+        // GET request rendering:
+        return $this->render('login', [
+            'csrfToken' => $this->generateCSRFToken() // Correctly passing token
+        ]);
+    }
+    // AccountController::register (Already correct when rendering view)
+
+    // CartController::showCart (Needs token for Update/Remove buttons JS if not using global)
+    public function showCart() {
+        // ... get cart items ...
+        $csrfToken = $this->getCsrfToken(); // *** ADD THIS LINE ***
+        require_once __DIR__ . '/../views/cart.php'; // $csrfToken is now in scope
+    }
+    ```
+
+    **b) Views (Add/Ensure this line exists, ideally early within `<main>`):**
+
+    *   **`views/home.php`:** (Add as shown in v1.0 fix)
+    *   **`views/products.php`:** (Confirm presence - it exists)
+    *   **`views/product_detail.php`:** (Add as shown in v1.0 fix)
+    *   **`views/cart.php`:** (Add this line)
+        ```php
+        <?php require_once __DIR__ . '/layout/header.php'; ?>
+        <main>
+            <!-- ADD THIS LINE -->
+            <input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+            <section class="cart-section">
+                <?php // rest of cart content ?>
+            </section>
+        </main>
+        <?php require_once __DIR__ . '/layout/footer.php'; ?>
+        ```
+    *   **`views/checkout.php`:** (Add this line)
+        ```php
+        <?php require_once __DIR__ . '/layout/header.php'; ?>
+        <main>
+            <!-- ADD THIS LINE -->
+            <input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+            <section class="checkout-section">
+                <?php // rest of checkout content ?>
+            </section>
+        </main>
+        <?php require_once __DIR__ . '/layout/footer.php'; ?>
+        ```
+    *   **`views/account/*.php` (e.g., `profile.php`):** (Add this line if forms/AJAX present)
+        ```php
+        <?php require_once __DIR__ . '/../layout/header.php'; ?>
+        <main>
+            <!-- ADD THIS LINE -->
+            <input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+            <section class="account-section">
+                <?php // rest of account content ?>
+            </section>
+        </main>
+        <?php require_once __DIR__ . '/../layout/footer.php'; ?>
+        ```
+    *   **`views/login.php`, `register.php`, etc.:** Ensure forms include `<input type="hidden" name="csrf_token" value="...">`. The global `#csrf-token-value` isn't strictly needed if no *other* AJAX relies on it, but adding it harms nothing and standardizes.
+
+*   **Explanation:** By consistently ensuring the `$csrfToken` variable is generated in *all relevant* controllers rendering views (via GET) and outputting it into the standard `<input type="hidden" id="csrf-token-value" ...>` element, the client-side JavaScript (especially the global handlers in `footer.php`) will reliably find and include the token in AJAX POST requests. This allows server-side `validateCSRF()` checks to pass, resolving the 400 errors and related "Error adding to cart" or similar AJAX failure messages.
+
+### Fix 3 (Recommended): Add CSRF Protection to `calculateTax` Endpoint
+
+*   **Goal:** Protect the `calculateTax` AJAX endpoint, which receives POST data, against CSRF attacks.
+*   **Changes:** Add CSRF validation call to the controller method. Ensure the calling JavaScript sends the token.
+
+*   **Code Snippets:**
+
+    **a) `controllers/CheckoutController.php` (Inside `calculateTax` method):**
+
+    ```php
+    public function calculateTax() {
+        $this->validateAjax();
+        $this->validateCSRF(); // *** ADD THIS LINE ***
+
+        $data = json_decode(file_get_contents('php://input'), true);
+        // ... rest of the method ...
+    }
+    ```
+    **b) Client-Side JavaScript (Ensure the AJAX call sending to `calculateTax` includes the CSRF token):**
+    *(The specific JS for this call isn't provided, but it should follow the pattern used in `footer.php`'s add-to-cart handler: read token from `#csrf-token-value`, include in POST body/headers).*
+
+## 4. Additional Recommendations
+
+1.  **Remove `preventSQLInjection`:** **Strongly Recommended.** Delete or comment out the `preventSQLInjection` function in `includes/SecurityMiddleware.php`. Rely *solely* on PDO prepared statements for SQL injection prevention. This function provides a false sense of security and can break valid data.
+2.  **Standardize Rate Limiting:** The project shows multiple approaches (`isRateLimited`, `checkRateLimit`, `validateRateLimit` in `BaseController`, different implementations in `AccountController` and `NewsletterController`). Choose **one** robust mechanism (e.g., using APCu, Redis, or Memcached via a dedicated service class) and apply it consistently to sensitive endpoints (login, registration, password reset, newsletter subscription, possibly checkout). Remove the unused/conflicting helper methods.
+3.  **Enable Content Security Policy (CSP):** Uncomment the CSP header in `includes/SecurityMiddleware.php` (or `BaseController`) and refine the policy directives (`script-src`, `style-src`, etc.). Aim to remove `'unsafe-inline'` and `'unsafe-eval'` by refactoring inline scripts/styles where feasible. This significantly enhances XSS protection.
+4.  **Dependency Management & Autoloading:** Introduce Composer for managing PHP dependencies and implement PSR-4 autoloading. This will eliminate manual `require_once` statements, improve code organization, and simplify updates.
+5.  **Database Cart:** Clarify the role of the `cart_items` table. If it's intended for persistent carts, implement the logic in `CartController`. If only session carts are used, consider removing the table to avoid confusion.
+6.  **Configuration Management:** Move sensitive credentials (DB pass, API keys, email pass) out of `config.php` and into environment variables (using a library like `phpdotenv`) or a secure configuration management system, especially for production.
+7.  **Error Reporting:** Ensure `display_errors` is OFF in production environments (`php.ini`) and rely on logging (`ErrorHandler.php`, `error_log`) for debugging.
 
 ## 5. Conclusion
 
-Implementing the UI consistency fix for the product listing page and the comprehensive CSRF token handling fix across controllers, views, and JavaScript should resolve the primary issues identified. These changes will lead to a more visually cohesive, functional, and secure user experience on The Scent platform. Remember to test thoroughly after applying these changes.  
+The primary issues stem from incomplete pagination on the product list page and, more critically, inconsistent handling of CSRF token provisioning from server-side controllers to views during GET requests. This inconsistency breaks subsequent AJAX POST requests relying on the token.
 
-https://drive.google.com/file/d/10fMrHUpv-e6_GHSyhkAFgrDAZlKI9Xuk/view?usp=sharing, https://drive.google.com/file/d/18vABpLEymmkSblUTQLGJ73ieUIiw2V98/view?usp=sharing, https://drive.google.com/file/d/1Nfkog4SAab82YbmLXVegBGVSmtmnyi-X/view?usp=sharing, https://drive.google.com/file/d/1RFoWLN1aU1YGGbsbz1yd1LM9Ng5Wh84a/view?usp=sharing, https://drive.google.com/file/d/1U1oSGdxX1tqwnhBToYF4g4mCs4BJlI9I/view?usp=sharing, https://drive.google.com/file/d/1b1YZO-1OsJ3cpT7B25feVus8foot4ERF/view?usp=sharing, https://drive.google.com/file/d/1ewwpRYfRB7G3-dTj_n70bL1w1arXnIwY/view?usp=sharing, https://drive.google.com/file/d/1gzj_IipNQdswfIijgHodS5XbxSUHnZrF/view?usp=sharing, https://drive.google.com/file/d/1iwmgE_CD8b7P-4Qi9PGQXFGqNw-rle6K/view?usp=sharing, https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221kduXBK9pkvGuzoLyV8O7ONsINSk-N9o0%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1sWR-zjpQ7-WGTqxE34zrV9I7jfC4TfwQ/view?usp=sharing
+Implementing Fix 1 (Pagination) will improve usability. Implementing Fix 2 (Consistent CSRF Token Handling) is crucial for security and functionality, requiring modifications in multiple controllers (to generate/pass the token) and views (to output the standard hidden input). Adding Fix 3 (CSRF for `calculateTax`) improves endpoint security.
+
+Addressing the additional recommendations, particularly removing `preventSQLInjection`, standardizing rate limiting, enabling CSP, and using Composer/autoloading, will significantly enhance the project's security, maintainability, and robustness.  
+
+https://drive.google.com/file/d/16P6Oa3oBdVDSvhPxp_Q2C81n0URNIYXd/view?usp=sharing, https://drive.google.com/file/d/1BreUBDFKmAR7pvsfHqXZudRMNB2hwOZ6/view?usp=sharing, https://drive.google.com/file/d/1JMFc4gFk3BAsEvs902tmtzBU0mkRjMqB/view?usp=sharing, https://drive.google.com/file/d/1NJ6DXRRe_-M826jQF6kC4_3ggv74X6_8/view?usp=sharing, https://drive.google.com/file/d/1UdSwsvuptuLXQo7pQ1sZy-JReNmj63OV/view?usp=sharing, https://drive.google.com/file/d/1YeirJLoVnkF6ghid1XzQp93cZvuhFCXQ/view?usp=sharing, https://drive.google.com/file/d/1_JxB9TpcVGWN7x9SBJJa2eiAffcbbcX0/view?usp=sharing, https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221_V3UQE__vlWohPYAK4V5Z9VwSNQ4-yWX%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1_pulr5u9WF8U06LnF1M2w1TmNsJwg78J/view?usp=sharing, https://drive.google.com/file/d/1f-x9ZGfkyZ0WdUCaHhh5iVjy4e-lVEBX/view?usp=sharing, https://drive.google.com/file/d/1m2t3W4mAxSrrwNIA_qm9HiyIqgCq1hnf/view?usp=sharing, https://drive.google.com/file/d/1w38FRNP6qcrZrGnxHUjbDFOpedZo4_jq/view?usp=sharing
