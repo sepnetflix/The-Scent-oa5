@@ -1,0 +1,508 @@
+<!-- DEBUG: index.php loaded --><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Results for &quot;1&quot;</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Montserrat:wght@400;500;600&family=Raleway:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1A4D5A',
+                        'primary-dark': '#164249',
+                        secondary: '#A0C1B1',
+                        accent: '#D4A76A'
+                    },
+                    fontFamily: {
+                        heading: ['Cormorant Garamond', 'serif'],
+                        body: ['Montserrat', 'sans-serif'],
+                        accent: ['Raleway', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- Scripts: Only mobile menu JS here, remove AOS/Particles.js init from header -->
+    <script>
+        // Initialize mobile menu functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const mobileMenuToggle = document.querySelector('.mobile-menu-toggle');
+            const mobileMenu = document.getElementById('mobile-menu');
+            let isMenuOpen = false;
+
+            function toggleMenu() {
+                isMenuOpen = !isMenuOpen;
+                mobileMenu.classList.toggle('active');
+                document.body.classList.toggle('menu-open');
+                mobileMenuToggle.innerHTML = isMenuOpen ? 
+                    '<i class="fas fa-times"></i>' : 
+                    '<i class="fas fa-bars"></i>';
+            }
+
+            function closeMenu() {
+                if (isMenuOpen) {
+                    isMenuOpen = false;
+                    mobileMenu.classList.remove('active');
+                    document.body.classList.remove('menu-open');
+                    mobileMenuToggle.innerHTML = '<i class="fas fa-bars"></i>';
+                }
+            }
+
+            mobileMenuToggle?.addEventListener('click', function(e) {
+                e.stopPropagation();
+                toggleMenu();
+            });
+
+            document.addEventListener('click', function(e) {
+                if (isMenuOpen && !e.target.closest('.main-nav')) {
+                    closeMenu();
+                }
+            });
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && isMenuOpen) {
+                    closeMenu();
+                }
+            });
+
+            mobileMenu?.querySelectorAll('a').forEach(link => {
+                link.addEventListener('click', closeMenu);
+            });
+        });
+    </script>
+</head>
+<body>
+    <header>
+        <nav class="main-nav sample-header">
+            <div class="container header-container">
+                <div class="logo">
+                    <a href="index.php" style="text-transform:uppercase; letter-spacing:1px;">The Scent</a>
+                    <span style="display:block; font-family:'Raleway',sans-serif; font-size:0.7rem; letter-spacing:2px; text-transform:uppercase; color:#A0C1B1; margin-top:-5px; opacity:0.8;">AROMATHERAPY</span>
+                </div>
+                <div class="nav-links" id="mobile-menu">
+                    <a href="index.php">Home</a>
+                    <a href="index.php?page=products">Shop</a>
+                    <a href="index.php?page=quiz">Scent Finder</a>
+                    <a href="index.php?page=about">About</a>
+                    <a href="index.php?page=contact">Contact</a>
+                </div>
+                <div class="header-icons">
+                    <a href="#" aria-label="Search"><i class="fas fa-search"></i></a>
+                                            <a href="index.php?page=login" aria-label="Login"><i class="fas fa-user"></i></a>
+                                        <a href="index.php?page=cart" class="cart-link" aria-label="Cart">
+                        <i class="fas fa-shopping-bag"></i>
+                        <span class="cart-count">0</span>
+                    </a>
+                </div>
+                <button class="mobile-menu-toggle md:hidden" aria-label="Toggle Menu">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+        </nav>
+    </header>
+    <main>
+        
+<section class="products-section">
+    <div class="container">
+        <div class="products-header" data-aos="fade-up">
+            <h1>Search Results for "1"</h1>
+            
+            <!-- Search Bar -->
+            <form action="index.php" method="GET" class="search-form">
+                <input type="hidden" name="page" value="products">
+                <div class="search-input">
+                    <input type="text" name="search" placeholder="Search products..."
+                           value="1">
+                    <button type="submit">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="products-grid-container">
+            <!-- Filters Sidebar -->
+            <aside class="filters-sidebar" data-aos="fade-right">
+                <div class="filters-section">
+                    <h2>Categories</h2>
+                    <ul class="category-list">
+                        <li>
+                            <a href="index.php?page=products" 
+                               class="active">
+                                All Products
+                            </a>
+                        </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=3"
+                                   class="">
+                                    Diffuser Blends                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=7"
+                                   class="">
+                                    Diffuser Blends                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=11"
+                                   class="">
+                                    Diffuser Blends                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=15"
+                                   class="">
+                                    Diffuser Blends                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=1"
+                                   class="">
+                                    Essential Oils                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=5"
+                                   class="">
+                                    Essential Oils                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=9"
+                                   class="">
+                                    Essential Oils                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=13"
+                                   class="">
+                                    Essential Oils                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=4"
+                                   class="">
+                                    Gift Sets                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=8"
+                                   class="">
+                                    Gift Sets                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=12"
+                                   class="">
+                                    Gift Sets                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=16"
+                                   class="">
+                                    Gift Sets                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=2"
+                                   class="">
+                                    Natural Soaps                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=6"
+                                   class="">
+                                    Natural Soaps                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=10"
+                                   class="">
+                                    Natural Soaps                                </a>
+                            </li>
+                                                    <li>
+                                <a href="index.php?page=products&category=14"
+                                   class="">
+                                    Natural Soaps                                </a>
+                            </li>
+                                            </ul>
+                </div>
+                
+                <div class="filters-section">
+                    <h2>Price Range</h2>
+                    <div class="price-range">
+                        <div class="range-inputs">
+                            <input type="number" id="minPrice" placeholder="Min" min="0"
+                                   value="">
+                            <span>to</span>
+                            <input type="number" id="maxPrice" placeholder="Max" min="0"
+                                   value="">
+                        </div>
+                        <button type="button" class="btn-secondary apply-price-filter">Apply</button>
+                    </div>
+                </div>
+            </aside>
+            
+            <!-- Products Grid -->
+            <div class="products-content">
+                <div class="products-toolbar" data-aos="fade-up">
+                    <div class="showing-products">
+                        Showing 0 products
+                    </div>
+                    
+                    <div class="sort-options">
+                        <label for="sort">Sort by:</label>
+                        <select id="sort" name="sort">
+                            <option value="name_asc" >
+                                Name (A-Z)
+                            </option>
+                            <option value="name_desc" >
+                                Name (Z-A)
+                            </option>
+                            <option value="price_asc" >
+                                Price (Low to High)
+                            </option>
+                            <option value="price_desc" >
+                                Price (High to Low)
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                
+                                    <div class="no-products" data-aos="fade-up">
+                        <i class="fas fa-search"></i>
+                        <p>No products found matching your criteria.</p>
+                        <a href="index.php?page=products" class="btn-primary">View All Products</a>
+                    </div>
+                            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle sorting
+    const sortSelect = document.getElementById('sort');
+    sortSelect.addEventListener('change', function() {
+        const url = new URL(window.location.href);
+        url.searchParams.set('sort', this.value);
+        window.location.href = url.toString();
+    });
+    
+    // Handle price filter
+    const applyPriceFilter = document.querySelector('.apply-price-filter');
+    applyPriceFilter.addEventListener('click', function() {
+        const minPrice = document.getElementById('minPrice').value;
+        const maxPrice = document.getElementById('maxPrice').value;
+        
+        const url = new URL(window.location.href);
+        if (minPrice) url.searchParams.set('min_price', minPrice);
+        if (maxPrice) url.searchParams.set('max_price', maxPrice);
+        window.location.href = url.toString();
+    });
+    
+    // Handle add to cart
+    document.querySelectorAll('.add-to-cart').forEach(button => {
+        button.addEventListener('click', function() {
+            const productId = this.dataset.productId;
+            
+            fetch('index.php?page=cart&action=add', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `product_id=${productId}&quantity=1`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update cart count
+                    const cartCount = document.querySelector('.cart-count');
+                    if (cartCount) {
+                        cartCount.textContent = data.cartCount;
+                        cartCount.style.display = 'inline';
+                    }
+                    
+                    // Show success message
+                    alert('Product added to cart!');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    });
+});
+</script>
+
+</main>
+    <footer>
+        <div class="container">
+            <div class="footer-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:3rem;margin-bottom:3rem;">
+                <div class="footer-about">
+                    <h3>About The Scent</h3>
+                    <p>Creating premium aromatherapy products to enhance mental and physical well-being through the power of nature.</p>
+                    <div class="social-icons">
+                        <a href="#" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+                        <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+                        <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+                        <a href="#" aria-label="Pinterest"><i class="fab fa-pinterest"></i></a>
+                    </div>
+                </div>
+                <div class="footer-links">
+                    <h3>Shop</h3>
+                    <ul>
+                        <li><a href="index.php?page=products">Essential Oils</a></li>
+                        <li><a href="index.php?page=products">Natural Soaps</a></li>
+                        <li><a href="index.php?page=products">Gift Sets</a></li>
+                        <li><a href="index.php?page=products">New Arrivals</a></li>
+                        <li><a href="index.php?page=products">Bestsellers</a></li>
+                    </ul>
+                </div>
+                <div class="footer-links">
+                    <h3>Help</h3>
+                    <ul>
+                        <li><a href="index.php?page=contact">Contact Us</a></li>
+                        <li><a href="index.php?page=faq">FAQs</a></li>
+                        <li><a href="index.php?page=shipping">Shipping & Returns</a></li>
+                        <li><a href="index.php?page=order-tracking">Track Your Order</a></li>
+                        <li><a href="index.php?page=privacy">Privacy Policy</a></li>
+                    </ul>
+                </div>
+                <div class="footer-contact">
+                    <h3>Contact Us</h3>
+                    <p><i class="fas fa-map-marker-alt"></i> 123 Aromatherapy Lane, Wellness City, WB 12345</p>
+                    <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
+                    <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
+                    <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
+                        <input type="hidden" name="csrf_token" value="">
+                        <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
+                        <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
+                    </form>
+                    <p class="newsletter-consent" style="font-size:0.8rem;opacity:0.7; margin-top:1rem;">By subscribing, you agree to our <a href="index.php?page=privacy" style="color:#A0C1B1; text-decoration:underline;">Privacy Policy</a> and consent to receive emails from The Scent.</p>
+                </div>
+            </div>
+            <div class="footer-bottom" style="background-color:#222b2e; padding:1.5rem 0; margin-top:2rem;">
+                <div class="container" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;font-size:0.85rem;">
+                    <p>&copy; 2025 The Scent. All rights reserved.</p>
+                    <div class="payment-methods" style="display:flex;align-items:center;gap:0.8rem;">
+                        <span>Accepted Payments:</span>
+                        <i class="fab fa-cc-visa"></i>
+                        <i class="fab fa-cc-mastercard"></i>
+                        <i class="fab fa-cc-paypal"></i>
+                        <i class="fab fa-cc-amex"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+    <script>
+        // Initialize AOS
+        document.addEventListener('DOMContentLoaded', function() {
+            AOS.init({
+                duration: 800,
+                offset: 100,
+                once: true
+            });
+
+            if (document.getElementById('particles-js')) {
+                particlesJS.load('particles-js', '/particles.json');
+            }
+        });
+
+        // Canonical flash message helper
+        window.showFlashMessage = function(message, type = 'info') {
+            let flashContainer = document.querySelector('.flash-message-container');
+            if (!flashContainer) {
+                flashContainer = document.createElement('div');
+                flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full';
+                document.body.appendChild(flashContainer);
+            }
+            const flashDiv = document.createElement('div');
+            const colorMap = {
+                success: 'bg-green-100 border-green-400 text-green-700',
+                error: 'bg-red-100 border-red-400 text-red-700',
+                info: 'bg-blue-100 border-blue-400 text-blue-700',
+                warning: 'bg-yellow-100 border-yellow-400 text-yellow-700'
+            };
+            flashDiv.className = `flash-message border px-4 py-3 rounded relative shadow-md mb-2 ${colorMap[type] || colorMap['info']}`;
+            flashDiv.setAttribute('role', 'alert');
+            const messageSpan = document.createElement('span');
+            messageSpan.className = 'block sm:inline';
+            messageSpan.textContent = message;
+            flashDiv.appendChild(messageSpan);
+            const closeButton = document.createElement('span');
+            closeButton.className = 'absolute top-0 bottom-0 right-0 px-4 py-3';
+            closeButton.innerHTML = '&times;';
+            closeButton.onclick = () => flashDiv.remove();
+            flashDiv.appendChild(closeButton);
+            flashContainer.appendChild(flashDiv);
+            setTimeout(() => {
+                if (flashDiv) {
+                    flashDiv.style.opacity = '0';
+                    flashDiv.style.transition = 'opacity 0.5s ease-out';
+                    setTimeout(() => flashDiv.remove(), 500);
+                }
+            }, 5000);
+        };
+
+        // Canonical Add-to-Cart handler (event delegation)
+        document.body.addEventListener('click', function(e) {
+            const btn = e.target.closest('.add-to-cart');
+            if (!btn) return;
+            e.preventDefault();
+            if (btn.disabled) return;
+            const productId = btn.dataset.productId;
+            const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
+            const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
+            if (!csrfToken) {
+                showFlashMessage('Security token missing. Please refresh.', 'error');
+                return;
+            }
+            btn.disabled = true;
+            const originalText = btn.textContent;
+            btn.textContent = 'Adding...';
+            fetch('index.php?page=cart&action=add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `product_id=${encodeURIComponent(productId)}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const cartCount = document.querySelector('.cart-count');
+                    if (cartCount) {
+                        cartCount.textContent = data.cart_count;
+                        cartCount.style.display = data.cart_count > 0 ? 'inline' : 'none';
+                    }
+                    showFlashMessage(data.message || 'Product added to cart', 'success');
+                    if (data.stock_status === 'out_of_stock') {
+                        btn.disabled = true;
+                        btn.classList.remove('btn-secondary');
+                        btn.classList.add('btn-disabled');
+                        btn.textContent = 'Out of Stock';
+                    } else if (data.stock_status === 'low_stock') {
+                        showFlashMessage('Limited quantity available', 'info');
+                        btn.dataset.lowStock = 'true';
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                    } else {
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                    }
+                } else {
+                    showFlashMessage(data.message || 'Error adding to cart', 'error');
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showFlashMessage('Error adding to cart', 'error');
+                btn.textContent = originalText;
+                btn.disabled = false;
+            });
+        });
+    </script>
+</body>
+</html>
