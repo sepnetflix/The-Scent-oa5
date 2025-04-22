@@ -40,7 +40,17 @@ class Product {
             LIMIT 1
         ");
         $stmt->execute([$id]);
-        return $stmt->fetch();
+        $product = $stmt->fetch(PDO::FETCH_ASSOC);
+        // Decode JSON fields if present
+        if ($product) {
+            if (isset($product['benefits'])) {
+                $product['benefits'] = json_decode($product['benefits'], true) ?? [];
+            }
+            if (isset($product['gallery_images'])) {
+                $product['gallery_images'] = json_decode($product['gallery_images'], true) ?? [];
+            }
+        }
+        return $product;
     }
     
     public function getByCategory($categoryId) {
@@ -204,13 +214,23 @@ class Product {
      */
     public function getRelated($categoryId, $excludeId, $limit = 4) {
         $stmt = $this->pdo->prepare(
-            "SELECT * FROM products WHERE category_id = ? AND id != ? ORDER BY RAND() LIMIT ?"
+            "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.category_id = ? AND p.id != ? ORDER BY RAND() LIMIT ?"
         );
         $stmt->bindValue(1, $categoryId, PDO::PARAM_INT);
         $stmt->bindValue(2, $excludeId, PDO::PARAM_INT);
         $stmt->bindValue(3, $limit, PDO::PARAM_INT);
         $stmt->execute();
-        return $stmt->fetchAll();
+        $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Decode JSON fields for related products
+        foreach ($products as &$product) {
+            if (isset($product['benefits'])) {
+                $product['benefits'] = json_decode($product['benefits'], true) ?? [];
+            }
+            if (isset($product['gallery_images'])) {
+                $product['gallery_images'] = json_decode($product['gallery_images'], true) ?? [];
+            }
+        }
+        return $products;
     }
 
     public function updateStock($id, $quantity) {

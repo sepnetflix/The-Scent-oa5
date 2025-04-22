@@ -8,6 +8,11 @@ based on your deep understanding of the current project state, please suggest ho
 Think deeply and thoroughly to explore the best implementation option to fix this issue before choosing the best implementation option to carefully merge the fix to the existing code files, taking care not to loose other features and functions while making changes. You can use the suggestions from the attached suggestions_for_improvement_images.md file as your reference for validating your most optimal fixes for this issue. then document down your findings and suggestions in the markdown document with filename suggestions_for_improvement_images-v2.md
 
 ---
+your next task is to carefully review the suggestions in the attached suggestions_for_improvement_images.md, then think deeply and systematically to carefully validate the suggested improvements against the current project code files and then explore thoroughly for the best implementation option to make the suggested improvements. then choose the best implementation option to carefully merge the validated changes to the existing code files, taking care not to loose other features and functions while making the changes.
+
+Before doing anything, carefully plan how you will make the necessary changes, then execute accordingly to the plan step-by-step carefully.
+
+---
 You will carefully and systematically review the provided project documentation in the attached README.md, technical_design_specification.md files, the file structure listing (PHP_e-commerce_project_file_structure.md), and the code snippets from key files (content_of_code_files_1.md, content_of_code_files_2.md).
 
 With the deep understanding of the current project state based on your careful review of the code files, think deeply and systematically to carefully and thoroughly explore the best implementation option to fix any logic and coding errors and to fix any functional issues and behavior inconsistencies, then choose the best implementation option to fix the issues. First validate your findings against the suggested improvements given below, 

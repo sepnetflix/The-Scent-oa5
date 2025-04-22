@@ -126,7 +126,6 @@ class ProductController extends BaseController {
             
             $csrfToken = $this->getCsrfToken();
             require_once __DIR__ . '/../views/product_detail.php';
-            
         } catch (Exception $e) {
             error_log("Error loading product details: " . $e->getMessage());
             $this->setFlashMessage('Error loading product details', 'error');
