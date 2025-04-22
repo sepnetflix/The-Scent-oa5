@@ -7,13 +7,13 @@ $ ls -l index.php css/style.css particles.json .htaccess config.php includes/*ph
 -rwxr-xr-x 1 pete www-data  3652 Apr 15 21:10 config.php
 -rwxr-xr-x 1 pete www-data 25459 Apr 14 08:10 controllers/AccountController.php
 -rw-rw-r-- 1 pete pete     18595 Apr 21 10:46 controllers/BaseController.php
--rwxr-xr-x 1 pete www-data  7334 Apr 21 18:42 controllers/CartController.php
+-rwxr-xr-x 1 pete www-data  7378 Apr 22 09:19 controllers/CartController.php
 -rwxr-xr-x 1 pete www-data 12327 Apr 14 07:08 controllers/CheckoutController.php
 -rwxr-xr-x 1 pete www-data 11307 Apr 14 07:08 controllers/CouponController.php
 -rwxr-xr-x 1 pete www-data  9875 Apr 14 07:16 controllers/InventoryController.php
 -rwxr-xr-x 1 pete www-data  7735 Apr 14 07:08 controllers/NewsletterController.php
 -rwxr-xr-x 1 pete www-data  9106 Apr 14 07:08 controllers/PaymentController.php
--rwxr-xr-x 1 pete www-data 11733 Apr 21 19:07 controllers/ProductController.php
+-rwxr-xr-x 1 pete www-data 11816 Apr 22 09:40 controllers/ProductController.php
 -rwxr-xr-x 1 pete www-data 11146 Apr 14 15:28 controllers/QuizController.php
 -rwxr-xr-x 1 pete www-data  9695 Apr 14 07:16 controllers/TaxController.php
 -rw-rw-r-- 1 pete pete     35087 Apr 17 10:32 css/style.css
@@ -24,23 +24,23 @@ $ ls -l index.php css/style.css particles.json .htaccess config.php includes/*ph
 -rwxr-xr-x 1 pete pete       890 Apr 18 07:04 includes/db.php
 -rwxr-xr-x 1 pete pete      5057 Apr 21 18:42 index.php
 -rwxr-xr-x 1 pete www-data  2939 Apr 13 13:00 models/Order.php
--rwxr-xr-x 1 pete www-data  9366 Apr 21 19:23 models/Product.php
+-rwxr-xr-x 1 pete www-data 10341 Apr 22 09:40 models/Product.php
 -rwxr-xr-x 1 pete www-data  9900 Apr 14 15:33 models/Quiz.php
 -rwxr-xr-x 1 pete www-data  2053 Apr 13 13:00 models/User.php
 -rwxr-xr-x 1 pete pete      1401 Apr 18 04:53 particles.json
 -rw-rw-r-- 1 pete pete      2242 Apr 14 07:00 views/404.php
--rwxr-xr-x 1 pete pete     10261 Apr 21 09:43 views/cart.php
+-rwxr-xr-x 1 pete pete      8131 Apr 22 09:21 views/cart.php
 -rwxr-xr-x 1 pete pete     15477 Apr 18 08:07 views/checkout.php
 -rw-rw-r-- 1 pete pete      2610 Apr 18 08:07 views/error.php
 -rwxr-xr-x 1 pete pete      2865 Apr 18 08:07 views/forgot_password.php
--rw-rw-r-- 1 pete pete     15811 Apr 21 18:45 views/home.php
+-rw-rw-r-- 1 pete pete     14875 Apr 22 09:21 views/home.php
 -rw-rw-r-- 1 pete pete       187 Apr 14 09:07 views/layout/admin_footer.php
 -rw-rw-r-- 1 pete pete      2833 Apr 14 09:07 views/layout/admin_header.php
--rw-rw-r-- 1 pete pete      9264 Apr 21 18:45 views/layout/footer.php
+-rw-rw-r-- 1 pete pete      9290 Apr 22 09:19 views/layout/footer.php
 -rwxr-xr-x 1 pete www-data  5655 Apr 21 09:43 views/layout/header.php
 -rwxr-xr-x 1 pete pete      5499 Apr 18 08:08 views/login.php
 -rwxr-xr-x 1 pete pete      5800 Apr 18 08:08 views/order_confirmation.php
--rwxr-xr-x 1 pete pete     11294 Apr 21 18:45 views/product_detail.php
+-rwxr-xr-x 1 pete pete     31937 Apr 22 10:05 views/product_detail.php
 -rwxr-xr-x 1 pete pete      8977 Apr 21 19:16 views/products.php
 -rwxr-xr-x 1 pete www-data  5171 Apr 14 15:31 views/quiz.php
 -rwxr-xr-x 1 pete www-data  4121 Apr 14 15:31 views/quiz_results.php
@@ -65,7 +65,7 @@ RewriteCond %{REQUEST_URI} !^/test_.*\.php$
 RewriteCond %{REQUEST_URI} !^/sample_.*\.html$
 RewriteRule ^ index.php [L]
 
-$ cat particles.json 
+$ cat particles.json
 {
   "particles": {
     "number": {
@@ -146,4 +146,3 @@ $ cat particles.json
   },
   "retina_detect": true
 }
-

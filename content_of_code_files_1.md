@@ -461,7 +461,7 @@ $delay = 0; // Initialize delay counter for animations
             <p class="mb-8">Subscribe to receive updates, exclusive offers, and aromatherapy tips.</p>
             <!-- Apply suggested form structure/style -->
             <form id="newsletter-form" class="newsletter-form flex flex-col sm:flex-row gap-4 justify-center">
-                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
                 <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input flex-1 px-4 py-2 rounded-full border border-gray-300 focus:border-primary">
                 <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
             </form>
@@ -469,6 +469,37 @@ $delay = 0; // Initialize delay counter for animations
         </div>
     </div>
 </section>
+
+<script>
+    // Newsletter form submission
+    const newsletterForm = document.getElementById('newsletter-form');
+    if (newsletterForm) {
+        newsletterForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            try {
+                const response = await fetch('index.php?page=newsletter&action=subscribe', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams(formData)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showFlashMessage(data.message || 'Thank you for subscribing!', 'success');
+                    newsletterForm.querySelector('input[type="email"]').value = '';
+                    newsletterForm.querySelector('button').disabled = true;
+                } else {
+                    showFlashMessage(data.message || 'Subscription failed', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showFlashMessage('Subscription failed', 'error');
+            }
+        });
+    }
+</script>
 
 <!-- Testimonials Section (Keep existing) -->
 <section class="py-20 bg-white" id="testimonials">
@@ -493,70 +524,6 @@ $delay = 0; // Initialize delay counter for animations
         </div>
     </div>
 </section>
-
-<!-- Keep Existing Script Block -->
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize AOS
-    AOS.init({
-        duration: 800,
-        offset: 100,
-        once: true
-    });
-
-    // Initialize Particles.js if element exists
-    if (document.getElementById('particles-js')) {
-        particlesJS.load('particles-js', '/particles.json', function() {
-            console.log('Particles.js loaded');
-        });
-    }
-
-    // Newsletter form submission
-    const newsletterForm = document.getElementById('newsletter-form');
-    if (newsletterForm) {
-        newsletterForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-            
-            try {
-                const response = await fetch('index.php?page=newsletter&action=subscribe', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: new URLSearchParams(formData)
-                });
-
-                const data = await response.json();
-                
-                if (data.success) {
-                    // Update the form's parent div content to show success, instead of just the form itself
-                    this.parentElement.innerHTML = '<p class="text-green-600 font-semibold">Thank you for subscribing!</p>';
-                } else {
-                    showFlashMessage(data.message || 'Subscription failed', 'error');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                showFlashMessage('Subscription failed', 'error');
-            }
-        });
-    }
-
-    // Sticky Header Logic (Add if not already present globally)
-    const header = document.querySelector('.sample-header'); // Target the header nav
-    if (header) {
-        const stickyPoint = header.offsetTop + 100; // Adjust offset as needed
-
-        window.addEventListener('scroll', () => {
-            if (window.pageYOffset > stickyPoint) {
-                header.classList.add('sticky');
-            } else {
-                header.classList.remove('sticky');
-            }
-        });
-    }
-});
-</script>
 
 <?php require_once __DIR__ . '/layout/footer.php'; // Uses footer-fixed.php content implicitly ?>
 
@@ -737,7 +704,7 @@ require_once __DIR__ . '/../../includes/auth.php';
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>
@@ -891,7 +858,7 @@ require_once __DIR__ . '/../../includes/auth.php';
                 </div>
             <?php else: ?>
                 <form id="cartForm" action="index.php?page=cart&action=update" method="POST">
-                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
                     <div class="cart-items">
                         <?php foreach ($cartItems as $item): ?>
                             <div class="cart-item" data-product-id="<?= $item['product']['id'] ?>">
@@ -1061,42 +1028,6 @@ document.addEventListener('DOMContentLoaded', function() {
             showFlashMessage('Error updating cart', 'error');
         });
     });
-
-    // Flash message helper (reuse from home.php/footer.php)
-    function showFlashMessage(message, type = 'info') {
-        let flashContainer = document.querySelector('.flash-message-container');
-        if (!flashContainer) {
-            flashContainer = document.createElement('div');
-            flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100]';
-            document.body.appendChild(flashContainer);
-        }
-        const flashDiv = document.createElement('div');
-        const colorMap = {
-            success: 'bg-green-100 border-green-400 text-green-700',
-            error: 'bg-red-100 border-red-400 text-red-700',
-            info: 'bg-blue-100 border-blue-400 text-blue-700',
-            warning: 'bg-yellow-100 border-yellow-400 text-yellow-700'
-        };
-        flashDiv.className = `flash-message border px-4 py-3 rounded relative shadow-md mb-2 ${colorMap[type] || colorMap['info']}`;
-        flashDiv.setAttribute('role', 'alert');
-        const messageSpan = document.createElement('span');
-        messageSpan.className = 'block sm:inline';
-        messageSpan.textContent = message;
-        flashDiv.appendChild(messageSpan);
-        const closeButton = document.createElement('span');
-        closeButton.className = 'absolute top-0 bottom-0 right-0 px-4 py-3';
-        closeButton.innerHTML = '<svg class="fill-current h-6 w-6 text-current" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>';
-        closeButton.onclick = () => flashDiv.remove();
-        flashDiv.appendChild(closeButton);
-        flashContainer.appendChild(flashDiv);
-        setTimeout(() => {
-             if (flashDiv) {
-                 flashDiv.style.opacity = '0';
-                 flashDiv.style.transition = 'opacity 0.5s ease-out';
-                 setTimeout(() => flashDiv.remove(), 500);
-             }
-        }, 5000);
-    }
 });
 </script>
 
