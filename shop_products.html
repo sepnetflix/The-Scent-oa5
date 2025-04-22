@@ -114,6 +114,9 @@
     </header>
     <main>
         
+<!-- Output CSRF token for JS (for AJAX add-to-cart) -->
+<input type="hidden" id="csrf-token-value" value="3e1b04319f29090e6b2d9a3923608736c14dca5ae1fa72149211eb265af86bed">
+
 <section class="products-section">
     <div class="container">
         <div class="products-header" data-aos="fade-up">
@@ -300,35 +303,7 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = url.toString();
     });
     
-    // Handle add to cart
-    document.querySelectorAll('.add-to-cart').forEach(button => {
-        button.addEventListener('click', function() {
-            const productId = this.dataset.productId;
-            
-            fetch('index.php?page=cart&action=add', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `product_id=${productId}&quantity=1`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Update cart count
-                    const cartCount = document.querySelector('.cart-count');
-                    if (cartCount) {
-                        cartCount.textContent = data.cartCount;
-                        cartCount.style.display = 'inline';
-                    }
-                    
-                    // Show success message
-                    alert('Product added to cart!');
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        });
-    });
+    // Handle add to cart (delegated to footer.js, but fallback for legacy)
 });
 </script>
 
@@ -372,7 +347,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="">
+                        <input type="hidden" name="csrf_token" value="3e1b04319f29090e6b2d9a3923608736c14dca5ae1fa72149211eb265af86bed">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>
@@ -453,8 +428,16 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             if (btn.disabled) return;
             const productId = btn.dataset.productId;
-            const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
-            const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
+            // Always get CSRF token from #csrf-token-value (for products page)
+            let csrfToken = '';
+            const csrfTokenInput = document.getElementById('csrf-token-value');
+            if (csrfTokenInput) {
+                csrfToken = csrfTokenInput.value;
+            } else {
+                // fallback for other pages
+                const legacyInput = document.querySelector('input[name="csrf_token"]');
+                csrfToken = legacyInput ? legacyInput.value : '';
+            }
             if (!csrfToken) {
                 showFlashMessage('Security token missing. Please refresh.', 'error');
                 return;

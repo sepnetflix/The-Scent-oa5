@@ -506,6 +506,7 @@ class ProductController extends BaseController {
                 "Search Results for \"" . htmlspecialchars($searchQuery) . "\"" : 
                 ($categoryId ? "Category Products" : "All Products");
             
+            $csrfToken = $this->getCsrfToken();
             require_once __DIR__ . '/../views/products.php';
             
         } catch (Exception $e) {

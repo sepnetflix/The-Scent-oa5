@@ -304,6 +304,7 @@ class ProductController extends BaseController {
                 "Search Results for \"" . htmlspecialchars($searchQuery) . "\"" : 
                 ($categoryId ? "Category Products" : "All Products");
             
+            $csrfToken = $this->getCsrfToken();
             require_once __DIR__ . '/../views/products.php';
             
         } catch (Exception $e) {
@@ -1017,6 +1018,9 @@ document.addEventListener('DOMContentLoaded', function() {
 ```php
 <?php require_once __DIR__ . '/layout/header.php'; ?>
 
+<!-- Output CSRF token for JS (for AJAX add-to-cart) -->
+<input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+
 <section class="products-section">
     <div class="container">
         <div class="products-header" data-aos="fade-up">
@@ -1106,36 +1110,43 @@ document.addEventListener('DOMContentLoaded', function() {
                         <a href="index.php?page=products" class="btn-primary">View All Products</a>
                     </div>
                 <?php else: ?>
-                    <div class="products-grid">
+                    <div class="products-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 px-6">
                         <?php foreach ($products as $index => $product): ?>
-                            <div class="product-card" data-aos="fade-up" data-aos-delay="<?= $index * 100 ?>">
-                                <div class="product-image">
-                                    <a href="index.php?page=products&id=<?= $product['id'] ?>">
-                                        <img src="<?= htmlspecialchars($product['image_url']) ?>" 
-                                             alt="<?= htmlspecialchars($product['name']) ?>">
+                            <!-- Modern product card structure, matching home.php/product_detail.php -->
+                            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="<?= $index * 100 ?>">
+                                <div class="product-image relative h-64 overflow-hidden">
+                                    <a href="index.php?page=product&id=<?= $product['id'] ?>">
+                                        <img src="<?= htmlspecialchars($product['image_url'] ?? '/images/placeholder.jpg') ?>" 
+                                             alt="<?= htmlspecialchars($product['name']) ?>" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
                                     </a>
-                                    <?php if ($product['featured']): ?>
-                                        <span class="featured-badge">Featured</span>
+                                    <?php if (!empty($product['featured'])): ?>
+                                        <span class="absolute top-2 left-2 bg-accent text-white text-xs font-semibold px-2 py-0.5 rounded-full">Featured</span>
                                     <?php endif; ?>
                                 </div>
-                                
-                                <div class="product-info">
-                                    <h3>
-                                        <a href="index.php?page=products&id=<?= $product['id'] ?>">
+                                <div class="product-info p-4 flex flex-col flex-grow text-center">
+                                    <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
+                                        <a href="index.php?page=product&id=<?= $product['id'] ?>">
                                             <?= htmlspecialchars($product['name']) ?>
                                         </a>
                                     </h3>
-                                    <p class="product-category">
-                                        <?= htmlspecialchars($product['category_name'] ?? '') ?>
-                                    </p>
-                                    <p class="product-price">$<?= number_format($product['price'], 2) ?></p>
-                                    <div class="product-actions">
-                                        <a href="index.php?page=products&id=<?= $product['id'] ?>" 
-                                           class="btn-secondary">View Details</a>
-                                        <button class="btn-primary add-to-cart" 
-                                                data-product-id="<?= $product['id'] ?>">
-                                            Add to Cart
-                                        </button>
+                                    <?php if (!empty($product['short_description'])): ?>
+                                        <p class="text-sm text-gray-500 mb-2"><?= htmlspecialchars($product['short_description']) ?></p>
+                                    <?php elseif (!empty($product['category_name'])): ?>
+                                        <p class="text-sm text-gray-500 mb-2"><?= htmlspecialchars($product['category_name']) ?></p>
+                                    <?php endif; ?>
+                                    <p class="price text-base font-semibold text-accent mb-4 mt-auto">$<?= isset($product['price']) ? number_format($product['price'], 2) : 'N/A' ?></p>
+                                    <div class="product-actions mt-auto flex gap-2 justify-center">
+                                        <a href="index.php?page=product&id=<?= $product['id'] ?>" class="btn btn-primary">View Details</a>
+                                        <?php $isOutOfStock = (!isset($product['stock_quantity']) || $product['stock_quantity'] <= 0) && empty($product['backorder_allowed']); ?>
+                                        <?php if (!$isOutOfStock): ?>
+                                            <button class="btn btn-secondary add-to-cart" 
+                                                    data-product-id="<?= $product['id'] ?>"
+                                                    <?= isset($product['low_stock_threshold']) && isset($product['stock_quantity']) && $product['stock_quantity'] <= $product['low_stock_threshold'] ? 'data-low-stock="true"' : '' ?>>
+                                                Add to Cart
+                                            </button>
+                                        <?php else: ?>
+                                            <button class="btn btn-disabled" disabled>Out of Stock</button>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
@@ -1169,35 +1180,7 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = url.toString();
     });
     
-    // Handle add to cart
-    document.querySelectorAll('.add-to-cart').forEach(button => {
-        button.addEventListener('click', function() {
-            const productId = this.dataset.productId;
-            
-            fetch('index.php?page=cart&action=add', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `product_id=${productId}&quantity=1`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Update cart count
-                    const cartCount = document.querySelector('.cart-count');
-                    if (cartCount) {
-                        cartCount.textContent = data.cartCount;
-                        cartCount.style.display = 'inline';
-                    }
-                    
-                    // Show success message
-                    alert('Product added to cart!');
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        });
-    });
+    // Handle add to cart (delegated to footer.js, but fallback for legacy)
 });
 </script>
 

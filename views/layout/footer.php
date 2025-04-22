@@ -119,8 +119,16 @@
             e.preventDefault();
             if (btn.disabled) return;
             const productId = btn.dataset.productId;
-            const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
-            const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
+            // Always get CSRF token from #csrf-token-value (for products page)
+            let csrfToken = '';
+            const csrfTokenInput = document.getElementById('csrf-token-value');
+            if (csrfTokenInput) {
+                csrfToken = csrfTokenInput.value;
+            } else {
+                // fallback for other pages
+                const legacyInput = document.querySelector('input[name="csrf_token"]');
+                csrfToken = legacyInput ? legacyInput.value : '';
+            }
             if (!csrfToken) {
                 showFlashMessage('Security token missing. Please refresh.', 'error');
                 return;

@@ -373,7 +373,7 @@
             <p class="mb-8">Subscribe to receive updates, exclusive offers, and aromatherapy tips.</p>
             <!-- Apply suggested form structure/style -->
             <form id="newsletter-form" class="newsletter-form flex flex-col sm:flex-row gap-4 justify-center">
-                <input type="hidden" name="csrf_token" value="fe354afd60de2027f1f1335263371be220166f5f7408fffc2b14d27856f6c6a6">
+                <input type="hidden" name="csrf_token" value="85dfa176bc0e0a77a6b4b0d2e3a90834228645a768740ed41e94fe513206daa1">
                 <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input flex-1 px-4 py-2 rounded-full border border-gray-300 focus:border-primary">
                 <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
             </form>
@@ -477,7 +477,7 @@
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="fe354afd60de2027f1f1335263371be220166f5f7408fffc2b14d27856f6c6a6">
+                        <input type="hidden" name="csrf_token" value="85dfa176bc0e0a77a6b4b0d2e3a90834228645a768740ed41e94fe513206daa1">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>
@@ -558,8 +558,16 @@
             e.preventDefault();
             if (btn.disabled) return;
             const productId = btn.dataset.productId;
-            const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
-            const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
+            // Always get CSRF token from #csrf-token-value (for products page)
+            let csrfToken = '';
+            const csrfTokenInput = document.getElementById('csrf-token-value');
+            if (csrfTokenInput) {
+                csrfToken = csrfTokenInput.value;
+            } else {
+                // fallback for other pages
+                const legacyInput = document.querySelector('input[name="csrf_token"]');
+                csrfToken = legacyInput ? legacyInput.value : '';
+            }
             if (!csrfToken) {
                 showFlashMessage('Security token missing. Please refresh.', 'error');
                 return;
