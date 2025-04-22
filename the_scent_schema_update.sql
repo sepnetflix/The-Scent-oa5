@@ -3,7 +3,7 @@
 -- Version: 1.0
 -- Date: 2024-05-16
 -- Description: This script applies recommended schema changes to the 'the_scent' database
---              based on code review and analysis (Ref: technical_design_specification-v2.md).
+--              based on code review and analysis (Ref: technical_design_specification.md (v2)).
 --              It adds missing columns to the 'products' table required for the enhanced
 --              product detail view and removes a redundant column.
 
@@ -31,7 +31,7 @@ ALTER TABLE `products`
   ADD COLUMN `backorder_allowed` TINYINT(1) DEFAULT 0 NULL COMMENT '0 = No, 1 = Yes. Allow purchase when stock_quantity <= 0' AFTER `reorder_point`;
 
 -- Optional: Add a unique constraint to SKU if it should be unique across all products
--- ALTER TABLE `products` ADD CONSTRAINT `sku_unique` UNIQUE (`sku`);
+ALTER TABLE `products` ADD CONSTRAINT `sku_unique` UNIQUE (`sku`);
 
 -- -----------------------------------------------------
 -- Step 2: Remove Redundant `stock` Column from `products` Table

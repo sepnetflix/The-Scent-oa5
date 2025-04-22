@@ -33,7 +33,7 @@ DROP TABLE IF EXISTS `cart_items`;
 CREATE TABLE `cart_items` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int DEFAULT NULL,
-  `session_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `session_id` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `product_id` int DEFAULT NULL,
   `quantity` int DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -53,8 +53,8 @@ DROP TABLE IF EXISTS `categories`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `categories` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `description` text COLLATE utf8mb4_unicode_ci,
+  `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -70,9 +70,9 @@ CREATE TABLE `inventory_movements` (
   `id` int NOT NULL AUTO_INCREMENT,
   `product_id` int NOT NULL,
   `quantity_change` int NOT NULL,
-  `type` enum('sale','restock','return','adjustment') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `type` enum('sale','restock','return','adjustment') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `reference_id` int DEFAULT NULL,
-  `notes` text COLLATE utf8mb4_unicode_ci,
+  `notes` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_product_date` (`product_id`,`created_at`),
@@ -90,7 +90,7 @@ DROP TABLE IF EXISTS `newsletter_subscribers`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `newsletter_subscribers` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `email` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `email` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `subscribed_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`)
@@ -129,7 +129,7 @@ CREATE TABLE `orders` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int DEFAULT NULL,
   `total_price` decimal(10,2) DEFAULT NULL,
-  `status` enum('pending','paid','shipped','delivered','cancelled') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
+  `status` enum('pending','paid','shipped','delivered','cancelled') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`),
@@ -147,9 +147,9 @@ DROP TABLE IF EXISTS `product_attributes`;
 CREATE TABLE `product_attributes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `product_id` int NOT NULL,
-  `scent_type` enum('floral','woody','citrus','oriental','fresh') COLLATE utf8mb4_unicode_ci NOT NULL,
-  `mood_effect` enum('calming','energizing','focusing','balancing') COLLATE utf8mb4_unicode_ci NOT NULL,
-  `intensity_level` enum('light','medium','strong') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `scent_type` enum('floral','woody','citrus','oriental','fresh') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `mood_effect` enum('calming','energizing','focusing','balancing') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `intensity_level` enum('light','medium','strong') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   PRIMARY KEY (`id`),
   KEY `product_id` (`product_id`),
   CONSTRAINT `product_attributes_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`)
@@ -165,20 +165,30 @@ DROP TABLE IF EXISTS `products`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `products` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `name` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `description` text COLLATE utf8mb4_unicode_ci,
-  `image` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `name` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `short_description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT 'Brief description for listings/previews',
+  `image` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `gallery_images` json DEFAULT NULL COMMENT 'JSON array of additional image paths',
   `price` decimal(10,2) DEFAULT NULL,
-  `stock` int DEFAULT '0',
+  `benefits` json DEFAULT NULL COMMENT 'Product benefits, stored as JSON array of strings',
+  `ingredients` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT 'List of key ingredients',
+  `usage_instructions` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT 'How to use the product',
   `category_id` int DEFAULT NULL,
   `is_featured` tinyint(1) DEFAULT '0',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `low_stock_threshold` int DEFAULT '20',
   `reorder_point` int DEFAULT '30',
+  `backorder_allowed` tinyint(1) DEFAULT '0' COMMENT '0 = No, 1 = Yes. Allow purchase when stock_quantity <= 0',
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `highlight_text` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `highlight_text` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `stock_quantity` int DEFAULT '0',
+  `size` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'e.g., 10ml, 100g',
+  `scent_profile` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Simple text description of scent (Alternative: Use JOIN with product_attributes table)',
+  `origin` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Country or region of origin',
+  `sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Stock Keeping Unit',
   PRIMARY KEY (`id`),
+  UNIQUE KEY `sku_unique` (`sku`),
   KEY `category_id` (`category_id`),
   CONSTRAINT `products_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -194,9 +204,9 @@ DROP TABLE IF EXISTS `quiz_results`;
 CREATE TABLE `quiz_results` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int DEFAULT NULL,
-  `email` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `answers` text COLLATE utf8mb4_unicode_ci,
-  `recommendations` text COLLATE utf8mb4_unicode_ci,
+  `email` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `answers` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `recommendations` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_created_at` (`created_at`),
@@ -214,10 +224,10 @@ DROP TABLE IF EXISTS `users`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `users` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `email` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `password` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `role` enum('user','admin') COLLATE utf8mb4_unicode_ci DEFAULT 'user',
+  `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `email` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `password` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `role` enum('user','admin') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'user',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`)
@@ -241,4 +251,4 @@ CREATE TABLE `users` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-04-16  7:41:15
+-- Dump completed on 2025-04-22  8:49:19

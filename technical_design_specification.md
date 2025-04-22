@@ -1,8 +1,6 @@
 # The Scent – Technical Design Specification (v2.0)
 
 **Document Version:** 2.0
-**Date:** 2024-05-16
-**Status:** Updated based on code review and analysis as of May 16, 2024.
 
 ---
 
