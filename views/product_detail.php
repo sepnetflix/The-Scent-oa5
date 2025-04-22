@@ -2,6 +2,8 @@
 // Enhanced product detail view with image path fix, robust data handling, AJAX add-to-cart, and modern layout
 require_once __DIR__ . '/layout/header.php';
 ?>
+<!-- Output CSRF token for JS (for AJAX add-to-cart) -->
+<input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
 <section class="product-detail py-12 md:py-20 bg-white">
     <div class="container mx-auto px-4">
         <!-- Breadcrumbs -->

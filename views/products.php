@@ -89,6 +89,12 @@
                     <div class="no-products" data-aos="fade-up">
                         <i class="fas fa-search"></i>
                         <p>No products found matching your criteria.</p>
+                        <?php if (!empty($searchQuery) || !empty($categoryId) || !empty($_GET['min_price']) || !empty($_GET['max_price'])): ?>
+                            <p class="text-gray-500 mb-6">Try adjusting your search terms or filters in the sidebar.</p>
+                            <a href="index.php?page=products" class="btn-secondary mr-2">Clear Filters</a>
+                        <?php else: ?>
+                            <p class="text-gray-500 mb-6">Explore our collections or try a different search.</p>
+                        <?php endif; ?>
                         <a href="index.php?page=products" class="btn-primary">View All Products</a>
                     </div>
                 <?php else: ?>
@@ -134,6 +140,54 @@
                             </div>
                         <?php endforeach; ?>
                     </div>
+                <?php endif; ?>
+                <!-- Pagination block -->
+                <?php if (isset($paginationData) && $paginationData['totalPages'] > 1): ?>
+                    <nav aria-label="Page navigation" class="mt-12 flex justify-center" data-aos="fade-up">
+                        <ul class="inline-flex items-center -space-x-px">
+                            <!-- Previous Button -->
+                            <li>
+                                <a href="<?= $paginationData['currentPage'] > 1 ? htmlspecialchars($paginationData['baseUrl'] . '&page=' . ($paginationData['currentPage'] - 1)) : '#' ?>"
+                                   class="py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 <?= $paginationData['currentPage'] <= 1 ? 'opacity-50 cursor-not-allowed' : '' ?>">
+                                    <span class="sr-only">Previous</span>
+                                    <i class="fas fa-chevron-left"></i>
+                                </a>
+                            </li>
+                            <?php
+                            $numLinks = 2;
+                            $startPage = max(1, $paginationData['currentPage'] - $numLinks);
+                            $endPage = min($paginationData['totalPages'], $paginationData['currentPage'] + $numLinks);
+                            if ($startPage > 1) {
+                                echo '<li><a href="'.htmlspecialchars($paginationData['baseUrl'].'&page=1').'" class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">1</a></li>';
+                                if ($startPage > 2) {
+                                     echo '<li><span class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300">...</span></li>';
+                                }
+                            }
+                            for ($i = $startPage; $i <= $endPage; $i++): ?>
+                                <li>
+                                    <a href="<?= htmlspecialchars($paginationData['baseUrl'] . '&page=' . $i) ?>"
+                                       class="py-2 px-3 leading-tight <?= $i == $paginationData['currentPage'] ? 'z-10 text-primary bg-secondary border-primary hover:bg-secondary hover:text-primary' : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700' ?>">
+                                        <?= $i ?>
+                                    </a>
+                                </li>
+                            <?php endfor;
+                             if ($endPage < $paginationData['totalPages']) {
+                                if ($endPage < $paginationData['totalPages'] - 1) {
+                                     echo '<li><span class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300">...</span></li>';
+                                }
+                                echo '<li><a href="'.htmlspecialchars($paginationData['baseUrl'].'&page='.$paginationData['totalPages']).'" class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">'.$paginationData['totalPages'].'</a></li>';
+                            }
+                            ?>
+                            <!-- Next Button -->
+                            <li>
+                                <a href="<?= $paginationData['currentPage'] < $paginationData['totalPages'] ? htmlspecialchars($paginationData['baseUrl'] . '&page=' . ($paginationData['currentPage'] + 1)) : '#' ?>"
+                                   class="py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 <?= $paginationData['currentPage'] >= $paginationData['totalPages'] ? 'opacity-50 cursor-not-allowed' : '' ?>">
+                                    <span class="sr-only">Next</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
                 <?php endif; ?>
             </div>
         </div>

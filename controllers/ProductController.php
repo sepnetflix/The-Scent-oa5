@@ -84,11 +84,33 @@ class ProductController extends BaseController {
             $categories = $this->productModel->getAllCategories();
             
             // Set page title
-            $pageTitle = $searchQuery ? 
-                "Search Results for \"" . htmlspecialchars($searchQuery) . "\"" : 
-                ($categoryId ? "Category Products" : "All Products");
+            $categoryName = null;
+            if ($categoryId) {
+                foreach ($categories as $cat) {
+                    if ($cat['id'] == $categoryId) {
+                        $categoryName = $cat['name'];
+                        break;
+                    }
+                }
+            }
+            $pageTitle = $searchQuery ?
+                "Search Results for \"" . htmlspecialchars($searchQuery) . "\"" :
+                ($categoryId ? ($categoryName ? htmlspecialchars($categoryName) . " Products" : "Category Products") : "All Products");
             
             $csrfToken = $this->getCsrfToken();
+            
+            // Prepare pagination data
+            $paginationData = [
+                'currentPage' => $page,
+                'totalPages' => $totalPages,
+                'baseUrl' => 'index.php?page=products'
+            ];
+            $queryParams = $_GET;
+            unset($queryParams['page']);
+            if (!empty($queryParams)) {
+                $paginationData['baseUrl'] .= '&' . http_build_query($queryParams);
+            }
+            
             require_once __DIR__ . '/../views/products.php';
             
         } catch (Exception $e) {

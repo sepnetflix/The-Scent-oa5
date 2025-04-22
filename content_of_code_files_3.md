@@ -271,31 +271,28 @@ class SecurityMiddleware {
         return $_SESSION['csrf_token'];
     }
     
-    public static function preventSQLInjection($value) {
-        if (is_array($value)) {
-            return array_map([self::class, 'preventSQLInjection'], $value);
-        }
-        
-        if (is_string($value)) {
-            // Remove common SQL injection patterns
-            $patterns = [
-                '/\bUNION\b/i',
-                '/\bSELECT\b/i',
-                '/\bINSERT\b/i',
-                '/\bUPDATE\b/i',
-                '/\bDELETE\b/i',
-                '/\bDROP\b/i',
-                '/\bTRUNCATE\b/i',
-                '/\bOR\b\s+\d+\s*[=<>]/i',
-                '/\bAND\b\s+\d+\s*[=<>]/i'
-            ];
-            
-            $value = preg_replace($patterns, '', $value);
-            return addslashes($value);
-        }
-        
-        return $value;
-    }
+    // public static function preventSQLInjection($value) {
+    //     if (is_array($value)) {
+    //         return array_map([self::class, 'preventSQLInjection'], $value);
+    //     }
+    //     if (is_string($value)) {
+    //         // Remove common SQL injection patterns
+    //         $patterns = [
+    //             '/\\bUNION\\b/i',
+    //             '/\\bSELECT\\b/i',
+    //             '/\\bINSERT\\b/i',
+    //             '/\\bUPDATE\\b/i',
+    //             '/\\bDELETE\\b/i',
+    //             '/\\bDROP\\b/i',
+    //             '/\\bTRUNCATE\\b/i',
+    //             '/\\bOR\\b\\s+\\d+\\s*[=<>]/i',
+    //             '/\\bAND\\b\\s+\\d+\\s*[=<>]/i'
+    //         ];
+    //         $value = preg_replace($patterns, '', $value);
+    //         return addslashes($value);
+    //     }
+    //     return $value;
+    // }
     
     public static function validateFileUpload($file, $allowedTypes, $maxSize = 5242880) {
         if (!isset($file['error']) || is_array($file['error'])) {
@@ -502,11 +499,33 @@ class ProductController extends BaseController {
             $categories = $this->productModel->getAllCategories();
             
             // Set page title
-            $pageTitle = $searchQuery ? 
-                "Search Results for \"" . htmlspecialchars($searchQuery) . "\"" : 
-                ($categoryId ? "Category Products" : "All Products");
+            $categoryName = null;
+            if ($categoryId) {
+                foreach ($categories as $cat) {
+                    if ($cat['id'] == $categoryId) {
+                        $categoryName = $cat['name'];
+                        break;
+                    }
+                }
+            }
+            $pageTitle = $searchQuery ?
+                "Search Results for \"" . htmlspecialchars($searchQuery) . "\"" :
+                ($categoryId ? ($categoryName ? htmlspecialchars($categoryName) . " Products" : "Category Products") : "All Products");
             
             $csrfToken = $this->getCsrfToken();
+            
+            // Prepare pagination data
+            $paginationData = [
+                'currentPage' => $page,
+                'totalPages' => $totalPages,
+                'baseUrl' => 'index.php?page=products'
+            ];
+            $queryParams = $_GET;
+            unset($queryParams['page']);
+            if (!empty($queryParams)) {
+                $paginationData['baseUrl'] .= '&' . http_build_query($queryParams);
+            }
+            
             require_once __DIR__ . '/../views/products.php';
             
         } catch (Exception $e) {

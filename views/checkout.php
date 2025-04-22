@@ -1,4 +1,6 @@
 <?php require_once __DIR__ . '/layout/header.php'; ?>
+<!-- Output CSRF token for JS (for AJAX checkout/coupon/tax) -->
+<input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
 
 <!-- Add Stripe.js -->
 <script src="https://js.stripe.com/v3/"></script>

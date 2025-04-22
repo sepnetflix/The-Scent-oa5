@@ -269,31 +269,28 @@ class SecurityMiddleware {
         return $_SESSION['csrf_token'];
     }
     
-    public static function preventSQLInjection($value) {
-        if (is_array($value)) {
-            return array_map([self::class, 'preventSQLInjection'], $value);
-        }
-        
-        if (is_string($value)) {
-            // Remove common SQL injection patterns
-            $patterns = [
-                '/\bUNION\b/i',
-                '/\bSELECT\b/i',
-                '/\bINSERT\b/i',
-                '/\bUPDATE\b/i',
-                '/\bDELETE\b/i',
-                '/\bDROP\b/i',
-                '/\bTRUNCATE\b/i',
-                '/\bOR\b\s+\d+\s*[=<>]/i',
-                '/\bAND\b\s+\d+\s*[=<>]/i'
-            ];
-            
-            $value = preg_replace($patterns, '', $value);
-            return addslashes($value);
-        }
-        
-        return $value;
-    }
+    // public static function preventSQLInjection($value) {
+    //     if (is_array($value)) {
+    //         return array_map([self::class, 'preventSQLInjection'], $value);
+    //     }
+    //     if (is_string($value)) {
+    //         // Remove common SQL injection patterns
+    //         $patterns = [
+    //             '/\\bUNION\\b/i',
+    //             '/\\bSELECT\\b/i',
+    //             '/\\bINSERT\\b/i',
+    //             '/\\bUPDATE\\b/i',
+    //             '/\\bDELETE\\b/i',
+    //             '/\\bDROP\\b/i',
+    //             '/\\bTRUNCATE\\b/i',
+    //             '/\\bOR\\b\\s+\\d+\\s*[=<>]/i',
+    //             '/\\bAND\\b\\s+\\d+\\s*[=<>]/i'
+    //         ];
+    //         $value = preg_replace($patterns, '', $value);
+    //         return addslashes($value);
+    //     }
+    //     return $value;
+    // }
     
     public static function validateFileUpload($file, $allowedTypes, $maxSize = 5242880) {
         if (!isset($file['error']) || is_array($file['error'])) {
