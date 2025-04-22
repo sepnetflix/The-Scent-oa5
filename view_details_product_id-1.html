@@ -153,6 +153,7 @@
                 </div>
                 
                 <form class="add-to-cart-form" action="index.php?page=cart&action=add" method="POST">
+                    <input type="hidden" name="csrf_token" value="03e195516e86c0cb372f433d8681ad4bfc780783aac0e296b6a55724baebd02d">
                     <input type="hidden" name="product_id" value="1">
                     <div class="quantity-selector">
                         <button type="button" class="quantity-btn minus">-</button>
@@ -256,6 +257,44 @@
                 <div class="products-grid">
                                             <div class="product-card">
                             <div class="product-image">
+                                <a href="index.php?page=products&id=2">
+                                    <img src="/images/placeholder.jpg" 
+                                         alt="Citrus Burst Oil">
+                                </a>
+                            </div>
+                            <div class="product-info">
+                                <h3>
+                                    <a href="index.php?page=products&id=2">
+                                        Citrus Burst Oil                                    </a>
+                                </h3>
+                                <p class="price">$19.99</p>
+                                <button class="btn-primary add-to-cart" 
+                                        data-product-id="2">
+                                    Add to Cart
+                                </button>
+                            </div>
+                        </div>
+                                            <div class="product-card">
+                            <div class="product-image">
+                                <a href="index.php?page=products&id=5">
+                                    <img src="/images/placeholder.jpg" 
+                                         alt="Eucalyptus Fresh Oil">
+                                </a>
+                            </div>
+                            <div class="product-info">
+                                <h3>
+                                    <a href="index.php?page=products&id=5">
+                                        Eucalyptus Fresh Oil                                    </a>
+                                </h3>
+                                <p class="price">$18.99</p>
+                                <button class="btn-primary add-to-cart" 
+                                        data-product-id="5">
+                                    Add to Cart
+                                </button>
+                            </div>
+                        </div>
+                                            <div class="product-card">
+                            <div class="product-image">
                                 <a href="index.php?page=products&id=4">
                                     <img src="/images/placeholder.jpg" 
                                          alt="Rose Harmony Oil">
@@ -288,44 +327,6 @@
                                 <p class="price">$22.99</p>
                                 <button class="btn-primary add-to-cart" 
                                         data-product-id="3">
-                                    Add to Cart
-                                </button>
-                            </div>
-                        </div>
-                                            <div class="product-card">
-                            <div class="product-image">
-                                <a href="index.php?page=products&id=5">
-                                    <img src="/images/placeholder.jpg" 
-                                         alt="Eucalyptus Fresh Oil">
-                                </a>
-                            </div>
-                            <div class="product-info">
-                                <h3>
-                                    <a href="index.php?page=products&id=5">
-                                        Eucalyptus Fresh Oil                                    </a>
-                                </h3>
-                                <p class="price">$18.99</p>
-                                <button class="btn-primary add-to-cart" 
-                                        data-product-id="5">
-                                    Add to Cart
-                                </button>
-                            </div>
-                        </div>
-                                            <div class="product-card">
-                            <div class="product-image">
-                                <a href="index.php?page=products&id=2">
-                                    <img src="/images/placeholder.jpg" 
-                                         alt="Citrus Burst Oil">
-                                </a>
-                            </div>
-                            <div class="product-info">
-                                <h3>
-                                    <a href="index.php?page=products&id=2">
-                                        Citrus Burst Oil                                    </a>
-                                </h3>
-                                <p class="price">$19.99</p>
-                                <button class="btn-primary add-to-cart" 
-                                        data-product-id="2">
                                     Add to Cart
                                 </button>
                             </div>
@@ -422,7 +423,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="">
+                        <input type="hidden" name="csrf_token" value="03e195516e86c0cb372f433d8681ad4bfc780783aac0e296b6a55724baebd02d">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>

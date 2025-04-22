@@ -60,6 +60,7 @@
                 </div>
                 
                 <form class="add-to-cart-form" action="index.php?page=cart&action=add" method="POST">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
                     <input type="hidden" name="product_id" value="<?= $product['id'] ?? '' ?>">
                     <div class="quantity-selector">
                         <button type="button" class="quantity-btn minus">-</button>

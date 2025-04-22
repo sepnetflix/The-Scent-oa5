@@ -20,6 +20,7 @@ class ProductController extends BaseController {
                 error_log("No featured products found");
             }
             
+            $csrfToken = $this->getCsrfToken();
             require_once __DIR__ . '/../views/home.php';
         } catch (Exception $e) {
             error_log("Error in showHomePage: " . $e->getMessage());
@@ -123,6 +124,7 @@ class ProductController extends BaseController {
                 $relatedProducts = $this->productModel->getRelated($categoryId, $id, 4);
             }
             
+            $csrfToken = $this->getCsrfToken();
             require_once __DIR__ . '/../views/product_detail.php';
             
         } catch (Exception $e) {
