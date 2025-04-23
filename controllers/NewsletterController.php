@@ -4,9 +4,7 @@ require_once __DIR__ . '/../includes/EmailService.php';
 
 class NewsletterController extends BaseController {
     private $emailService;
-    private $rateLimit = 5; // Maximum attempts per hour
-    private $rateLimitWindow = 3600; // 1 hour in seconds
-    
+
     public function __construct($pdo) {
         parent::__construct($pdo);
         $this->emailService = new EmailService();
@@ -16,13 +14,8 @@ class NewsletterController extends BaseController {
         try {
             $this->validateCSRF();
             
-            // Rate limiting
-            if (!$this->checkRateLimit($_SERVER['REMOTE_ADDR'])) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'message' => 'Too many subscription attempts. Please try again later.'
-                ], 429);
-            }
+            // Standardized rate limiting
+            $this->validateRateLimit('newsletter');
             
             $email = $this->validateInput($_POST['email'] ?? null, 'email');
             if (!$email) {
@@ -167,18 +160,6 @@ class NewsletterController extends BaseController {
             $email . time(),
             NEWSLETTER_SECRET_KEY
         );
-    }
-    
-    private function checkRateLimit($ip) {
-        $stmt = $this->pdo->prepare("
-            SELECT COUNT(*) 
-            FROM newsletter_subscribers
-            WHERE ip_address = ?
-            AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)
-        ");
-        $stmt->execute([$ip]);
-        
-        return $stmt->fetchColumn() < $this->rateLimit;
     }
     
     public function logEmail($userId, $emailType, $recipientEmail, $subject, $status, $errorMessage = null) {

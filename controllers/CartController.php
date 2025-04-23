@@ -101,6 +101,14 @@ class CartController extends BaseController {
             }
         }
         
+        // Audit log for add to cart
+        $userId = $_SESSION['user_id'] ?? null;
+        $this->logAuditTrail('cart_add', $userId, [
+            'product_id' => $productId,
+            'quantity' => $quantity,
+            'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+        ]);
+        
         $this->jsonResponse([
             'success' => true,
             'message' => htmlspecialchars($product['name']) . ' added to cart',
@@ -150,6 +158,13 @@ class CartController extends BaseController {
         }
         
         unset($_SESSION['cart'][$productId]);
+        
+        // Audit log for remove from cart
+        $userId = $_SESSION['user_id'] ?? null;
+        $this->logAuditTrail('cart_remove', $userId, [
+            'product_id' => $productId,
+            'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+        ]);
         
         $this->jsonResponse([
             'success' => true,

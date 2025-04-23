@@ -16,11 +16,6 @@ class AccountController extends BaseController {
     private $maxLoginAttempts = 5;
     private $lockoutDuration = 900; // 15 minutes
     private $resetTokenExpiry = 3600; // 1 hour
-    private $rateLimit = [
-        'login' => ['attempts' => 5, 'window' => 300], // 5 attempts per 5 minutes
-        'reset' => ['attempts' => 3, 'window' => 3600]  // 3 attempts per hour
-    ];
-    
     private $securityHeaders = [
         'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
         'X-Content-Type-Options' => 'nosniff',
@@ -231,9 +226,7 @@ class AccountController extends BaseController {
             $this->validateCSRF();
             
             // Rate limit password reset requests
-            if ($this->isRateLimited('password_reset', 5, 3600)) { // 5 attempts per hour
-                throw new Exception('Too many password reset attempts. Please try again later.');
-            }
+            $this->validateRateLimit('reset');
             
             $email = $this->validateInput($_POST['email'] ?? '', 'email');
             if (!$email) {
@@ -282,59 +275,60 @@ class AccountController extends BaseController {
     }
     
     public function resetPassword() {
-        try {
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return;
-            }
-            
-            $this->validateCSRF();
-            
-            // Validate inputs
-            $token = $this->validateInput($_POST['token'] ?? '', 'string');
-            $password = $_POST['password'] ?? '';
-            $confirmPassword = $_POST['confirm_password'] ?? '';
-            
-            if (!$token) {
-                throw new Exception('Invalid password reset token.');
-            }
-            
-            if ($password !== $confirmPassword) {
-                throw new Exception('Passwords do not match.');
-            }
-            
-            if (!$this->isPasswordStrong($password)) {
-                throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-            }
-            
-            $this->beginTransaction();
-            
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
-                // Verify token and get user
-                $user = $this->userModel->getUserByValidResetToken($token);
-                if (!$user) {
-                    throw new Exception('This password reset link has expired or is invalid.');
+                $this->validateCSRF();
+                
+                // Standardized rate limit check
+                $this->validateRateLimit('reset');
+                
+                // Validate inputs
+                $token = $this->validateInput($_POST['token'] ?? '', 'string');
+                $password = $_POST['password'] ?? '';
+                $confirmPassword = $_POST['confirm_password'] ?? '';
+                
+                if (!$token) {
+                    throw new Exception('Invalid password reset token.');
                 }
                 
-                // Update password and clear reset token
-                $this->userModel->resetPassword($user['id'], $password);
+                if ($password !== $confirmPassword) {
+                    throw new Exception('Passwords do not match.');
+                }
                 
-                // Log the password reset
-                $this->logAuditTrail('password_reset_complete', $user['id']);
+                if (!$this->isPasswordStrong($password)) {
+                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
+                }
                 
-                $this->commit();
+                $this->beginTransaction();
                 
-                $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                return $this->redirect('login');
+                try {
+                    // Verify token and get user
+                    $user = $this->userModel->getUserByValidResetToken($token);
+                    if (!$user) {
+                        throw new Exception('This password reset link has expired or is invalid.');
+                    }
+                    
+                    // Update password and clear reset token
+                    $this->userModel->resetPassword($user['id'], $password);
+                    
+                    // Log the password reset
+                    $this->logAuditTrail('password_reset_complete', $user['id']);
+                    
+                    $this->commit();
+                    
+                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
+                    return $this->redirect('login');
+                    
+                } catch (Exception $e) {
+                    $this->rollback();
+                    throw $e;
+                }
                 
             } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
+                error_log("Password reset error: " . $e->getMessage());
+                $this->setFlashMessage($e->getMessage(), 'error');
+                return $this->redirect("reset_password?token=" . urlencode($token));
             }
-            
-        } catch (Exception $e) {
-            error_log("Password reset error: " . $e->getMessage());
-            $this->setFlashMessage($e->getMessage(), 'error');
-            return $this->redirect("reset_password?token=" . urlencode($token));
         }
     }
     
@@ -469,8 +463,8 @@ class AccountController extends BaseController {
                 // Validate CSRF token
                 $this->validateCSRFToken();
                 
-                // Rate limit check
-                $this->checkRateLimit('login', $_SERVER['REMOTE_ADDR']);
+                // Standardized rate limit check
+                $this->validateRateLimit('login');
                 
                 // Validate input
                 $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
@@ -489,9 +483,6 @@ class AccountController extends BaseController {
                 
                 // Success - create session
                 $this->createSecureSession($user);
-                
-                // Clear failed attempts
-                $this->clearRateLimit('login', $_SERVER['REMOTE_ADDR']);
                 
                 // Audit log
                 $this->logAuditEvent('login_success', $user['id']);
@@ -563,8 +554,8 @@ class AccountController extends BaseController {
             try {
                 $this->validateCSRFToken();
                 
-                // Rate limit check
-                $this->checkRateLimit('reset', $_SERVER['REMOTE_ADDR']);
+                // Standardized rate limit check
+                $this->validateRateLimit('reset');
                 
                 $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
                 if (!$email) {
@@ -653,28 +644,6 @@ class AccountController extends BaseController {
         // This could write to a database or log file
     }
     
-    private function checkRateLimit($action, $ip) {
-        // Check if IP is blacklisted
-        if (SecurityMiddleware::isBlacklisted($ip)) {
-            throw new Exception('Access denied');
-        }
-        
-        $attempts = $this->getRateLimitAttempts($action, $ip);
-        if ($attempts >= $this->rateLimit[$action]['attempts']) {
-            throw new Exception('Too many attempts. Please try again later.');
-        }
-    }
-    
-    private function getRateLimitAttempts($action, $ip) {
-        // Implementation to get number of attempts
-        // This would typically use Redis or similar
-        return 0; // Placeholder
-    }
-    
-    private function clearRateLimit($action, $ip) {
-        // Implementation to clear rate limit attempts
-    }
-    
     private function logAuditEvent($action, $userId) {
         // Implementation for audit logging
         // This would typically write to a separate audit log table
@@ -690,9 +659,7 @@ require_once __DIR__ . '/../includes/EmailService.php';
 
 class NewsletterController extends BaseController {
     private $emailService;
-    private $rateLimit = 5; // Maximum attempts per hour
-    private $rateLimitWindow = 3600; // 1 hour in seconds
-    
+
     public function __construct($pdo) {
         parent::__construct($pdo);
         $this->emailService = new EmailService();
@@ -702,13 +669,8 @@ class NewsletterController extends BaseController {
         try {
             $this->validateCSRF();
             
-            // Rate limiting
-            if (!$this->checkRateLimit($_SERVER['REMOTE_ADDR'])) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'message' => 'Too many subscription attempts. Please try again later.'
-                ], 429);
-            }
+            // Standardized rate limiting
+            $this->validateRateLimit('newsletter');
             
             $email = $this->validateInput($_POST['email'] ?? null, 'email');
             if (!$email) {
@@ -853,18 +815,6 @@ class NewsletterController extends BaseController {
             $email . time(),
             NEWSLETTER_SECRET_KEY
         );
-    }
-    
-    private function checkRateLimit($ip) {
-        $stmt = $this->pdo->prepare("
-            SELECT COUNT(*) 
-            FROM newsletter_subscribers
-            WHERE ip_address = ?
-            AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)
-        ");
-        $stmt->execute([$ip]);
-        
-        return $stmt->fetchColumn() < $this->rateLimit;
     }
     
     public function logEmail($userId, $emailType, $recipientEmail, $subject, $status, $errorMessage = null) {
@@ -1125,7 +1075,12 @@ class CheckoutController extends BaseController {
             }
             
             $this->commit();
-            
+            // Audit log for order placement
+            $this->logAuditTrail('order_placed', $userId, [
+                'order_id' => $orderId,
+                'total_amount' => $total,
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+            ]);
             // Send order confirmation email
             $user = $this->getCurrentUser();
             $order = $this->orderModel->getById($orderId);

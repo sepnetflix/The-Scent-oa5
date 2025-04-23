@@ -2,24 +2,24 @@
 
 $ cd /cdrom/project/The-Scent-oa5
 
-$ ls -l index.php css/style.css particles.json .htaccess config.php includes/*php views/*php views/layout/*php controllers/*php models/*php | egrep -v 'test_|phpinfo' 
+$ ls -l index.php css/style.css particles.json .htaccess config.php includes/*php views/*php views/layout/*php controllers/*php models/*php | egrep -v 'test_|phpinfo'
 -rw-rw-r-- 1 pete pete       508 Apr 18 04:44 .htaccess
 -rwxr-xr-x 1 pete www-data  3652 Apr 15 21:10 config.php
--rwxr-xr-x 1 pete www-data 25459 Apr 14 08:10 controllers/AccountController.php
--rw-rw-r-- 1 pete pete     18437 Apr 23 08:32 controllers/BaseController.php
--rwxr-xr-x 1 pete www-data  7250 Apr 23 08:03 controllers/CartController.php
--rwxr-xr-x 1 pete www-data 12379 Apr 23 08:03 controllers/CheckoutController.php
+-rwxr-xr-x 1 pete www-data 24459 Apr 23 21:24 controllers/AccountController.php
+-rw-rw-r-- 1 pete pete     18675 Apr 23 21:24 controllers/BaseController.php
+-rwxr-xr-x 1 pete www-data  7795 Apr 23 21:28 controllers/CartController.php
+-rwxr-xr-x 1 pete www-data 12625 Apr 23 21:29 controllers/CheckoutController.php
 -rwxr-xr-x 1 pete www-data 11307 Apr 14 07:08 controllers/CouponController.php
 -rwxr-xr-x 1 pete www-data  9875 Apr 14 07:16 controllers/InventoryController.php
--rwxr-xr-x 1 pete www-data  7735 Apr 14 07:08 controllers/NewsletterController.php
+-rwxr-xr-x 1 pete www-data  7035 Apr 23 21:24 controllers/NewsletterController.php
 -rwxr-xr-x 1 pete www-data  9106 Apr 14 07:08 controllers/PaymentController.php
--rwxr-xr-x 1 pete www-data 13616 Apr 23 10:12 controllers/ProductController.php
+-rwxr-xr-x 1 pete www-data 14675 Apr 23 21:28 controllers/ProductController.php
 -rwxr-xr-x 1 pete www-data 11146 Apr 14 15:28 controllers/QuizController.php
 -rwxr-xr-x 1 pete www-data  9695 Apr 14 07:16 controllers/TaxController.php
 -rw-rw-r-- 1 pete pete     35087 Apr 17 10:32 css/style.css
 -rwxr-xr-x 1 pete www-data 16899 Apr 14 08:24 includes/EmailService.php
 -rw-rw-r-- 1 pete pete      8947 Apr 14 08:24 includes/ErrorHandler.php
--rw-rw-r-- 1 pete pete     13587 Apr 22 20:11 includes/SecurityMiddleware.php
+-rw-rw-r-- 1 pete pete     12475 Apr 23 21:25 includes/SecurityMiddleware.php
 -rwxr-xr-x 1 pete www-data  1403 Apr 15 21:10 includes/auth.php
 -rwxr-xr-x 1 pete pete       890 Apr 18 07:04 includes/db.php
 -rwxr-xr-x 1 pete pete      6103 Apr 23 08:16 index.php
@@ -38,7 +38,7 @@ $ ls -l index.php css/style.css particles.json .htaccess config.php includes/*ph
 -rw-rw-r-- 1 pete pete     15058 Apr 23 11:30 views/home.php
 -rw-rw-r-- 1 pete pete       187 Apr 14 09:07 views/layout/admin_footer.php
 -rw-rw-r-- 1 pete pete      2833 Apr 14 09:07 views/layout/admin_header.php
--rw-rw-r-- 1 pete pete      9638 Apr 22 15:21 views/layout/footer.php
+-rw-rw-r-- 1 pete pete     10077 Apr 23 21:21 views/layout/footer.php
 -rwxr-xr-x 1 pete www-data  5655 Apr 23 08:01 views/layout/header.php
 -rwxr-xr-x 1 pete pete      5499 Apr 18 08:08 views/login.php
 -rw-rw-r-- 1 pete pete       975 Apr 23 08:16 views/order-tracking.php

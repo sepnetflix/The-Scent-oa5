@@ -199,7 +199,12 @@ class CheckoutController extends BaseController {
             }
             
             $this->commit();
-            
+            // Audit log for order placement
+            $this->logAuditTrail('order_placed', $userId, [
+                'order_id' => $orderId,
+                'total_amount' => $total,
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+            ]);
             // Send order confirmation email
             $user = $this->getCurrentUser();
             $order = $this->orderModel->getById($orderId);

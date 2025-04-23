@@ -115,7 +115,7 @@
     <main>
         
 <!-- Output CSRF token for JS (for AJAX add-to-cart) -->
-<input type="hidden" id="csrf-token-value" value="1e78555be125a63f9f7da0c029d7d46271674e994fd27cd647aa57a5878865a4">
+<input type="hidden" id="csrf-token-value" value="a920a94ae5549e2d9775bf8525f2fdf3ea2bfe308c7398f559c06acba1c98c9d">
 
 <section class="products-section">
     <div class="container">
@@ -675,7 +675,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="1e78555be125a63f9f7da0c029d7d46271674e994fd27cd647aa57a5878865a4">
+                        <input type="hidden" name="csrf_token" value="a920a94ae5549e2d9775bf8525f2fdf3ea2bfe308c7398f559c06acba1c98c9d">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>
@@ -756,18 +756,15 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             if (btn.disabled) return;
             const productId = btn.dataset.productId;
-            // Always get CSRF token from #csrf-token-value (for products page)
+            // STRICTLY get CSRF token from the standard hidden input by ID
             let csrfToken = '';
             const csrfTokenInput = document.getElementById('csrf-token-value');
             if (csrfTokenInput) {
                 csrfToken = csrfTokenInput.value;
-            } else {
-                // fallback for other pages
-                const legacyInput = document.querySelector('input[name="csrf_token"]');
-                csrfToken = legacyInput ? legacyInput.value : '';
             }
             if (!csrfToken) {
-                showFlashMessage('Security token missing. Please refresh.', 'error');
+                showFlashMessage('Security token input not found on page. Please refresh.', 'error');
+                console.error('CSRF token input #csrf-token-value not found.');
                 return;
             }
             btn.disabled = true;
@@ -778,7 +775,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `product_id=${encodeURIComponent(productId)}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}`
             })
-            .then(response => response.json())
+            .then(response => {
+                const contentType = response.headers.get("content-type");
+                if (response.ok && contentType && contentType.indexOf("application/json") !== -1) {
+                    return response.json();
+                }
+                return response.text().then(text => {
+                    console.error('Received non-JSON response:', response.status, text);
+                    throw new Error(`Server returned status ${response.status}. Check server logs.`);
+                });
+            })
             .then(data => {
                 if (data.success) {
                     const cartCount = document.querySelector('.cart-count');
@@ -808,8 +814,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                showFlashMessage('Error adding to cart', 'error');
+                console.error('Add to Cart Fetch Error:', error);
+                showFlashMessage(error.message || 'Error adding to cart. Check connection or refresh.', 'error');
                 btn.textContent = originalText;
                 btn.disabled = false;
             });

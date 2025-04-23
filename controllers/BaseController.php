@@ -492,15 +492,17 @@ abstract class BaseController {
         $settings = SECURITY_SETTINGS['rate_limiting']['endpoints'][$action] ?? 
                    ['window' => SECURITY_SETTINGS['rate_limiting']['default_window'],
                     'max_requests' => SECURITY_SETTINGS['rate_limiting']['default_max_requests']];
-        
         $ip = $_SERVER['REMOTE_ADDR'];
         $key = "rate_limit:{$action}:{$ip}";
-        
         // Check whitelist
         if (in_array($ip, SECURITY_SETTINGS['rate_limiting']['ip_whitelist'])) {
             return true;
         }
-        
+        // Check for APCu availability
+        if (!function_exists('apcu_fetch') || !ini_get('apc.enabled')) {
+            error_log('[WARN] APCu not enabled - rate limiting is not enforced for ' . $action . ' from ' . $ip);
+            return true; // Fail open
+        }
         $attempts = apcu_fetch($key) ?: 0;
         if ($attempts >= $settings['max_requests']) {
             $this->logSecurityEvent('rate_limit_exceeded', [
@@ -510,7 +512,6 @@ abstract class BaseController {
             ]);
             $this->jsonResponse(['error' => 'Rate limit exceeded'], 429);
         }
-        
         apcu_inc($key, 1, $success, $settings['window']);
     }
     

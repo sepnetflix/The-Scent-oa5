@@ -813,18 +813,15 @@ require_once __DIR__ . '/../../includes/auth.php';
             e.preventDefault();
             if (btn.disabled) return;
             const productId = btn.dataset.productId;
-            // Always get CSRF token from #csrf-token-value (for products page)
+            // STRICTLY get CSRF token from the standard hidden input by ID
             let csrfToken = '';
             const csrfTokenInput = document.getElementById('csrf-token-value');
             if (csrfTokenInput) {
                 csrfToken = csrfTokenInput.value;
-            } else {
-                // fallback for other pages
-                const legacyInput = document.querySelector('input[name="csrf_token"]');
-                csrfToken = legacyInput ? legacyInput.value : '';
             }
             if (!csrfToken) {
-                showFlashMessage('Security token missing. Please refresh.', 'error');
+                showFlashMessage('Security token input not found on page. Please refresh.', 'error');
+                console.error('CSRF token input #csrf-token-value not found.');
                 return;
             }
             btn.disabled = true;
@@ -835,7 +832,16 @@ require_once __DIR__ . '/../../includes/auth.php';
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `product_id=${encodeURIComponent(productId)}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}`
             })
-            .then(response => response.json())
+            .then(response => {
+                const contentType = response.headers.get("content-type");
+                if (response.ok && contentType && contentType.indexOf("application/json") !== -1) {
+                    return response.json();
+                }
+                return response.text().then(text => {
+                    console.error('Received non-JSON response:', response.status, text);
+                    throw new Error(`Server returned status ${response.status}. Check server logs.`);
+                });
+            })
             .then(data => {
                 if (data.success) {
                     const cartCount = document.querySelector('.cart-count');
@@ -865,8 +871,8 @@ require_once __DIR__ . '/../../includes/auth.php';
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                showFlashMessage('Error adding to cart', 'error');
+                console.error('Add to Cart Fetch Error:', error);
+                showFlashMessage(error.message || 'Error adding to cart. Check connection or refresh.', 'error');
                 btn.textContent = originalText;
                 btn.disabled = false;
             });
@@ -1568,15 +1574,17 @@ abstract class BaseController {
         $settings = SECURITY_SETTINGS['rate_limiting']['endpoints'][$action] ?? 
                    ['window' => SECURITY_SETTINGS['rate_limiting']['default_window'],
                     'max_requests' => SECURITY_SETTINGS['rate_limiting']['default_max_requests']];
-        
         $ip = $_SERVER['REMOTE_ADDR'];
         $key = "rate_limit:{$action}:{$ip}";
-        
         // Check whitelist
         if (in_array($ip, SECURITY_SETTINGS['rate_limiting']['ip_whitelist'])) {
             return true;
         }
-        
+        // Check for APCu availability
+        if (!function_exists('apcu_fetch') || !ini_get('apc.enabled')) {
+            error_log('[WARN] APCu not enabled - rate limiting is not enforced for ' . $action . ' from ' . $ip);
+            return true; // Fail open
+        }
         $attempts = apcu_fetch($key) ?: 0;
         if ($attempts >= $settings['max_requests']) {
             $this->logSecurityEvent('rate_limit_exceeded', [
@@ -1586,7 +1594,6 @@ abstract class BaseController {
             ]);
             $this->jsonResponse(['error' => 'Rate limit exceeded'], 429);
         }
-        
         apcu_inc($key, 1, $success, $settings['window']);
     }
     

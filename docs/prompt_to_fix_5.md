@@ -19,6 +19,11 @@ carefully review the relevant files, then think deeply and systematically to exp
 Before doing anything, carefully plan how you will make the necessary changes, then execute accordingly to the plan step-by-step carefully.
 
 ---
+Think deeply and systematically to explore carefully and thoroughly for the best implementation option to fix this issue before choosing the best implementation option to carefully merge the fix to the existing code files, taking care not to loose other features and functions while making changes.
+
+Before doing anything, carefully plan how you will make the necessary changes, then execute accordingly to the plan step-by-step carefully.
+
+---
 I still get the following message for the SHOP link (https://the-scent.com/index.php?page=products):
 
 No products found matching your criteria.

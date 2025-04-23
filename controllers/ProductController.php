@@ -201,6 +201,14 @@ class ProductController extends BaseController {
                     // Clear cache
                     $this->clearProductCache();
                     
+                    // Audit log for product creation
+                    $userId = $this->getUserId();
+                    $this->logAuditTrail('product_create', $userId, [
+                        'product_id' => $productId,
+                        'name' => $data['name'],
+                        'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+                    ]);
+                    
                     $this->commit();
                     $this->setFlashMessage('Product created successfully', 'success');
                     $this->redirect('admin/products');
@@ -252,6 +260,14 @@ class ProductController extends BaseController {
                     // Clear cache
                     $this->clearProductCache();
                     
+                    // Audit log for product update
+                    $userId = $this->getUserId();
+                    $this->logAuditTrail('product_update', $userId, [
+                        'product_id' => $id,
+                        'name' => $data['name'],
+                        'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+                    ]);
+                    
                     $this->commit();
                     $this->setFlashMessage('Product updated successfully', 'success');
                     $this->redirect('admin/products');
@@ -284,6 +300,13 @@ class ProductController extends BaseController {
             if ($this->productModel->delete($id)) {
                 // Clear cache
                 $this->clearProductCache();
+                
+                // Audit log for product deletion
+                $userId = $this->getUserId();
+                $this->logAuditTrail('product_delete', $userId, [
+                    'product_id' => $id,
+                    'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+                ]);
                 
                 $this->commit();
                 $this->setFlashMessage('Product deleted successfully', 'success');

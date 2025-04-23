@@ -114,7 +114,7 @@
     </header>
     <main>
         <!-- DEBUG: home.php loaded --><!-- Output CSRF token for JS (for AJAX add-to-cart/newsletter) -->
-<input type="hidden" id="csrf-token-value" value="d8204dd77b52bb7f705006165fbc45266198181e56305c2bdc587a4f1b1159ef">
+<input type="hidden" id="csrf-token-value" value="120e90ea9e8faa295b5b36605e4687874dd184bd08967c07702a6327c08c7b9a">
 
 <!-- Hero Section with Video Background -->
 <section class="hero-section relative min-h-screen flex items-center justify-center overflow-hidden">
@@ -375,7 +375,7 @@
             <p class="mb-8">Subscribe to receive updates, exclusive offers, and aromatherapy tips.</p>
             <!-- Apply suggested form structure/style -->
             <form id="newsletter-form" class="newsletter-form flex flex-col sm:flex-row gap-4 justify-center">
-                <input type="hidden" name="csrf_token" value="d8204dd77b52bb7f705006165fbc45266198181e56305c2bdc587a4f1b1159ef">
+                <input type="hidden" name="csrf_token" value="120e90ea9e8faa295b5b36605e4687874dd184bd08967c07702a6327c08c7b9a">
                 <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input flex-1 px-4 py-2 rounded-full border border-gray-300 focus:border-primary">
                 <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
             </form>
@@ -479,7 +479,7 @@
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="d8204dd77b52bb7f705006165fbc45266198181e56305c2bdc587a4f1b1159ef">
+                        <input type="hidden" name="csrf_token" value="120e90ea9e8faa295b5b36605e4687874dd184bd08967c07702a6327c08c7b9a">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>
@@ -560,18 +560,15 @@
             e.preventDefault();
             if (btn.disabled) return;
             const productId = btn.dataset.productId;
-            // Always get CSRF token from #csrf-token-value (for products page)
+            // STRICTLY get CSRF token from the standard hidden input by ID
             let csrfToken = '';
             const csrfTokenInput = document.getElementById('csrf-token-value');
             if (csrfTokenInput) {
                 csrfToken = csrfTokenInput.value;
-            } else {
-                // fallback for other pages
-                const legacyInput = document.querySelector('input[name="csrf_token"]');
-                csrfToken = legacyInput ? legacyInput.value : '';
             }
             if (!csrfToken) {
-                showFlashMessage('Security token missing. Please refresh.', 'error');
+                showFlashMessage('Security token input not found on page. Please refresh.', 'error');
+                console.error('CSRF token input #csrf-token-value not found.');
                 return;
             }
             btn.disabled = true;
@@ -582,7 +579,16 @@
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `product_id=${encodeURIComponent(productId)}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}`
             })
-            .then(response => response.json())
+            .then(response => {
+                const contentType = response.headers.get("content-type");
+                if (response.ok && contentType && contentType.indexOf("application/json") !== -1) {
+                    return response.json();
+                }
+                return response.text().then(text => {
+                    console.error('Received non-JSON response:', response.status, text);
+                    throw new Error(`Server returned status ${response.status}. Check server logs.`);
+                });
+            })
             .then(data => {
                 if (data.success) {
                     const cartCount = document.querySelector('.cart-count');
@@ -612,8 +618,8 @@
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                showFlashMessage('Error adding to cart', 'error');
+                console.error('Add to Cart Fetch Error:', error);
+                showFlashMessage(error.message || 'Error adding to cart. Check connection or refresh.', 'error');
                 btn.textContent = originalText;
                 btn.disabled = false;
             });

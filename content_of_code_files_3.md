@@ -8,14 +8,13 @@ class SecurityMiddleware {
     private static $encryptionKey;
 
     public static function apply() {
-        // Set security headers
-        header("X-Frame-Options: DENY");
-        header("X-XSS-Protection: 1; mode=block");
-        header("X-Content-Type-Options: nosniff");
-        header("Referrer-Policy: strict-origin-when-cross-origin");
-	// TEMPORARRILY disabled
-	// header("Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-src https://js.stripe.com; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com");
-        
+        // Set security headers from config
+        if (defined('SECURITY_SETTINGS') && isset(SECURITY_SETTINGS['headers'])) {
+            foreach (SECURITY_SETTINGS['headers'] as $header => $value) {
+                header("$header: $value");
+            }
+        }
+
         // Set secure cookie parameters
         if (session_status() === PHP_SESSION_NONE) {
             session_set_cookie_params([
@@ -270,29 +269,6 @@ class SecurityMiddleware {
         }
         return $_SESSION['csrf_token'];
     }
-    
-    // public static function preventSQLInjection($value) {
-    //     if (is_array($value)) {
-    //         return array_map([self::class, 'preventSQLInjection'], $value);
-    //     }
-    //     if (is_string($value)) {
-    //         // Remove common SQL injection patterns
-    //         $patterns = [
-    //             '/\\bUNION\\b/i',
-    //             '/\\bSELECT\\b/i',
-    //             '/\\bINSERT\\b/i',
-    //             '/\\bUPDATE\\b/i',
-    //             '/\\bDELETE\\b/i',
-    //             '/\\bDROP\\b/i',
-    //             '/\\bTRUNCATE\\b/i',
-    //             '/\\bOR\\b\\s+\\d+\\s*[=<>]/i',
-    //             '/\\bAND\\b\\s+\\d+\\s*[=<>]/i'
-    //         ];
-    //         $value = preg_replace($patterns, '', $value);
-    //         return addslashes($value);
-    //     }
-    //     return $value;
-    // }
     
     public static function validateFileUpload($file, $allowedTypes, $maxSize = 5242880) {
         if (!isset($file['error']) || is_array($file['error'])) {
@@ -616,6 +592,14 @@ class ProductController extends BaseController {
                     // Clear cache
                     $this->clearProductCache();
                     
+                    // Audit log for product creation
+                    $userId = $this->getUserId();
+                    $this->logAuditTrail('product_create', $userId, [
+                        'product_id' => $productId,
+                        'name' => $data['name'],
+                        'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+                    ]);
+                    
                     $this->commit();
                     $this->setFlashMessage('Product created successfully', 'success');
                     $this->redirect('admin/products');
@@ -667,6 +651,14 @@ class ProductController extends BaseController {
                     // Clear cache
                     $this->clearProductCache();
                     
+                    // Audit log for product update
+                    $userId = $this->getUserId();
+                    $this->logAuditTrail('product_update', $userId, [
+                        'product_id' => $id,
+                        'name' => $data['name'],
+                        'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+                    ]);
+                    
                     $this->commit();
                     $this->setFlashMessage('Product updated successfully', 'success');
                     $this->redirect('admin/products');
@@ -699,6 +691,13 @@ class ProductController extends BaseController {
             if ($this->productModel->delete($id)) {
                 // Clear cache
                 $this->clearProductCache();
+                
+                // Audit log for product deletion
+                $userId = $this->getUserId();
+                $this->logAuditTrail('product_delete', $userId, [
+                    'product_id' => $id,
+                    'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+                ]);
                 
                 $this->commit();
                 $this->setFlashMessage('Product deleted successfully', 'success');
