@@ -18,6 +18,7 @@ yarn-error.log
 index*.html
 index.html
 notes.txt
+/bak
 /auth.json
 /.fleet
 /.idea

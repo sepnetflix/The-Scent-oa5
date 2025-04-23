@@ -35,7 +35,7 @@ $ ls -l index.php css/style.css particles.json .htaccess config.php includes/*ph
 -rw-rw-r-- 1 pete pete      2610 Apr 18 08:07 views/error.php
 -rw-rw-r-- 1 pete pete      1248 Apr 23 08:16 views/faq.php
 -rwxr-xr-x 1 pete pete      2865 Apr 18 08:07 views/forgot_password.php
--rw-rw-r-- 1 pete pete     15058 Apr 22 20:06 views/home.php
+-rw-rw-r-- 1 pete pete     15058 Apr 23 11:30 views/home.php
 -rw-rw-r-- 1 pete pete       187 Apr 14 09:07 views/layout/admin_footer.php
 -rw-rw-r-- 1 pete pete      2833 Apr 14 09:07 views/layout/admin_header.php
 -rw-rw-r-- 1 pete pete      9638 Apr 22 15:21 views/layout/footer.php
@@ -44,7 +44,7 @@ $ ls -l index.php css/style.css particles.json .htaccess config.php includes/*ph
 -rw-rw-r-- 1 pete pete       975 Apr 23 08:16 views/order-tracking.php
 -rwxr-xr-x 1 pete pete      5800 Apr 18 08:08 views/order_confirmation.php
 -rw-rw-r-- 1 pete pete       756 Apr 23 08:16 views/privacy.php
--rwxr-xr-x 1 pete pete     32109 Apr 22 20:06 views/product_detail.php
+-rwxr-xr-x 1 pete pete     32187 Apr 23 11:07 views/product_detail.php
 -rwxr-xr-x 1 pete pete     14524 Apr 23 10:12 views/products.php
 -rwxr-xr-x 1 pete www-data  5171 Apr 14 15:31 views/quiz.php
 -rwxr-xr-x 1 pete www-data  4121 Apr 14 15:31 views/quiz_results.php

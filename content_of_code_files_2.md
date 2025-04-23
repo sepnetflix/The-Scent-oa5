@@ -687,7 +687,8 @@ require_once __DIR__ . '/layout/header.php';
                         </div>
                     </div>
                     <?php if (!$isOutOfStock): ?>
-                        <button type="submit" class="btn btn-primary w-full py-3 text-lg add-to-cart">
+                        <button type="submit" class="btn btn-primary w-full py-3 text-lg add-to-cart"
+                                data-product-id="<?= $product['id'] ?? '' ?>">
                             <i class="fas fa-shopping-cart mr-2"></i> Add to Cart
                         </button>
                         <?php if ($isLowStock): ?>
