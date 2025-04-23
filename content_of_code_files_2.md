@@ -41,7 +41,6 @@ class CartController extends BaseController {
     }
     
     public function addToCart() {
-        $this->validateAjax();
         $this->validateCSRF();
         
         $productId = $this->validateInput($_POST['product_id'] ?? null, 'int');
@@ -113,7 +112,6 @@ class CartController extends BaseController {
     }
     
     public function updateCart() {
-        $this->validateAjax();
         $this->validateCSRF();
         
         $updates = $_POST['updates'] ?? [];
@@ -145,7 +143,6 @@ class CartController extends BaseController {
     }
     
     public function removeFromCart() {
-        $this->validateAjax();
         $this->validateCSRF();
         
         $productId = $this->validateInput($_POST['product_id'] ?? null, 'int');
@@ -167,7 +164,6 @@ class CartController extends BaseController {
         $_SESSION['cart'] = [];
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $this->validateAjax();
             $this->validateCSRF();
             $this->jsonResponse([
                 'success' => true,
@@ -248,9 +244,8 @@ class ProductController extends BaseController {
     public function showProductList() {
         try {
             // Validate and sanitize inputs
-            $page = max(1, (int)($this->validateInput($_GET['page'] ?? 1, 'int')));
-            $searchQuery = $this->validateInput($_GET['search'] ?? '', 'string');
-            $categoryId = $this->validateInput($_GET['category'] ?? '', 'int');
+            $page = max(1, (int)($this->validateInput($_GET['page_num'] ?? 1, 'int')));
+            $categoryId = isset($_GET['category']) ? $this->validateInput($_GET['category'], 'int') : null;
             $sortBy = $this->validateInput($_GET['sort'] ?? 'name_asc', 'string');
             $minPrice = $this->validateInput($_GET['min_price'] ?? null, 'float');
             $maxPrice = $this->validateInput($_GET['max_price'] ?? null, 'float');
@@ -262,26 +257,39 @@ class ProductController extends BaseController {
             $conditions = [];
             $params = [];
             
-            if ($searchQuery) {
-                $conditions[] = "(name LIKE ? OR description LIKE ?)";
-                $params[] = "%{$searchQuery}%";
-                $params[] = "%{$searchQuery}%";
+            // Only add search condition if 'search' is present in GET and is not empty
+            if (isset($_GET['search']) && trim($_GET['search']) !== '') {
+                $searchQuery = $this->validateInput($_GET['search'], 'string');
+                if (!empty($searchQuery)) {
+                    $conditions[] = "(name LIKE ? OR description LIKE ?)";
+                    $params[] = "%{$searchQuery}%";
+                    $params[] = "%{$searchQuery}%";
+                }
+            } else {
+                $searchQuery = '';
             }
             
-            if ($categoryId) {
+            // Only add category filter if $categoryId is a valid, non-zero integer
+            if ($categoryId !== null && $categoryId !== false && is_numeric($categoryId) && (int)$categoryId > 0) {
                 $conditions[] = "category_id = ?";
-                $params[] = $categoryId;
+                $params[] = (int)$categoryId;
             }
             
-            if ($minPrice !== null) {
+            // Only add min price filter if $minPrice is not null and is numeric
+            if ($minPrice !== null && is_numeric($minPrice)) {
                 $conditions[] = "price >= ?";
                 $params[] = $minPrice;
             }
             
-            if ($maxPrice !== null) {
+            // Only add max price filter if $maxPrice is not null and is numeric
+            if ($maxPrice !== null && is_numeric($maxPrice)) {
                 $conditions[] = "price <= ?";
                 $params[] = $maxPrice;
             }
+            
+            // Debug logging for diagnosis
+            error_log("[showProductList] conditions: " . json_encode($conditions));
+            error_log("[showProductList] params: " . json_encode($params));
             
             // Get total count for pagination
             $totalProducts = $this->productModel->getCount($conditions, $params);
@@ -322,7 +330,7 @@ class ProductController extends BaseController {
                 'baseUrl' => 'index.php?page=products'
             ];
             $queryParams = $_GET;
-            unset($queryParams['page']);
+            unset($queryParams['page'], $queryParams['page_num']);
             if (!empty($queryParams)) {
                 $paginationData['baseUrl'] .= '&' . http_build_query($queryParams);
             }
@@ -1189,7 +1197,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <ul class="inline-flex items-center -space-x-px">
                             <!-- Previous Button -->
                             <li>
-                                <a href="<?= $paginationData['currentPage'] > 1 ? htmlspecialchars($paginationData['baseUrl'] . '&page=' . ($paginationData['currentPage'] - 1)) : '#' ?>"
+                                <a href="<?= $paginationData['currentPage'] > 1 ? htmlspecialchars($paginationData['baseUrl'] . '&page_num=' . ($paginationData['currentPage'] - 1)) : '#' ?>"
                                    class="py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 <?= $paginationData['currentPage'] <= 1 ? 'opacity-50 cursor-not-allowed' : '' ?>">
                                     <span class="sr-only">Previous</span>
                                     <i class="fas fa-chevron-left"></i>
@@ -1200,14 +1208,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             $startPage = max(1, $paginationData['currentPage'] - $numLinks);
                             $endPage = min($paginationData['totalPages'], $paginationData['currentPage'] + $numLinks);
                             if ($startPage > 1) {
-                                echo '<li><a href="'.htmlspecialchars($paginationData['baseUrl'].'&page=1').'" class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">1</a></li>';
+                                echo '<li><a href="'.htmlspecialchars($paginationData['baseUrl'].'&page_num=1').'" class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">1</a></li>';
                                 if ($startPage > 2) {
                                      echo '<li><span class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300">...</span></li>';
                                 }
                             }
                             for ($i = $startPage; $i <= $endPage; $i++): ?>
                                 <li>
-                                    <a href="<?= htmlspecialchars($paginationData['baseUrl'] . '&page=' . $i) ?>"
+                                    <a href="<?= htmlspecialchars($paginationData['baseUrl'] . '&page_num=' . $i) ?>"
                                        class="py-2 px-3 leading-tight <?= $i == $paginationData['currentPage'] ? 'z-10 text-primary bg-secondary border-primary hover:bg-secondary hover:text-primary' : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700' ?>">
                                         <?= $i ?>
                                     </a>
@@ -1217,12 +1225,12 @@ document.addEventListener('DOMContentLoaded', function() {
                                 if ($endPage < $paginationData['totalPages'] - 1) {
                                      echo '<li><span class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300">...</span></li>';
                                 }
-                                echo '<li><a href="'.htmlspecialchars($paginationData['baseUrl'].'&page='.$paginationData['totalPages']).'" class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">'.$paginationData['totalPages'].'</a></li>';
+                                echo '<li><a href="'.htmlspecialchars($paginationData['baseUrl'].'&page_num='.$paginationData['totalPages']).'" class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">'.$paginationData['totalPages'].'</a></li>';
                             }
                             ?>
                             <!-- Next Button -->
                             <li>
-                                <a href="<?= $paginationData['currentPage'] < $paginationData['totalPages'] ? htmlspecialchars($paginationData['baseUrl'] . '&page=' . ($paginationData['currentPage'] + 1)) : '#' ?>"
+                                <a href="<?= $paginationData['currentPage'] < $paginationData['totalPages'] ? htmlspecialchars($paginationData['baseUrl'] . '&page_num=' . ($paginationData['currentPage'] + 1)) : '#' ?>"
                                    class="py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 <?= $paginationData['currentPage'] >= $paginationData['totalPages'] ? 'opacity-50 cursor-not-allowed' : '' ?>">
                                     <span class="sr-only">Next</span>
                                     <i class="fas fa-chevron-right"></i>

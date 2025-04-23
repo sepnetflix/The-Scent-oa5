@@ -988,7 +988,6 @@ class CheckoutController extends BaseController {
     }
     
     public function calculateTax() {
-        $this->validateAjax();
         $this->validateCSRF(); // Enforce CSRF validation for AJAX tax calculation
         
         $data = json_decode(file_get_contents('php://input'), true);

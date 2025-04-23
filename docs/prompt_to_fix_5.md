@@ -12,3 +12,20 @@ ou will thoroughly review the project description, design documents (`README.md`
 Use the following information as your guide to confirm your own independent careful code review and findings. After validating the issues and suggestions mentioned below, you can use the information below as your guide to think deeply and systematically to explore thoroughly the best implementation option before choosing the most optimal implementation option for making the necessary code changes. But before doing anything, first create a detailed step-by-step execution plan. Then proceed cautiously according to your well-thought-out execution plan to effect the code changes, taking care not to affect any of the existing features and functionalities of the application:
 
 ---
+you have done an excellent job so far. now help me review of other controllers for similar AJAX/CSRF issues.
+
+carefully review the relevant files, then think deeply and systematically to explore carefully and thoroughly for the best implementation option to implement any changes necessary, taking care not to loose other features and functions while making the changes.
+
+Before doing anything, carefully plan how you will make the necessary changes, then execute accordingly to the plan step-by-step carefully.
+
+---
+I still get the following message for the SHOP link (https://the-scent.com/index.php?page=products):
+
+No products found matching your criteria.
+
+Try adjusting your search terms or filters in the sidebar.
+
+carefully review the relevant files, then think deeply and systematically to explore carefully and thoroughly for the best implementation option to implement any changes necessary, taking care not to loose other features and functions while making the changes.
+
+Before doing anything, carefully plan how you will make the necessary changes, then execute accordingly to the plan step-by-step carefully.
+

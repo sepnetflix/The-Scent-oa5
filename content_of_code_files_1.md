@@ -127,6 +127,32 @@ try {
                     break;
             }
             break;
+
+        case 'contact':
+            $pageTitle = 'Contact Us';
+            $csrfToken = SecurityMiddleware::generateCSRFToken();
+            require_once __DIR__ . '/views/contact.php';
+            break;
+        case 'faq':
+            $pageTitle = 'FAQs';
+            $csrfToken = SecurityMiddleware::generateCSRFToken();
+            require_once __DIR__ . '/views/faq.php';
+            break;
+        case 'shipping':
+            $pageTitle = 'Shipping & Returns';
+            $csrfToken = SecurityMiddleware::generateCSRFToken();
+            require_once __DIR__ . '/views/shipping.php';
+            break;
+        case 'order-tracking':
+            $pageTitle = 'Track Your Order';
+            $csrfToken = SecurityMiddleware::generateCSRFToken();
+            require_once __DIR__ . '/views/order-tracking.php';
+            break;
+        case 'privacy':
+            $pageTitle = 'Privacy Policy';
+            $csrfToken = SecurityMiddleware::generateCSRFToken();
+            require_once __DIR__ . '/views/privacy.php';
+            break;
             
         default:
             http_response_code(404);
@@ -1331,10 +1357,7 @@ abstract class BaseController {
     }
     
     protected function validateCSRF() {
-        if (!$this->securityMiddleware->validateCSRFToken()) {
-            $this->logAuditTrail('csrf_failure', null);
-            $this->jsonResponse(['error' => 'Invalid CSRF token'], 403);
-        }
+        SecurityMiddleware::validateCSRF();
     }
     
     protected function jsonResponse($data, $status = 200) {

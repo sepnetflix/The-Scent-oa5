@@ -447,9 +447,8 @@ class ProductController extends BaseController {
     public function showProductList() {
         try {
             // Validate and sanitize inputs
-            $page = max(1, (int)($this->validateInput($_GET['page'] ?? 1, 'int')));
-            $searchQuery = $this->validateInput($_GET['search'] ?? '', 'string');
-            $categoryId = $this->validateInput($_GET['category'] ?? '', 'int');
+            $page = max(1, (int)($this->validateInput($_GET['page_num'] ?? 1, 'int')));
+            $categoryId = isset($_GET['category']) ? $this->validateInput($_GET['category'], 'int') : null;
             $sortBy = $this->validateInput($_GET['sort'] ?? 'name_asc', 'string');
             $minPrice = $this->validateInput($_GET['min_price'] ?? null, 'float');
             $maxPrice = $this->validateInput($_GET['max_price'] ?? null, 'float');
@@ -461,26 +460,39 @@ class ProductController extends BaseController {
             $conditions = [];
             $params = [];
             
-            if ($searchQuery) {
-                $conditions[] = "(name LIKE ? OR description LIKE ?)";
-                $params[] = "%{$searchQuery}%";
-                $params[] = "%{$searchQuery}%";
+            // Only add search condition if 'search' is present in GET and is not empty
+            if (isset($_GET['search']) && trim($_GET['search']) !== '') {
+                $searchQuery = $this->validateInput($_GET['search'], 'string');
+                if (!empty($searchQuery)) {
+                    $conditions[] = "(name LIKE ? OR description LIKE ?)";
+                    $params[] = "%{$searchQuery}%";
+                    $params[] = "%{$searchQuery}%";
+                }
+            } else {
+                $searchQuery = '';
             }
             
-            if ($categoryId) {
+            // Only add category filter if $categoryId is a valid, non-zero integer
+            if ($categoryId !== null && $categoryId !== false && is_numeric($categoryId) && (int)$categoryId > 0) {
                 $conditions[] = "category_id = ?";
-                $params[] = $categoryId;
+                $params[] = (int)$categoryId;
             }
             
-            if ($minPrice !== null) {
+            // Only add min price filter if $minPrice is not null and is numeric
+            if ($minPrice !== null && is_numeric($minPrice)) {
                 $conditions[] = "price >= ?";
                 $params[] = $minPrice;
             }
             
-            if ($maxPrice !== null) {
+            // Only add max price filter if $maxPrice is not null and is numeric
+            if ($maxPrice !== null && is_numeric($maxPrice)) {
                 $conditions[] = "price <= ?";
                 $params[] = $maxPrice;
             }
+            
+            // Debug logging for diagnosis
+            error_log("[showProductList] conditions: " . json_encode($conditions));
+            error_log("[showProductList] params: " . json_encode($params));
             
             // Get total count for pagination
             $totalProducts = $this->productModel->getCount($conditions, $params);
@@ -521,7 +533,7 @@ class ProductController extends BaseController {
                 'baseUrl' => 'index.php?page=products'
             ];
             $queryParams = $_GET;
-            unset($queryParams['page']);
+            unset($queryParams['page'], $queryParams['page_num']);
             if (!empty($queryParams)) {
                 $paginationData['baseUrl'] .= '&' . http_build_query($queryParams);
             }

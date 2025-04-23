@@ -114,7 +114,7 @@
     </header>
     <main>
         <!-- Output CSRF token for JS (for AJAX add-to-cart) -->
-<input type="hidden" id="csrf-token-value" value="f231625e926d4b81eff06d87dd2cd7a205fc7e5a0a52d1c2dac01b5a7e9b9dcc">
+<input type="hidden" id="csrf-token-value" value="e405d715f26be14a90c0fb94b708664f482a35114f93dc00e105800adf2e28e1">
 <section class="product-detail py-12 md:py-20 bg-white">
     <div class="container mx-auto px-4">
         <!-- Breadcrumbs -->
@@ -158,7 +158,7 @@
                     Pure lavender essential oil for relaxation and calm.                </div>
                                                                                 <form class="add-to-cart-form space-y-4 border-t pt-6" action="index.php?page=cart&action=add" method="POST" id="product-detail-add-cart-form">
                     <input type="hidden" name="product_id" value="1">
-                    <input type="hidden" name="csrf_token" value="f231625e926d4b81eff06d87dd2cd7a205fc7e5a0a52d1c2dac01b5a7e9b9dcc">
+                    <input type="hidden" name="csrf_token" value="e405d715f26be14a90c0fb94b708664f482a35114f93dc00e105800adf2e28e1">
                     <div class="flex items-center space-x-4">
                         <label for="quantity" class="font-semibold text-gray-700">Quantity:</label>
                         <div class="quantity-selector flex items-center border border-gray-300 rounded">
@@ -242,6 +242,28 @@
                 <div class="products-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
                                             <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col">
                             <div class="product-image relative h-64 overflow-hidden">
+                                <a href="index.php?page=product&id=3">
+                                    <img src="/images/products/3.jpg"
+                                         alt="Forest Pine Oil" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
+                                </a>
+                                                            </div>
+                            <div class="product-info p-4 flex flex-col flex-grow text-center">
+                                <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
+                                    <a href="index.php?page=product&id=3">
+                                        Forest Pine Oil                                    </a>
+                                </h3>
+                                                                    <p class="text-sm text-gray-500 mb-2">Essential Oils</p>
+                                                                <p class="price text-base font-semibold text-accent mb-4 mt-auto">$22.99</p>
+                                <div class="product-actions mt-auto">
+                                                                                                                <button class="btn btn-secondary add-to-cart-related w-full"
+                                                data-product-id="3">
+                                            Add to Cart
+                                        </button>
+                                                                    </div>
+                            </div>
+                        </div>
+                                            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col">
+                            <div class="product-image relative h-64 overflow-hidden">
                                 <a href="index.php?page=product&id=4">
                                     <img src="/images/products/4.jpg"
                                          alt="Rose Harmony Oil" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
@@ -258,29 +280,6 @@
                                 <div class="product-actions mt-auto">
                                                                                                                 <button class="btn btn-secondary add-to-cart-related w-full"
                                                 data-product-id="4">
-                                            Add to Cart
-                                        </button>
-                                                                    </div>
-                            </div>
-                        </div>
-                                            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col">
-                            <div class="product-image relative h-64 overflow-hidden">
-                                <a href="index.php?page=product&id=2">
-                                    <img src="/images/products/2.jpg"
-                                         alt="Citrus Burst Oil" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
-                                </a>
-                                                                    <span class="absolute top-2 left-2 bg-accent text-white text-xs font-semibold px-2 py-0.5 rounded-full">Featured</span>
-                                                            </div>
-                            <div class="product-info p-4 flex flex-col flex-grow text-center">
-                                <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                    <a href="index.php?page=product&id=2">
-                                        Citrus Burst Oil                                    </a>
-                                </h3>
-                                                                    <p class="text-sm text-gray-500 mb-2">Essential Oils</p>
-                                                                <p class="price text-base font-semibold text-accent mb-4 mt-auto">$19.99</p>
-                                <div class="product-actions mt-auto">
-                                                                                                                <button class="btn btn-secondary add-to-cart-related w-full"
-                                                data-product-id="2">
                                             Add to Cart
                                         </button>
                                                                     </div>
@@ -310,21 +309,22 @@
                         </div>
                                             <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col">
                             <div class="product-image relative h-64 overflow-hidden">
-                                <a href="index.php?page=product&id=3">
-                                    <img src="/images/products/3.jpg"
-                                         alt="Forest Pine Oil" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
+                                <a href="index.php?page=product&id=2">
+                                    <img src="/images/products/2.jpg"
+                                         alt="Citrus Burst Oil" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
                                 </a>
+                                                                    <span class="absolute top-2 left-2 bg-accent text-white text-xs font-semibold px-2 py-0.5 rounded-full">Featured</span>
                                                             </div>
                             <div class="product-info p-4 flex flex-col flex-grow text-center">
                                 <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                    <a href="index.php?page=product&id=3">
-                                        Forest Pine Oil                                    </a>
+                                    <a href="index.php?page=product&id=2">
+                                        Citrus Burst Oil                                    </a>
                                 </h3>
                                                                     <p class="text-sm text-gray-500 mb-2">Essential Oils</p>
-                                                                <p class="price text-base font-semibold text-accent mb-4 mt-auto">$22.99</p>
+                                                                <p class="price text-base font-semibold text-accent mb-4 mt-auto">$19.99</p>
                                 <div class="product-actions mt-auto">
                                                                                                                 <button class="btn btn-secondary add-to-cart-related w-full"
-                                                data-product-id="3">
+                                                data-product-id="2">
                                             Add to Cart
                                         </button>
                                                                     </div>
@@ -564,7 +564,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="f231625e926d4b81eff06d87dd2cd7a205fc7e5a0a52d1c2dac01b5a7e9b9dcc">
+                        <input type="hidden" name="csrf_token" value="e405d715f26be14a90c0fb94b708664f482a35114f93dc00e105800adf2e28e1">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>

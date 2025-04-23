@@ -39,7 +39,6 @@ class CartController extends BaseController {
     }
     
     public function addToCart() {
-        $this->validateAjax();
         $this->validateCSRF();
         
         $productId = $this->validateInput($_POST['product_id'] ?? null, 'int');
@@ -111,7 +110,6 @@ class CartController extends BaseController {
     }
     
     public function updateCart() {
-        $this->validateAjax();
         $this->validateCSRF();
         
         $updates = $_POST['updates'] ?? [];
@@ -143,7 +141,6 @@ class CartController extends BaseController {
     }
     
     public function removeFromCart() {
-        $this->validateAjax();
         $this->validateCSRF();
         
         $productId = $this->validateInput($_POST['product_id'] ?? null, 'int');
@@ -165,7 +162,6 @@ class CartController extends BaseController {
         $_SESSION['cart'] = [];
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $this->validateAjax();
             $this->validateCSRF();
             $this->jsonResponse([
                 'success' => true,

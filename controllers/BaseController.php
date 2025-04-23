@@ -281,10 +281,7 @@ abstract class BaseController {
     }
     
     protected function validateCSRF() {
-        if (!$this->securityMiddleware->validateCSRFToken()) {
-            $this->logAuditTrail('csrf_failure', null);
-            $this->jsonResponse(['error' => 'Invalid CSRF token'], 403);
-        }
+        SecurityMiddleware::validateCSRF();
     }
     
     protected function jsonResponse($data, $status = 200) {

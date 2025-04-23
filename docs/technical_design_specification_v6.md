@@ -1,4 +1,4 @@
-# The Scent – Technical Design Specification (v5.0)
+# The Scent – Technical Design Specification (v4.0)
 
 ## Table of Contents
 
@@ -63,17 +63,17 @@
 
 ## 1. Introduction
 
-The Scent is a modular, secure, and extensible e-commerce platform focused on delivering premium aromatherapy products. It’s engineered with a custom PHP MVC-inspired architecture without reliance on heavy frameworks, maximizing transparency and developer control. This document (**v5.0**) serves as the updated technical design specification, reflecting the project's current state, architecture, and areas requiring attention or improvement (such as CSRF token consistency and rate-limiting standardization). **This version incorporates fixes for previous issues related to incorrect navigation links and AJAX request validation.** It aims to offer deep insight into the system’s structure, logic, and flow, serving as a comprehensive onboarding and reference guide.
+The Scent is a modular, secure, and extensible e-commerce platform focused on delivering premium aromatherapy products. It’s engineered with a custom PHP MVC-inspired architecture without reliance on heavy frameworks, maximizing transparency and developer control. This document (v4.0) serves as the updated technical design specification, reflecting the project's current state, architecture, and known areas requiring attention or improvement (such as inconsistent CSRF token provisioning and rate-limiting implementations). It incorporates analysis and intended fixes from previous reviews, aiming to offer deep insight into the system’s structure, logic, and flow, serving as a comprehensive onboarding and reference guide.
 
 ---
 
 ## 2. Project Philosophy & Goals
 
-*   **Security First:** All data input and user interactions are validated and sanitized. Strong session management and CSRF protection mechanisms are implemented, although **consistent application of CSRF token provisioning to views requires ongoing diligence**.
+*   **Security First:** All data input and user interactions are validated and sanitized. Strong session management and CSRF protection mechanisms are implemented, although **consistent application of CSRF token provisioning to views requires diligence**.
 *   **Simplicity & Maintainability:** Clear, modular code structure. Direct `require_once` usage in `index.php` for core component loading provides transparency but lacks autoloading benefits.
 *   **Extensibility:** Architecture allows adding new features, pages, controllers, or views, requiring manual includes but offering straightforward extension points.
 *   **Performance:** Direct routing is potentially fast. Relies on PDO prepared statements. CDN usage for frontend libraries impacts external dependencies.
-*   **Modern User Experience:** Responsive design, smooth animations (AOS.js, Particles.js), and AJAX interactions (cart updates/removal, newsletter) provide a seamless interface. UI consistency across product displays has been addressed. **AJAX functionality has been restored.**
+*   **Modern User Experience:** Responsive design, smooth animations (AOS.js, Particles.js), and AJAX interactions (cart updates/removal, newsletter) provide a seamless interface. UI consistency across product displays has been addressed.
 *   **Transparency:** No magic – application flow and routing are explicit in `index.php`'s include and switch logic.
 *   **Accessibility & SEO:** Semantic HTML used. `aria-label` observed. Basic accessibility practices followed, further audit recommended.
 
@@ -136,12 +136,12 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 2.  **.htaccess Rewrite:** Apache rewrites the request to `/index.php` if applicable.
 3.  **Initialization (`/index.php`):** Core files loaded (`config`, `db`, `auth`, `SecurityMiddleware`, `ErrorHandler`), `$pdo` connection established, error handling set up, security settings applied (`SecurityMiddleware::apply`).
 4.  **Routing (`/index.php`):** `$page`, `$action` extracted and validated.
-5.  **CSRF Check (`/index.php`):** If `POST`, `SecurityMiddleware::validateCSRF()` compares `$_POST['csrf_token']` with `$_SESSION['csrf_token']`. Crucial for security.
+5.  **CSRF Check (`/index.php`):** If `POST`, `SecurityMiddleware::validateCSRF()` compares `$_POST['csrf_token']` with `$_SESSION['csrf_token']`. This check is crucial for security.
 6.  **Controller/View Dispatch (`/index.php` `switch ($page)`):** Relevant controller loaded, instantiated. Action method called or view directly included.
 7.  **Controller Action:** Executes logic, interacts with DB (Models/PDO), prepares data. **If rendering a view that requires subsequent CSRF-protected actions (forms/AJAX), the controller MUST call `$csrfToken = $this->getCsrfToken()` to generate/retrieve the token.**
 8.  **View Rendering / Response Generation:**
     *   **HTML Page:** Controller passes data (including `$csrfToken` if fetched) to the view. View (`views/*.php`) generates HTML, includes layout partials. **If the view needs to support CSRF-protected forms or AJAX initiated from it, it MUST output the `$csrfToken` into `<input type="hidden" id="csrf-token-value" ...>`**. All dynamic output must be escaped using `htmlspecialchars()`.
-    *   **JSON Response:** Controller uses `BaseController::jsonResponse()` for AJAX actions (e.g., Cart operations). Note: Unnecessary `validateAjax()` checks have been removed from relevant controllers.
+    *   **JSON Response:** Controller uses `BaseController::jsonResponse()` for AJAX.
     *   **Redirect:** Controller uses `BaseController::redirect()`.
 9.  **Response Transmission:** Server sends HTML/JSON/Redirect to browser.
 10. **Client-Side Execution:** Browser renders HTML, applies CSS, executes JS. **AJAX handlers (e.g., in `footer.php`) read the CSRF token from the `#csrf-token-value` hidden input when making POST requests.**
@@ -172,8 +172,8 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 |-- controllers/           # Business logic / request handlers
 |   |-- BaseController.php # Abstract base with shared helpers (DB, JSON, redirect, validation, CSRF, auth checks, logging, etc.)
 |   |-- ProductController.php
-|   |-- CartController.php # Note: validateAjax() removed from AJAX methods
-|   |-- CheckoutController.php # Note: validateAjax() removed from AJAX methods if applicable
+|   |-- CartController.php
+|   |-- CheckoutController.php
 |   |-- AccountController.php
 |   |-- QuizController.php
 |   |-- ... (Coupon, Inventory, Newsletter, Payment, Tax)
@@ -184,21 +184,21 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 |   |-- Quiz.php
 |-- views/                 # HTML templates (PHP files)
 |   |-- home.php
-|   |-- products.php         # Displays product listing/filters/pagination
-|   |-- product_detail.php   # Enhanced version implemented
+|   |-- products.php         # (UI updated for consistency, pagination added)
+|   |-- product_detail.php   # (Enhanced version implemented)
 |   |-- cart.php
 |   |-- checkout.php
 |   |-- register.php, login.php, forgot_password.php, reset_password.php
 |   |-- quiz.php, quiz_results.php
 |   |-- error.php, 404.php
 |   |-- layout/
-|   |   |-- header.php     # Sitewide header, nav (Shop link corrected), assets
+|   |   |-- header.php     # Sitewide header, nav, assets, session data display
 |   |   |-- footer.php     # Sitewide footer, JS init, AJAX handlers
 |   |   |-- admin_header.php, admin_footer.php
 |-- .htaccess              # Apache URL rewrite rules & config
 |-- .env                   # (Not present, recommended for secrets)
 |-- README.md              # Project documentation
-|-- technical_design_specification.md # (This document v5)
+|-- technical_design_specification.md # (This document v4)
 |-- ... (other docs, schema file)
 ```
 
@@ -207,13 +207,13 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 *   **index.php**: Central orchestrator. Includes core components, performs routing, validates basic input and CSRF (POST), includes/instantiates controllers, and dispatches to controller actions or includes views.
 *   **config.php**: Defines DB constants, app settings, API keys, email config, `SECURITY_SETTINGS` array.
 *   **includes/SecurityMiddleware.php**: Provides static methods: `apply()` (sets headers, session params), `validateInput()`, `validateCSRF()` (compares POST/Session token), `generateCSRFToken()` (creates/retrieves session token).
-*   **controllers/BaseController.php**: Abstract base providing shared functionality: `$db` (PDO), response helpers (`jsonResponse`, `redirect`), view rendering (`renderView`), validation helpers, authentication checks, logging, **`getCsrfToken()`** (calls `SecurityMiddleware::generateCSRFToken`). **`validateAjax()` method exists but is no longer called by AJAX endpoints like CartController actions.**
+*   **controllers/BaseController.php**: Abstract base providing shared functionality: `$db` (PDO), response helpers (`jsonResponse`, `redirect`), view rendering (`renderView`), validation helpers, authentication checks, logging, **`getCsrfToken()`** (calls `SecurityMiddleware::generateCSRFToken`).
 *   **controllers/*Controller.php**: Handle module-specific logic, extend `BaseController`. Fetch data (Models/PDO), prepare data for views, **MUST call `$this->getCsrfToken()` and pass token to views requiring CSRF protection.** Handle AJAX responses.
 *   **models/*.php**: Encapsulate entity-specific DB logic (e.g., `Product.php`) using prepared statements.
-*   **views/layout/header.php**: Common header, includes assets, displays dynamic session info. **Contains corrected "Shop" navigation link (`index.php?page=products`).**
+*   **views/layout/header.php**: Common header, includes assets, displays dynamic session info.
 *   **views/layout/footer.php**: Common footer, JS initializations (AOS, Particles), **global AJAX handlers** for `.add-to-cart` and newsletter (relies on reading CSRF token from hidden input), `showFlashMessage` JS helper.
 *   **views/*.php**: Specific page templates. **MUST output CSRF token via `htmlspecialchars($csrfToken)` into `<input type="hidden" id="csrf-token-value" ...>`** when needed for subsequent forms/AJAX. Use `htmlspecialchars()` for all dynamic output.
-*   **views/products.php**: Product listing page view. Displays product grid, search, filters, sorting, and pagination. **Loads all products by default.**
+*   **views/products.php**: Product listing page view. Styling is consistent. **Pagination has been implemented.**
 *   **views/product_detail.php**: Enhanced version with improved layout, gallery, tabs, AJAX cart functionality.
 
 ---
@@ -235,7 +235,7 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 *   Execute business logic, use Models/PDO for data.
 *   **Crucially, controllers rendering views that need CSRF protection for subsequent actions MUST call `$csrfToken = $this->getCsrfToken();` and pass this token to the view.**
 *   Pass data (including `$csrfToken`) to views using `require_once` scope or the `$data` array with `renderView`.
-*   Terminate via view inclusion, `jsonResponse`, or `redirect`. AJAX actions no longer perform the `validateAjax()` check.
+*   Terminate via view inclusion, `jsonResponse`, or `redirect`.
 
 ### 5.4 Views: Templating and Rendering
 
@@ -264,10 +264,10 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 
 *   **Library Initialization:** AOS, Particles initialized in `footer.php`.
 *   **Custom Handlers (Primarily `footer.php`):**
-    *   **Add-to-Cart:** Global handler for `.add-to-cart`. **Relies on reading CSRF token from `#csrf-token-value`**, sends via AJAX POST to `cart/add`, handles JSON response/errors, uses `showFlashMessage`. **Now functional.**
-    *   **Newsletter:** Handlers for `#newsletter-form` / `#newsletter-form-footer`. **Relies on reading CSRF token from `#csrf-token-value`**, sends via AJAX POST, uses `showFlashMessage`. **Assumed functional (pending `validateAjax` check removal if present).**
-*   **Page-Specific JS:** Mobile menu (`header.php`), Cart page AJAX (`cart.php`), Product Detail AJAX/UI (`product_detail.php`). These also rely on the presence of `#csrf-token-value` for POST actions. **Product Detail Add-to-Cart now functional.** Cart page AJAX assumed functional.
-*   **Standardization:** `showFlashMessage` helper used for feedback. JS redundancy minimized by using global handlers in `footer.php`. **Key Dependency:** Functionality of global AJAX handlers is critically dependent on the `#csrf-token-value` input being present and correctly populated on the page.
+    *   **Add-to-Cart:** Global handler for `.add-to-cart`. **Relies on reading CSRF token from `#csrf-token-value`**, sends via AJAX POST to `cart/add`, handles JSON response/errors, uses `showFlashMessage`.
+    *   **Newsletter:** Handlers for `#newsletter-form` / `#newsletter-form-footer`. **Relies on reading CSRF token from `#csrf-token-value`**, sends via AJAX POST, uses `showFlashMessage`.
+*   **Page-Specific JS:** Mobile menu (`header.php`), Cart page AJAX (`cart.php`), Product Detail AJAX/UI (`product_detail.php`). These also rely on the presence of `#csrf-token-value` for POST actions.
+*   **Standardization:** `showFlashMessage` helper used for feedback. JS redundancy minimized by using global handlers in `footer.php`. **Key Dependency:** The functionality of global AJAX handlers is critically dependent on the `#csrf-token-value` input being present and correctly populated on the page.
 
 ---
 
@@ -275,11 +275,11 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 
 ### 7.1 Home/Landing Page (views/home.php)
 
-*   Displays standard sections. Product cards use consistent styling. `.add-to-cart` buttons **functional** via global handler (provided CSRF token input is outputted).
+*   Displays standard sections. Product cards use consistent styling. `.add-to-cart` buttons functional via global handler **provided the CSRF token input is correctly outputted by the controller/view**.
 
 ### 7.2 Header and Navigation (views/layout/header.php)
 
-*   Standard header. Displays dynamic session info. Includes assets. Mobile menu functional. **Shop link corrected to point to `index.php?page=products`.**
+*   Standard header. Displays dynamic session info. Includes assets. Mobile menu functional.
 
 ### 7.3 Footer and Newsletter (views/layout/footer.php)
 
@@ -291,15 +291,15 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 
 ### 7.5 Shopping Cart (views/cart.php)
 
-*   Displays items. JS handles quantity updates, AJAX removal, and AJAX cart updates via form submission. **Relies on `#csrf-token-value` being outputted on the page for its AJAX actions.** Assumed functional after `validateAjax` removal.
+*   Displays items. JS handles quantity updates, AJAX removal, and AJAX cart updates via form submission. **Relies on `#csrf-token-value` being outputted on the page for its AJAX actions.**
 
 ### 7.6 Product Detail Page (views/product_detail.php)
 
-*   Displays using the enhanced, modern layout. Includes gallery, tabs, detailed info, related products. AJAX Add-to-Cart for main and related products is **functional** (provided CSRF token input is outputted). Requires necessary fields in `products` table (see 9.3).
+*   Displays using the enhanced, modern layout. Includes gallery, tabs, detailed info, related products. AJAX Add-to-Cart for main and related products is functional **provided the CSRF token input is correctly outputted by the controller/view**. Requires necessary fields in `products` table (see 9.3).
 
 ### 7.7 Products Page (views/products.php)
 
-*   Displays product listing with filters, sorting, and pagination. **Loads all products by default** when accessed via the corrected navigation link (`index.php?page=products`). Functioning of Add-to-Cart buttons depends on CSRF token availability.
+*   Displays product listing with filters and sorting. **Pagination has been implemented.** Correct functioning of Add-to-Cart buttons depends on CSRF token availability.
 
 ### 7.8 Quiz Flow & Personalization
 
@@ -315,8 +315,8 @@ The Scent is a modular, secure, and extensible e-commerce platform focused on de
 
 ### 8.2 Controllers: Business Logic Layer (controllers/ & BaseController.php)
 
-*   `BaseController.php`: Provides shared methods including `$db`, response helpers, validation, auth checks, **`getCsrfToken()`**. `validateAjax()` is no longer used for standard AJAX endpoints.
-*   Specific Controllers: Extend `BaseController`. Handle module logic. **MUST call `$this->getCsrfToken()` and pass the token to views requiring CSRF protection for subsequent actions.** `CartController` (and similar AJAX endpoints) have had `validateAjax()` removed.
+*   `BaseController.php`: Provides shared methods including `$db`, response helpers, validation, auth checks, **`getCsrfToken()`**.
+*   Specific Controllers: Extend `BaseController`. Handle module logic. **MUST call `$this->getCsrfToken()` and pass the token to views requiring CSRF protection for subsequent actions.**
 
 ### 8.3 Database Abstraction (includes/db.php & models/)
 
@@ -352,9 +352,9 @@ Core tables (`users`, `products`, `categories`, `orders`, `order_items`, `quiz_r
 
 ### 9.4 Data Flow Examples
 
-*   **Add to Cart:** (AJAX) JS reads product ID and CSRF token (from `#csrf-token-value`) -> POST to `cart/add` -> `CartController::addToCart()` validates CSRF -> Updates session -> Returns JSON. (**Now functional**)
+*   **Add to Cart:** (AJAX) JS reads product ID and CSRF token (from `#csrf-token-value`) -> POST to `cart/add` -> `CartController::addToCart()` validates CSRF -> Updates session -> Returns JSON.
 *   **Place Order:** Form POST to `checkout/process` -> `CheckoutController::processCheckout()` validates CSRF -> Creates DB records (`orders`, `order_items`) -> Updates stock (`inventory_movements`, `products`) -> Clears session cart -> Processes payment -> Returns JSON/Redirects.
-*   **View Product List:** Request to `products` (default) -> `ProductController::showProductList()` fetches products, calculates pagination, gets CSRF token -> Includes `views/products.php`, passing data and token -> View renders cards, pagination, and outputs hidden CSRF token. (**Default load corrected**)
+*   **View Product List:** Request to `products` -> `ProductController::showProductList()` fetches products, calculates pagination, gets CSRF token -> Includes `views/products.php`, passing data and token -> View renders cards, pagination, and outputs hidden CSRF token.
 
 ---
 
@@ -396,7 +396,7 @@ Core tables (`users`, `products`, `categories`, `orders`, `order_items`, `quiz_r
 ### 10.8 SQL Injection Prevention
 
 *   The primary defense is the consistent use of **PDO Prepared Statements** in Models and database interactions, which is observed.
-*   **Recommendation:** The commented-out `preventSQLInjection` function in `SecurityMiddleware.php` should be **removed** as it's unnecessary with prepared statements and potentially harmful.
+*   **Recommendation:** The `preventSQLInjection` function in `SecurityMiddleware.php` should be **removed** as it's unnecessary with prepared statements and potentially harmful.
 
 ---
 
@@ -420,7 +420,6 @@ Core tables (`users`, `products`, `categories`, `orders`, `order_items`, `quiz_r
 6.  Configure Apache VirtualHost (`DocumentRoot` to project root, `AllowOverride All`).
 7.  Browse site, check server logs (`error_log`, `access.log`).
 8.  **Verify CSRF implementation:** Use browser dev tools (Network tab) to confirm the `csrf_token` is sent in POST requests (form data or AJAX body) and check views' source code for the presence of `<input id="csrf-token-value">`.
-9.  **Verify Core Functionality:** Test default product page load, add-to-cart from multiple pages, cart updates/removal.
 
 ### 11.4 Testing & Debugging Notes
 
@@ -433,7 +432,8 @@ Core tables (`users`, `products`, `categories`, `orders`, `order_items`, `quiz_r
 
 ## 12. Future Enhancements & Recommendations
 
-*   **Consistent CSRF Token Handling:** Ensure all controllers rendering views pass the CSRF token, and views output the `#csrf-token-value` hidden input. (**Ongoing Diligence Required**)
+*   **Pagination:** Implement pagination on the main products page (`views/products.php`). (Done)
+*   **Consistent CSRF Token Handling:** Ensure all controllers rendering views pass the CSRF token, and views output the `#csrf-token-value` hidden input. (Fix Implementation Required)
 *   **Standardize Rate Limiting:** Implement a single, robust mechanism.
 *   **Remove `preventSQLInjection`:** Rely solely on prepared statements.
 *   **Implement & Configure CSP:** Enable and configure the Content-Security-Policy header properly.
@@ -454,19 +454,17 @@ Core tables (`users`, `products`, `categories`, `orders`, `order_items`, `quiz_r
 
 ### A. Key File Summaries
 
-| File/Folder                 | Purpose                                                                                                     | Status Notes                                       |
-| :-------------------------- | :---------------------------------------------------------------------------------------------------------- | :------------------------------------------------- |
-| `index.php`                 | Entry point, routing, core includes, CSRF POST validation, controller/view dispatch                         | OK                                                 |
-| `config.php`                | DB credentials, App/Security settings, API keys, Email config                                               | Move secrets to .env recommended                   |
-| `includes/SecurityMiddleware.php` | Static helpers: `apply()`, `validateInput()`, `validateCSRF()`, `generateCSRFToken()`                         | Remove `preventSQLInjection` recommendation        |
-| `controllers/BaseController.php` | Abstract base: `$db`, helpers (JSON, redirect, render), validation, auth checks, `getCsrfToken()`, `validateAjax` | `validateAjax` no longer used by AJAX endpoints    |
-| `controllers/CartController.php`| Handles AJAX cart actions                                                                                   | `validateAjax` removed from AJAX methods         |
-| `controllers/*Controller.php` | Module logic, extend BaseController, **pass CSRF token to views**                                           | Needs consistent token passing                     |
-| `models/*.php`              | Entity DB logic (Prepared Statements)                                                                       | OK                                                 |
-| `views/layout/header.php`   | Header, navigation, assets                                                                                  | Shop link corrected                                |
-| `views/*.php`               | HTML/PHP templates, **output CSRF token into `#csrf-token-value` hidden input**                               | Needs consistent token output                      |
-| `views/layout/footer.php`   | Footer, JS init, **global AJAX handlers reading CSRF token from `#csrf-token-value`**                         | OK (relies on token input)                         |
-| `views/products.php`        | Product list, search, filters, sorting, pagination                                                          | Loads all products by default, pagination added    |
+| File/Folder                 | Purpose                                                                                             | Status Notes                     |
+| :-------------------------- | :-------------------------------------------------------------------------------------------------- | :------------------------------- |
+| `index.php`                 | Entry point, routing, core includes, CSRF POST validation, controller/view dispatch                 | OK                               |
+| `config.php`                | DB credentials, App/Security settings, API keys, Email config                                       | Move secrets to .env recommended |
+| `includes/SecurityMiddleware.php` | Static helpers: `apply()`, `validateInput()`, `validateCSRF()`, `generateCSRFToken()`                 | Remove `preventSQLInjection` |
+| `controllers/BaseController.php` | Abstract base: `$db`, helpers (JSON, redirect, render), validation, auth checks, `getCsrfToken()` | Standardize rate limit methods |
+| `controllers/*Controller.php` | Module logic, extend BaseController, **pass CSRF token to views**                                   | Needs consistent token passing   |
+| `models/*.php`              | Entity DB logic (Prepared Statements)                                                               | OK                               |
+| `views/*.php`               | HTML/PHP templates, **output CSRF token into `#csrf-token-value` hidden input**                       | Needs consistent token output    |
+| `views/layout/footer.php`   | Footer, JS init, **global AJAX handlers reading CSRF token from `#csrf-token-value`**                 | OK (relies on token input)       |
+| `views/products.php`        | Product list                                                                                        | Pagination added                 |
 
 ### B. Glossary
 
@@ -481,38 +479,27 @@ Core tables (`users`, `products`, `categories`, `orders`, `order_items`, `quiz_r
     // Inside controller method handling GET request for a view
     $csrfToken = $this->getCsrfToken(); // Fetch/generate token
     // ... prepare other $viewData ...
-    // Make token available to the view (e.g., via extract() or passing array)
-    require_once __DIR__ . '/../views/path/to/view.php';
-    // OR if using renderView:
-    // $viewData['csrfToken'] = $csrfToken;
-    // return $this->renderView('path/to/view', $viewData);
+    $viewData['csrfToken'] = $csrfToken; // Add token to data for the view
+    // Render the view, passing $viewData
+    // e.g., return $this->renderView('path/to/view', $viewData);
+    // or make $csrfToken available in scope if using require_once
     ```
-2.  **View (e.g., `views/home.php`, `views/product_detail.php`):**
+2.  **View (e.g., `views/home.php`):**
     ```html
     <main>
-        <!-- ** ESSENTIAL FOR AJAX ** -->
         <input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
-
         <!-- Rest of view content -->
-
-        <!-- Example Form -->
+        <!-- Forms should also include: -->
         <form method="POST" ...>
-            <!-- ** ESSENTIAL FOR FORMS ** -->
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
             <!-- Other form fields -->
-            <button type="submit">Submit</button>
         </form>
-
-        <!-- Example Button triggering AJAX -->
-        <button class="add-to-cart" data-product-id="123">Add to Cart</button>
     </main>
     ```
 3.  **JavaScript (AJAX POST in `footer.php` or specific scripts):**
     ```javascript
     // Get token from the standard hidden input
-    const csrfTokenInput = document.getElementById('csrf-token-value');
-    const csrfToken = csrfTokenInput ? csrfTokenInput.value : ''; // Use value from input
-
+    const csrfToken = document.getElementById('csrf-token-value')?.value;
     if (!csrfToken) {
         showFlashMessage('Security token missing. Please refresh.', 'error');
         return; // Abort if token not found
@@ -521,16 +508,17 @@ Core tables (`users`, `products`, `categories`, `orders`, `order_items`, `quiz_r
     fetch('index.php?page=cart&action=add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `product_id=${productId}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}` // Send token in body
+        body: `product_id=${productId}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}`
     })
     // ... .then() handlers ...
     ```
 4.  **Server (Controller handling POST):**
     ```php
-    // Early in the POST handling method (e.g., CartController::addToCart)
-    $this->validateCSRF(); // Uses SecurityMiddleware::validateCSRF() which checks $_POST['csrf_token']
+    // Early in the POST handling method
+    $this->validateCSRF(); // Uses SecurityMiddleware::validateCSRF() internally
+    // OR if called directly from index.php before controller dispatch:
+    // SecurityMiddleware::validateCSRF();
     // ... proceed with processing POST data ...
     ```
 
----
-https://drive.google.com/file/d/17sQ-jAwpmCw5AH1aHdOOrSK9097fi4BO/view?usp=sharing, https://drive.google.com/file/d/1FyAA1sG46WO7EFkG2r3L4J0WemXSNubI/view?usp=sharing, https://drive.google.com/file/d/1H2R68QZCm8Nj1TvJ5vYz-sqGOYEkXvkn/view?usp=sharing, https://drive.google.com/file/d/1J2idBpA46EyMVTgO7rtrmEqs4KOCbmsz/view?usp=sharing, https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221M8ZMO9RYtFFaiwVV4fHitLNmxnZWE1go%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1bnysHWRLA0U-hXWBU6aM48R1-mYkSTcn/view?usp=sharing, https://drive.google.com/file/d/1iYtVZhH7PoblGzR3WViZnVSBF0nU5oT4/view?usp=sharing, https://drive.google.com/file/d/1lDSuDrMFsSCw7fktqHQr_bRFW4pfsmKC/view?usp=sharing, https://drive.google.com/file/d/1mcCunnB3JE5sNAR7alkRgRjFxPDca5qB/view?usp=sharing, https://drive.google.com/file/d/1mm-kHs4jpmySYRmEeKf68tcby04j9ZzJ/view?usp=sharing, https://drive.google.com/file/d/1nAx3ra0ScJF4NXawSpw5n7bsnZTGznqc/view?usp=sharing, https://drive.google.com/file/d/1t1NBJZ1MbfXL-SwX2Oimh3T8uwOwImeW/view?usp=sharing, https://drive.google.com/file/d/1tG2uF5vL5RVr7V59HifVCkiwn02hZ7pS/view?usp=sharing, https://drive.google.com/file/d/1yrb78QgFuSheVsJjQGDvHypZmJNjOFLf/view?usp=sharing
+https://drive.google.com/file/d/16P6Oa3oBdVDSvhPxp_Q2C81n0URNIYXd/view?usp=sharing, https://drive.google.com/file/d/1BreUBDFKmAR7pvsfHqXZudRMNB2hwOZ6/view?usp=sharing, https://drive.google.com/file/d/1JMFc4gFk3BAsEvs902tmtzBU0mkRjMqB/view?usp=sharing, https://drive.google.com/file/d/1NJ6DXRRe_-M826jQF6kC4_3ggv74X6_8/view?usp=sharing, https://drive.google.com/file/d/1UdSwsvuptuLXQo7pQ1sZy-JReNmj63OV/view?usp=sharing, https://drive.google.com/file/d/1YeirJLoVnkF6ghid1XzQp93cZvuhFCXQ/view?usp=sharing, https://drive.google.com/file/d/1_JxB9TpcVGWN7x9SBJJa2eiAffcbbcX0/view?usp=sharing, https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221_V3UQE__vlWohPYAK4V5Z9VwSNQ4-yWX%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1_pulr5u9WF8U06LnF1M2w1TmNsJwg78J/view?usp=sharing, https://drive.google.com/file/d/1f-x9ZGfkyZ0WdUCaHhh5iVjy4e-lVEBX/view?usp=sharing, https://drive.google.com/file/d/1m2t3W4mAxSrrwNIA_qm9HiyIqgCq1hnf/view?usp=sharing, https://drive.google.com/file/d/1rjvbwVhDWDUlS-KpRtjCQBfyJtCHAH1B/view?usp=sharing, https://drive.google.com/file/d/1w38FRNP6qcrZrGnxHUjbDFOpedZo4_jq/view?usp=sharing

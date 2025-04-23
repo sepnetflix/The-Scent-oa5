@@ -125,6 +125,32 @@ try {
                     break;
             }
             break;
+
+        case 'contact':
+            $pageTitle = 'Contact Us';
+            $csrfToken = SecurityMiddleware::generateCSRFToken();
+            require_once __DIR__ . '/views/contact.php';
+            break;
+        case 'faq':
+            $pageTitle = 'FAQs';
+            $csrfToken = SecurityMiddleware::generateCSRFToken();
+            require_once __DIR__ . '/views/faq.php';
+            break;
+        case 'shipping':
+            $pageTitle = 'Shipping & Returns';
+            $csrfToken = SecurityMiddleware::generateCSRFToken();
+            require_once __DIR__ . '/views/shipping.php';
+            break;
+        case 'order-tracking':
+            $pageTitle = 'Track Your Order';
+            $csrfToken = SecurityMiddleware::generateCSRFToken();
+            require_once __DIR__ . '/views/order-tracking.php';
+            break;
+        case 'privacy':
+            $pageTitle = 'Privacy Policy';
+            $csrfToken = SecurityMiddleware::generateCSRFToken();
+            require_once __DIR__ . '/views/privacy.php';
+            break;
             
         default:
             http_response_code(404);
