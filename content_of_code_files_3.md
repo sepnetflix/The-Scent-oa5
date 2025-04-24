@@ -408,13 +408,13 @@ class ProductController extends BaseController {
             $featuredProducts = $this->productModel->getFeatured();
             
             if (empty($featuredProducts)) {
-                error_log("No featured products found");
+                $this->logSecurityEvent('no_featured_products', null, ['ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             }
             
             $csrfToken = $this->getCsrfToken();
             require_once __DIR__ . '/../views/home.php';
         } catch (Exception $e) {
-            error_log("Error in showHomePage: " . $e->getMessage());
+            $this->logSecurityEvent('error_show_home', null, ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             $this->setFlashMessage('An error occurred while loading the page', 'error');
             $this->redirect('error');
         }
@@ -466,10 +466,6 @@ class ProductController extends BaseController {
                 $params[] = $maxPrice;
             }
             
-            // Debug logging for diagnosis
-            error_log("[showProductList] conditions: " . json_encode($conditions));
-            error_log("[showProductList] params: " . json_encode($params));
-            
             // Get total count for pagination
             $totalProducts = $this->productModel->getCount($conditions, $params);
             $totalPages = ceil($totalProducts / $this->itemsPerPage);
@@ -517,7 +513,7 @@ class ProductController extends BaseController {
             require_once __DIR__ . '/../views/products.php';
             
         } catch (Exception $e) {
-            error_log("Error loading product list: " . $e->getMessage());
+            $this->logSecurityEvent('error_show_product_list', null, ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             $this->setFlashMessage('Error loading products', 'error');
             $this->redirect('error');
         }
@@ -758,6 +754,70 @@ class ProductController extends BaseController {
         } catch (Exception $e) {
             error_log("Error getting all products: " . $e->getMessage());
             throw $e;
+        }
+    }
+}
+
+```
+
+# models/Cart.php  
+```php
+<?php
+class Cart {
+    private $pdo;
+    private $userId;
+
+    public function __construct($pdo, $userId) {
+        $this->pdo = $pdo;
+        $this->userId = $userId;
+    }
+
+    public function addItem($productId, $quantity = 1) {
+        // Check if item already exists
+        $stmt = $this->pdo->prepare("SELECT id, quantity FROM cart_items WHERE user_id = ? AND product_id = ?");
+        $stmt->execute([$this->userId, $productId]);
+        $item = $stmt->fetch();
+        if ($item) {
+            // Update quantity
+            $newQty = $item['quantity'] + $quantity;
+            $update = $this->pdo->prepare("UPDATE cart_items SET quantity = ? WHERE id = ?");
+            $update->execute([$newQty, $item['id']]);
+        } else {
+            // Insert new item
+            $insert = $this->pdo->prepare("INSERT INTO cart_items (user_id, product_id, quantity, added_at) VALUES (?, ?, ?, NOW())");
+            $insert->execute([$this->userId, $productId, $quantity]);
+        }
+    }
+
+    public function updateItem($productId, $quantity) {
+        if ($quantity <= 0) {
+            $this->removeItem($productId);
+            return;
+        }
+        $stmt = $this->pdo->prepare("UPDATE cart_items SET quantity = ? WHERE user_id = ? AND product_id = ?");
+        $stmt->execute([$quantity, $this->userId, $productId]);
+    }
+
+    public function removeItem($productId) {
+        $stmt = $this->pdo->prepare("DELETE FROM cart_items WHERE user_id = ? AND product_id = ?");
+        $stmt->execute([$this->userId, $productId]);
+    }
+
+    public function getItems() {
+        $stmt = $this->pdo->prepare("SELECT ci.product_id, ci.quantity, p.* FROM cart_items ci JOIN products p ON ci.product_id = p.id WHERE ci.user_id = ?");
+        $stmt->execute([$this->userId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function clearCart() {
+        $stmt = $this->pdo->prepare("DELETE FROM cart_items WHERE user_id = ?");
+        $stmt->execute([$this->userId]);
+    }
+
+    public function mergeSessionCart($sessionCart) {
+        if (!is_array($sessionCart)) return;
+        foreach ($sessionCart as $productId => $item) {
+            $this->addItem($productId, $item['quantity']);
         }
     }
 }

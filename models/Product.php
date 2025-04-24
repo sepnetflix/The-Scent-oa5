@@ -109,22 +109,29 @@ class Product {
     }
     
     public function getAllCategories() {
-        $stmt = $this->pdo->query("SELECT id, name FROM categories ORDER BY name ASC");
+        // Select distinct names and the minimum ID associated with each unique name
+        $stmt = $this->pdo->query("
+            SELECT MIN(id) as id, name
+            FROM categories
+            GROUP BY name
+            ORDER BY name ASC
+        ");
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
     
-    public function getFiltered($conditions = [], $params = [], $sortBy = 'name_asc', $limit = null, $offset = null) {
-        // Prefix ambiguous columns in conditions
+    public function getFiltered($conditions = [], $params = [], $sortBy = 'name_asc', $limit = 12, $offset = 0) {
         $fixedConditions = array_map(function($cond) {
-            $cond = preg_replace('/\bname\b/', 'p.name', $cond);
-            $cond = preg_replace('/\bdescription\b/', 'p.description', $cond);
+            $cond = preg_replace('/\\bname\\b/', 'p.name', $cond);
+            $cond = preg_replace('/\\bdescription\\b/', 'p.description', $cond);
+            $cond = preg_replace('/\\bprice\\b/', 'p.price', $cond);
+            $cond = preg_replace('/\\bcategory_id\\b/', 'p.category_id', $cond);
             return $cond;
         }, $conditions);
         $sql = "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id";
         if (!empty($fixedConditions)) {
             $sql .= " WHERE " . implode(" AND ", $fixedConditions);
         }
-        // Add sorting
+        // Sorting
         switch ($sortBy) {
             case 'price_asc':
                 $sql .= " ORDER BY p.price ASC";
@@ -138,18 +145,26 @@ class Product {
             case 'name_asc':
             default:
                 $sql .= " ORDER BY p.name ASC";
+                break;
         }
-        if ($limit !== null) {
-            $sql .= " LIMIT " . (int)$limit;
-            if ($offset !== null) {
-                $sql .= " OFFSET " . (int)$offset;
-            }
-        }
+        $sql .= " LIMIT ? OFFSET ?";
+        $params[] = (int)$limit;
+        $params[] = (int)$offset;
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
-        return $stmt->fetchAll();
+        $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Decode JSON fields if present
+        foreach ($products as &$product) {
+            if (isset($product['benefits'])) {
+                $product['benefits'] = json_decode($product['benefits'], true) ?? [];
+            }
+            if (isset($product['gallery_images'])) {
+                $product['gallery_images'] = json_decode($product['gallery_images'], true) ?? [];
+            }
+        }
+        return $products;
     }
-    
+
     public function getPriceRange() {
         $stmt = $this->pdo->query("
             SELECT MIN(price) as min_price, MAX(price) as max_price 
@@ -283,9 +298,27 @@ class Product {
     }
 
     public function getCount($conditions = [], $params = []) {
-        $sql = "SELECT COUNT(*) as count FROM products";
-        if (!empty($conditions)) {
-            $sql .= " WHERE " . implode(" AND ", $conditions);
+        // Ensure this prefixing matches getFiltered if ambiguous columns are possible
+        $fixedConditions = array_map(function($cond) {
+            $cond = preg_replace('/\\bname\\b/', 'p.name', $cond);
+            $cond = preg_replace('/\\bdescription\\b/', 'p.description', $cond);
+            $cond = preg_replace('/\\bprice\\b/', 'p.price', $cond);
+            $cond = preg_replace('/\\bcategory_id\\b/', 'p.category_id', $cond);
+            return $cond;
+        }, $conditions);
+        $needsCategoryJoin = false;
+        foreach($fixedConditions as $cond) {
+            if (strpos($cond, 'c.') !== false) {
+                $needsCategoryJoin = true;
+                break;
+            }
+        }
+        $sql = "SELECT COUNT(p.id) as count FROM products p";
+        if ($needsCategoryJoin) {
+            $sql .= " LEFT JOIN categories c ON p.category_id = c.id";
+        }
+        if (!empty($fixedConditions)) {
+            $sql .= " WHERE " . implode(" AND ", $fixedConditions);
         }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);

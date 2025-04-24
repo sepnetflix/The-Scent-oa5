@@ -25,26 +25,6 @@
             <!-- Filters Sidebar -->
             <aside class="filters-sidebar" data-aos="fade-right">
                 <div class="filters-section">
-                    <h2>Categories</h2>
-                    <ul class="category-list">
-                        <li>
-                            <a href="index.php?page=products" 
-                               class="<?= empty($_GET['category']) ? 'active' : '' ?>">
-                                All Products
-                            </a>
-                        </li>
-                        <?php foreach ($categories as $cat): ?>
-                            <li>
-                                <a href="index.php?page=products&category=<?= urlencode($cat['id']) ?>"
-                                   class="<?= (isset($_GET['category']) && $_GET['category'] == $cat['id']) ? 'active' : '' ?>">
-                                    <?= htmlspecialchars($cat['name']) ?>
-                                </a>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                </div>
-                
-                <div class="filters-section">
                     <h2>Price Range</h2>
                     <div class="price-range">
                         <div class="range-inputs">
@@ -61,6 +41,22 @@
             
             <!-- Products Grid -->
             <div class="products-content">
+                <!-- Horizontal Category Filter Bar -->
+                <div class="category-filter-bar mb-6 pb-4 border-b border-gray-200" data-aos="fade-up">
+                    <nav class="flex flex-wrap gap-x-4 gap-y-2 items-center">
+                        <a href="index.php?page=products"
+                           class="category-link <?= empty($_GET['category']) ? 'active' : '' ?>">
+                            All Products
+                        </a>
+                        <?php foreach ($categories as $cat): ?>
+                            <a href="index.php?page=products&category=<?= urlencode($cat['id']) ?>"
+                               class="category-link <?= (isset($_GET['category']) && $_GET['category'] == $cat['id']) ? 'active' : '' ?>">
+                                <?= htmlspecialchars($cat['name']) ?>
+                            </a>
+                        <?php endforeach; ?>
+                    </nav>
+                </div>
+                
                 <div class="products-toolbar" data-aos="fade-up">
                     <div class="showing-products">
                         Showing <?= count($products) ?> products
@@ -193,6 +189,21 @@
         </div>
     </div>
 </section>
+
+<style>
+    .category-link {
+        color: #4B5563;
+        padding: 0.25rem 0.75rem;
+        border-radius: 0.375rem;
+        transition: background 0.2s, color 0.2s;
+        text-decoration: none;
+    }
+    .category-link.active {
+        color: #1A4D5A;
+        font-weight: 600;
+        background: #A0C1B1;
+    }
+</style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

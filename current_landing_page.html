@@ -1,4 +1,4 @@
-<!-- DEBUG: index.php loaded --><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -101,9 +101,15 @@
                 <div class="header-icons">
                     <a href="#" aria-label="Search"><i class="fas fa-search"></i></a>
                                             <a href="index.php?page=login" aria-label="Login"><i class="fas fa-user"></i></a>
-                                        <a href="index.php?page=cart" class="cart-link" aria-label="Cart">
+                                        <a href="index.php?page=cart" class="cart-link relative group" aria-label="Cart">
                         <i class="fas fa-shopping-bag"></i>
                         <span class="cart-count">0</span>
+                        <!-- Mini-cart dropdown -->
+                        <div class="mini-cart-dropdown absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 hidden group-hover:block group-focus-within:block transition-all duration-200" style="min-width:320px;">
+                            <div id="mini-cart-content" class="p-4">
+                                <div class="text-center text-gray-500 py-6">Your cart is empty.</div>
+                            </div>
+                        </div>
                     </a>
                 </div>
                 <button class="mobile-menu-toggle md:hidden" aria-label="Toggle Menu">
@@ -114,7 +120,7 @@
     </header>
     <main>
         <!-- DEBUG: home.php loaded --><!-- Output CSRF token for JS (for AJAX add-to-cart/newsletter) -->
-<input type="hidden" id="csrf-token-value" value="120e90ea9e8faa295b5b36605e4687874dd184bd08967c07702a6327c08c7b9a">
+<input type="hidden" id="csrf-token-value" value="2680591f1ada91088c6b50944cd49db579809019be058ba3518030bba477e845">
 
 <!-- Hero Section with Video Background -->
 <section class="hero-section relative min-h-screen flex items-center justify-center overflow-hidden">
@@ -375,7 +381,7 @@
             <p class="mb-8">Subscribe to receive updates, exclusive offers, and aromatherapy tips.</p>
             <!-- Apply suggested form structure/style -->
             <form id="newsletter-form" class="newsletter-form flex flex-col sm:flex-row gap-4 justify-center">
-                <input type="hidden" name="csrf_token" value="120e90ea9e8faa295b5b36605e4687874dd184bd08967c07702a6327c08c7b9a">
+                <input type="hidden" name="csrf_token" value="2680591f1ada91088c6b50944cd49db579809019be058ba3518030bba477e845">
                 <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input flex-1 px-4 py-2 rounded-full border border-gray-300 focus:border-primary">
                 <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
             </form>
@@ -479,7 +485,7 @@
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="120e90ea9e8faa295b5b36605e4687874dd184bd08967c07702a6327c08c7b9a">
+                        <input type="hidden" name="csrf_token" value="2680591f1ada91088c6b50944cd49db579809019be058ba3518030bba477e845">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>
@@ -623,6 +629,57 @@
                 btn.textContent = originalText;
                 btn.disabled = false;
             });
+        });
+
+        // Mini-cart AJAX update logic
+        function fetchMiniCart() {
+            fetch('index.php?page=cart&action=mini', {
+                credentials: 'same-origin'
+            })
+            .then(response => response.json())
+            .then(data => {
+                const miniCartContent = document.getElementById('mini-cart-content');
+                if (!miniCartContent) return;
+                if (!data.items || data.items.length === 0) {
+                    miniCartContent.innerHTML = '<div class="text-center text-gray-500 py-6">Your cart is empty.</div>';
+                    return;
+                }
+                let html = '<ul class="divide-y divide-gray-200">';
+                data.items.forEach(item => {
+                    html += `<li class="flex items-center gap-3 py-3">
+                        <img src="${item.product.image_url || '/images/placeholder.jpg'}" alt="${item.product.name}" class="w-14 h-14 object-cover rounded border">
+                        <div class="flex-1">
+                            <div class="font-semibold text-gray-800">${item.product.name}</div>
+                            <div class="text-sm text-gray-500">Qty: ${item.quantity}</div>
+                        </div>
+                        <div class="font-semibold text-accent">$${(item.product.price * item.quantity).toFixed(2)}</div>
+                    </li>`;
+                });
+                html += '</ul>';
+                html += `<div class="flex justify-between items-center mt-4">
+                    <span class="font-semibold text-gray-700">Subtotal:</span>
+                    <span class="font-bold text-primary">$${data.subtotal.toFixed(2)}</span>
+                </div>`;
+                html += `<div class="mt-4 text-center">
+                    <a href="index.php?page=cart" class="btn btn-secondary w-full mb-2">View Cart</a>
+                    <a href="index.php?page=checkout" class="btn btn-primary w-full">Checkout</a>
+                </div>`;
+                miniCartContent.innerHTML = html;
+            })
+            .catch(() => {
+                const miniCartContent = document.getElementById('mini-cart-content');
+                if (miniCartContent) {
+                    miniCartContent.innerHTML = '<div class="text-center text-red-500 py-6">Could not load cart.</div>';
+                }
+            });
+        }
+        // Fetch mini-cart on page load
+        document.addEventListener('DOMContentLoaded', fetchMiniCart);
+        // Update mini-cart after cart actions
+        document.body.addEventListener('click', function(e) {
+            if (e.target.closest('.add-to-cart') || e.target.closest('.remove-from-cart') || e.target.closest('.update-cart')) {
+                setTimeout(fetchMiniCart, 400);
+            }
         });
     </script>
 </body>

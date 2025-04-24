@@ -17,13 +17,13 @@ class ProductController extends BaseController {
             $featuredProducts = $this->productModel->getFeatured();
             
             if (empty($featuredProducts)) {
-                error_log("No featured products found");
+                $this->logSecurityEvent('no_featured_products', null, ['ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             }
             
             $csrfToken = $this->getCsrfToken();
             require_once __DIR__ . '/../views/home.php';
         } catch (Exception $e) {
-            error_log("Error in showHomePage: " . $e->getMessage());
+            $this->logSecurityEvent('error_show_home', null, ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             $this->setFlashMessage('An error occurred while loading the page', 'error');
             $this->redirect('error');
         }
@@ -75,10 +75,6 @@ class ProductController extends BaseController {
                 $params[] = $maxPrice;
             }
             
-            // Debug logging for diagnosis
-            error_log("[showProductList] conditions: " . json_encode($conditions));
-            error_log("[showProductList] params: " . json_encode($params));
-            
             // Get total count for pagination
             $totalProducts = $this->productModel->getCount($conditions, $params);
             $totalPages = ceil($totalProducts / $this->itemsPerPage);
@@ -126,7 +122,7 @@ class ProductController extends BaseController {
             require_once __DIR__ . '/../views/products.php';
             
         } catch (Exception $e) {
-            error_log("Error loading product list: " . $e->getMessage());
+            $this->logSecurityEvent('error_show_product_list', null, ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             $this->setFlashMessage('Error loading products', 'error');
             $this->redirect('error');
         }

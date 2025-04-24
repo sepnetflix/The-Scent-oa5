@@ -1,7 +1,6 @@
 # index.php  
 ```php
 <?php
-echo '<!-- DEBUG: index.php loaded -->';
 define('ROOT_PATH', __DIR__);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/db.php';
@@ -49,6 +48,12 @@ try {
             if ($action === 'add' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 // AJAX Add to Cart endpoint
                 $controller->addToCart();
+                // jsonResponse will exit
+            }
+            
+            if ($action === 'mini') {
+                // AJAX Mini Cart endpoint
+                $controller->mini();
                 // jsonResponse will exit
             }
             
@@ -231,7 +236,8 @@ define('SECURITY_SETTINGS', [
         'X-XSS-Protection' => '1; mode=block',
         'X-Content-Type-Options' => 'nosniff',
         'Referrer-Policy' => 'strict-origin-when-cross-origin',
-        'Content-Security-Policy' => "default-src 'self'; script-src 'self' https://js.stripe.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-src https://js.stripe.com; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com",
+        // CSP tightened: removed 'unsafe-inline' from script-src and style-src
+        'Content-Security-Policy' => "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; frame-src https://js.stripe.com; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com",
         'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains'
     ],
     'file_upload' => [
@@ -669,9 +675,15 @@ require_once __DIR__ . '/../../includes/auth.php';
                     <?php else: ?>
                         <a href="index.php?page=login" aria-label="Login"><i class="fas fa-user"></i></a>
                     <?php endif; ?>
-                    <a href="index.php?page=cart" class="cart-link" aria-label="Cart">
+                    <a href="index.php?page=cart" class="cart-link relative group" aria-label="Cart">
                         <i class="fas fa-shopping-bag"></i>
                         <span class="cart-count"><?= isset($_SESSION['cart_count']) ? $_SESSION['cart_count'] : 0 ?></span>
+                        <!-- Mini-cart dropdown -->
+                        <div class="mini-cart-dropdown absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 hidden group-hover:block group-focus-within:block transition-all duration-200" style="min-width:320px;">
+                            <div id="mini-cart-content" class="p-4">
+                                <div class="text-center text-gray-500 py-6">Your cart is empty.</div>
+                            </div>
+                        </div>
                     </a>
                 </div>
                 <button class="mobile-menu-toggle md:hidden" aria-label="Toggle Menu">
@@ -876,6 +888,57 @@ require_once __DIR__ . '/../../includes/auth.php';
                 btn.textContent = originalText;
                 btn.disabled = false;
             });
+        });
+
+        // Mini-cart AJAX update logic
+        function fetchMiniCart() {
+            fetch('index.php?page=cart&action=mini', {
+                credentials: 'same-origin'
+            })
+            .then(response => response.json())
+            .then(data => {
+                const miniCartContent = document.getElementById('mini-cart-content');
+                if (!miniCartContent) return;
+                if (!data.items || data.items.length === 0) {
+                    miniCartContent.innerHTML = '<div class="text-center text-gray-500 py-6">Your cart is empty.</div>';
+                    return;
+                }
+                let html = '<ul class="divide-y divide-gray-200">';
+                data.items.forEach(item => {
+                    html += `<li class="flex items-center gap-3 py-3">
+                        <img src="${item.product.image_url || '/images/placeholder.jpg'}" alt="${item.product.name}" class="w-14 h-14 object-cover rounded border">
+                        <div class="flex-1">
+                            <div class="font-semibold text-gray-800">${item.product.name}</div>
+                            <div class="text-sm text-gray-500">Qty: ${item.quantity}</div>
+                        </div>
+                        <div class="font-semibold text-accent">$${(item.product.price * item.quantity).toFixed(2)}</div>
+                    </li>`;
+                });
+                html += '</ul>';
+                html += `<div class="flex justify-between items-center mt-4">
+                    <span class="font-semibold text-gray-700">Subtotal:</span>
+                    <span class="font-bold text-primary">$${data.subtotal.toFixed(2)}</span>
+                </div>`;
+                html += `<div class="mt-4 text-center">
+                    <a href="index.php?page=cart" class="btn btn-secondary w-full mb-2">View Cart</a>
+                    <a href="index.php?page=checkout" class="btn btn-primary w-full">Checkout</a>
+                </div>`;
+                miniCartContent.innerHTML = html;
+            })
+            .catch(() => {
+                const miniCartContent = document.getElementById('mini-cart-content');
+                if (miniCartContent) {
+                    miniCartContent.innerHTML = '<div class="text-center text-red-500 py-6">Could not load cart.</div>';
+                }
+            });
+        }
+        // Fetch mini-cart on page load
+        document.addEventListener('DOMContentLoaded', fetchMiniCart);
+        // Update mini-cart after cart actions
+        document.body.addEventListener('click', function(e) {
+            if (e.target.closest('.add-to-cart') || e.target.closest('.remove-from-cart') || e.target.closest('.update-cart')) {
+                setTimeout(fetchMiniCart, 400);
+            }
         });
     </script>
 </body>

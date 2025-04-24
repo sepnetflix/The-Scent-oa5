@@ -3,13 +3,22 @@
 <?php
 require_once __DIR__ . '/BaseController.php';
 require_once __DIR__ . '/../models/Product.php';
+require_once __DIR__ . '/../models/Cart.php';
 
 class CartController extends BaseController {
     private $productModel;
+    private $cartModel = null;
+    private $isLoggedIn = false;
+    private $userId = null;
     
     public function __construct($pdo) {
         parent::__construct($pdo);
         $this->productModel = new Product($pdo);
+        $this->userId = $_SESSION['user_id'] ?? null;
+        $this->isLoggedIn = $this->userId !== null;
+        if ($this->isLoggedIn) {
+            $this->cartModel = new Cart($pdo, $this->userId);
+        }
         $this->initCart();
     }
     
@@ -18,43 +27,58 @@ class CartController extends BaseController {
             $_SESSION['cart'] = [];
         }
     }
-    
+
+    // Call this after login to merge session cart into DB cart
+    public static function mergeSessionCartOnLogin($pdo, $userId) {
+        if (!empty($_SESSION['cart'])) {
+            require_once __DIR__ . '/../models/Cart.php';
+            $cartModel = new Cart($pdo, $userId);
+            $cartModel->mergeSessionCart($_SESSION['cart']);
+            $_SESSION['cart'] = [];
+        }
+    }
+
     public function showCart() {
         $cartItems = [];
         $total = 0;
-        
-        // Get full product details for cart items
-        foreach ($_SESSION['cart'] as $productId => $quantity) {
-            $product = $this->productModel->getById($productId);
-            if ($product) {
+        if ($this->isLoggedIn) {
+            $items = $this->cartModel->getItems();
+            foreach ($items as $item) {
                 $cartItems[] = [
-                    'product' => $product,
-                    'quantity' => $quantity,
-                    'subtotal' => $product['price'] * $quantity
+                    'product' => $item,
+                    'quantity' => $item['quantity'],
+                    'subtotal' => $item['price'] * $item['quantity']
                 ];
-                $total += $product['price'] * $quantity;
+                $total += $item['price'] * $item['quantity'];
+            }
+        } else {
+            foreach ($_SESSION['cart'] as $productId => $quantity) {
+                $product = $this->productModel->getById($productId);
+                if ($product) {
+                    $cartItems[] = [
+                        'product' => $product,
+                        'quantity' => $quantity,
+                        'subtotal' => $product['price'] * $quantity
+                    ];
+                    $total += $product['price'] * $quantity;
+                }
             }
         }
-        
         $csrfToken = $this->getCsrfToken();
         require_once __DIR__ . '/../views/cart.php';
     }
-    
+
     public function addToCart() {
         $this->validateCSRF();
-        
         $productId = $this->validateInput($_POST['product_id'] ?? null, 'int');
         $quantity = (int)$this->validateInput($_POST['quantity'] ?? 1, 'int');
-        
         if (!$productId || $quantity < 1) {
             $this->jsonResponse(['success' => false, 'message' => 'Invalid product or quantity'], 400);
         }
-        
         $product = $this->productModel->getById($productId);
         if (!$product) {
             $this->jsonResponse(['success' => false, 'message' => 'Product not found'], 404);
         }
-        
         // Check stock availability
         if (!$this->productModel->isInStock($productId, $quantity)) {
             $stockInfo = $this->productModel->checkStock($productId);
@@ -62,36 +86,32 @@ class CartController extends BaseController {
             $this->jsonResponse([
                 'success' => false,
                 'message' => 'Insufficient stock',
-                'cart_count' => array_sum($_SESSION['cart']),
+                'cart_count' => $this->getCartCount(),
                 'stock_status' => $stockStatus
             ], 400);
         }
-        
-        // Add or update quantity
-        if (isset($_SESSION['cart'][$productId])) {
-            $newQuantity = $_SESSION['cart'][$productId] + $quantity;
-            // Recheck stock for total quantity
-            if (!$this->productModel->isInStock($productId, $newQuantity)) {
-                $stockInfo = $this->productModel->checkStock($productId);
-                $stockStatus = 'out_of_stock';
-                $this->jsonResponse([
-                    'success' => false,
-                    'message' => 'Insufficient stock for requested quantity',
-                    'cart_count' => array_sum($_SESSION['cart']),
-                    'stock_status' => $stockStatus
-                ], 400);
-            }
-            $_SESSION['cart'][$productId] = $newQuantity;
+        if ($this->isLoggedIn) {
+            $this->cartModel->addItem($productId, $quantity);
         } else {
-            $_SESSION['cart'][$productId] = $quantity;
+            if (isset($_SESSION['cart'][$productId])) {
+                $newQuantity = $_SESSION['cart'][$productId] + $quantity;
+                if (!$this->productModel->isInStock($productId, $newQuantity)) {
+                    $this->jsonResponse([
+                        'success' => false,
+                        'message' => 'Insufficient stock for requested quantity',
+                        'cart_count' => $this->getCartCount(),
+                        'stock_status' => 'out_of_stock'
+                    ], 400);
+                }
+                $_SESSION['cart'][$productId] = $newQuantity;
+            } else {
+                $_SESSION['cart'][$productId] = $quantity;
+            }
         }
-        
-        $cartCount = array_sum($_SESSION['cart']);
+        $cartCount = $this->getCartCount();
         $_SESSION['cart_count'] = $cartCount;
-        
-        // Determine stock status for response
         $stockInfo = $this->productModel->checkStock($productId);
-        $currentStock = $stockInfo ? ($stockInfo['stock_quantity'] - $_SESSION['cart'][$productId]) : 0;
+        $currentStock = $stockInfo ? ($stockInfo['stock_quantity'] - $quantity) : 0;
         $stockStatus = 'in_stock';
         if ($stockInfo) {
             if (!$stockInfo['backorder_allowed']) {
@@ -102,15 +122,12 @@ class CartController extends BaseController {
                 }
             }
         }
-        
-        // Audit log for add to cart
-        $userId = $_SESSION['user_id'] ?? null;
+        $userId = $this->userId;
         $this->logAuditTrail('cart_add', $userId, [
             'product_id' => $productId,
             'quantity' => $quantity,
             'ip' => $_SERVER['REMOTE_ADDR'] ?? null
         ]);
-        
         $this->jsonResponse([
             'success' => true,
             'message' => htmlspecialchars($product['name']) . ' added to cart',
@@ -118,66 +135,79 @@ class CartController extends BaseController {
             'stock_status' => $stockStatus
         ]);
     }
-    
+
     public function updateCart() {
         $this->validateCSRF();
-        
         $updates = $_POST['updates'] ?? [];
         $stockErrors = [];
-        
-        foreach ($updates as $productId => $quantity) {
-            $productId = $this->validateInput($productId, 'int');
-            $quantity = (int)$this->validateInput($quantity, 'int');
-            
-            if ($quantity > 0) {
-                // Validate stock
-                if (!$this->productModel->isInStock($productId, $quantity)) {
-                    $product = $this->productModel->getById($productId);
-                    $stockErrors[] = "{$product['name']} has insufficient stock";
-                    continue;
+        if ($this->isLoggedIn) {
+            foreach ($updates as $productId => $quantity) {
+                $productId = $this->validateInput($productId, 'int');
+                $quantity = (int)$this->validateInput($quantity, 'int');
+                if ($quantity > 0) {
+                    if (!$this->productModel->isInStock($productId, $quantity)) {
+                        $product = $this->productModel->getById($productId);
+                        $stockErrors[] = "{$product['name']} has insufficient stock";
+                        continue;
+                    }
+                    $this->cartModel->updateItem($productId, $quantity);
+                } else {
+                    $this->cartModel->removeItem($productId);
                 }
-                $_SESSION['cart'][$productId] = $quantity;
-            } else {
-                unset($_SESSION['cart'][$productId]);
+            }
+        } else {
+            foreach ($updates as $productId => $quantity) {
+                $productId = $this->validateInput($productId, 'int');
+                $quantity = (int)$this->validateInput($quantity, 'int');
+                if ($quantity > 0) {
+                    if (!$this->productModel->isInStock($productId, $quantity)) {
+                        $product = $this->productModel->getById($productId);
+                        $stockErrors[] = "{$product['name']} has insufficient stock";
+                        continue;
+                    }
+                    $_SESSION['cart'][$productId] = $quantity;
+                } else {
+                    unset($_SESSION['cart'][$productId]);
+                }
             }
         }
-        
         $this->jsonResponse([
             'success' => empty($stockErrors),
             'message' => empty($stockErrors) ? 'Cart updated' : 'Some items have insufficient stock',
-            'cartCount' => array_sum($_SESSION['cart']),
+            'cartCount' => $this->getCartCount(),
             'errors' => $stockErrors
         ]);
     }
-    
+
     public function removeFromCart() {
         $this->validateCSRF();
-        
         $productId = $this->validateInput($_POST['product_id'] ?? null, 'int');
-        
-        if (!$productId || !isset($_SESSION['cart'][$productId])) {
-            $this->jsonResponse(['success' => false, 'message' => 'Product not found in cart'], 404);
+        if ($this->isLoggedIn) {
+            $this->cartModel->removeItem($productId);
+        } else {
+            if (!$productId || !isset($_SESSION['cart'][$productId])) {
+                $this->jsonResponse(['success' => false, 'message' => 'Product not found in cart'], 404);
+            }
+            unset($_SESSION['cart'][$productId]);
         }
-        
-        unset($_SESSION['cart'][$productId]);
-        
-        // Audit log for remove from cart
-        $userId = $_SESSION['user_id'] ?? null;
+        $userId = $this->userId;
         $this->logAuditTrail('cart_remove', $userId, [
             'product_id' => $productId,
             'ip' => $_SERVER['REMOTE_ADDR'] ?? null
         ]);
-        
         $this->jsonResponse([
             'success' => true,
             'message' => 'Product removed from cart',
-            'cartCount' => array_sum($_SESSION['cart'])
+            'cartCount' => $this->getCartCount()
         ]);
     }
-    
+
     public function clearCart() {
-        $_SESSION['cart'] = [];
-        
+        if ($this->isLoggedIn) {
+            $this->cartModel->clearCart();
+        } else {
+            $_SESSION['cart'] = [];
+        }
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $this->validateCSRF();
             $this->jsonResponse([
@@ -189,36 +219,106 @@ class CartController extends BaseController {
             $this->redirect('cart');
         }
     }
-    
+
     public function validateCartStock() {
         $errors = [];
-        
-        foreach ($_SESSION['cart'] as $productId => $quantity) {
-            if (!$this->productModel->isInStock($productId, $quantity)) {
-                $product = $this->productModel->getById($productId);
-                $errors[] = "{$product['name']} has insufficient stock";
+        $cart = $this->isLoggedIn ? $this->cartModel->getItems() : $_SESSION['cart'];
+        if ($this->isLoggedIn) {
+            foreach ($cart as $item) {
+                if (!$this->productModel->isInStock($item['product_id'], $item['quantity'])) {
+                    $errors[] = "{$item['name']} has insufficient stock";
+                }
+            }
+        } else {
+            foreach ($cart as $productId => $quantity) {
+                if (!$this->productModel->isInStock($productId, $quantity)) {
+                    $product = $this->productModel->getById($productId);
+                    $errors[] = "{$product['name']} has insufficient stock";
+                }
             }
         }
-        
         return $errors;
     }
-    
+
     public function getCartItems() {
         $this->initCart();
         $cartItems = [];
-        
-        foreach ($_SESSION['cart'] as $productId => $quantity) {
-            $product = $this->productModel->getById($productId);
-            if ($product) {
+        if ($this->isLoggedIn) {
+            $items = $this->cartModel->getItems();
+            foreach ($items as $item) {
                 $cartItems[] = [
-                    'product' => $product,
-                    'quantity' => $quantity,
-                    'subtotal' => $product['price'] * $quantity
+                    'product' => $item,
+                    'quantity' => $item['quantity'],
+                    'subtotal' => $item['price'] * $item['quantity']
                 ];
             }
+        } else {
+            foreach ($_SESSION['cart'] as $productId => $quantity) {
+                $product = $this->productModel->getById($productId);
+                if ($product) {
+                    $cartItems[] = [
+                        'product' => $product,
+                        'quantity' => $quantity,
+                        'subtotal' => $product['price'] * $quantity
+                    ];
+                }
+            }
         }
-        
         return $cartItems;
+    }
+
+    private function getCartCount() {
+        if ($this->isLoggedIn) {
+            $items = $this->cartModel->getItems();
+            $count = 0;
+            foreach ($items as $item) {
+                $count += $item['quantity'];
+            }
+            return $count;
+        } else {
+            return array_sum($_SESSION['cart']);
+        }
+    }
+
+    public function mini() {
+        $this->initCart();
+        $items = [];
+        $subtotal = 0;
+        if ($this->isLoggedIn) {
+            $cartItems = $this->cartModel->getItems();
+            foreach ($cartItems as $item) {
+                $items[] = [
+                    'product' => [
+                        'id' => $item['id'],
+                        'name' => $item['name'],
+                        'image_url' => $item['image_url'],
+                        'price' => $item['price']
+                    ],
+                    'quantity' => $item['quantity']
+                ];
+                $subtotal += $item['price'] * $item['quantity'];
+            }
+        } else {
+            foreach ($_SESSION['cart'] as $productId => $quantity) {
+                $product = $this->productModel->getById($productId);
+                if ($product) {
+                    $items[] = [
+                        'product' => [
+                            'id' => $product['id'],
+                            'name' => $product['name'],
+                            'image_url' => $product['image_url'],
+                            'price' => $product['price']
+                        ],
+                        'quantity' => $quantity
+                    ];
+                    $subtotal += $product['price'] * $quantity;
+                }
+            }
+        }
+        $this->jsonResponse([
+            'items' => $items,
+            'subtotal' => $subtotal
+        ]);
     }
 }
 ```
@@ -244,13 +344,13 @@ class ProductController extends BaseController {
             $featuredProducts = $this->productModel->getFeatured();
             
             if (empty($featuredProducts)) {
-                error_log("No featured products found");
+                $this->logSecurityEvent('no_featured_products', null, ['ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             }
             
             $csrfToken = $this->getCsrfToken();
             require_once __DIR__ . '/../views/home.php';
         } catch (Exception $e) {
-            error_log("Error in showHomePage: " . $e->getMessage());
+            $this->logSecurityEvent('error_show_home', null, ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             $this->setFlashMessage('An error occurred while loading the page', 'error');
             $this->redirect('error');
         }
@@ -302,10 +402,6 @@ class ProductController extends BaseController {
                 $params[] = $maxPrice;
             }
             
-            // Debug logging for diagnosis
-            error_log("[showProductList] conditions: " . json_encode($conditions));
-            error_log("[showProductList] params: " . json_encode($params));
-            
             // Get total count for pagination
             $totalProducts = $this->productModel->getCount($conditions, $params);
             $totalPages = ceil($totalProducts / $this->itemsPerPage);
@@ -353,7 +449,7 @@ class ProductController extends BaseController {
             require_once __DIR__ . '/../views/products.php';
             
         } catch (Exception $e) {
-            error_log("Error loading product list: " . $e->getMessage());
+            $this->logSecurityEvent('error_show_product_list', null, ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             $this->setFlashMessage('Error loading products', 'error');
             $this->redirect('error');
         }
@@ -1114,26 +1210,6 @@ document.addEventListener('DOMContentLoaded', function() {
             <!-- Filters Sidebar -->
             <aside class="filters-sidebar" data-aos="fade-right">
                 <div class="filters-section">
-                    <h2>Categories</h2>
-                    <ul class="category-list">
-                        <li>
-                            <a href="index.php?page=products" 
-                               class="<?= empty($_GET['category']) ? 'active' : '' ?>">
-                                All Products
-                            </a>
-                        </li>
-                        <?php foreach ($categories as $cat): ?>
-                            <li>
-                                <a href="index.php?page=products&category=<?= urlencode($cat['id']) ?>"
-                                   class="<?= (isset($_GET['category']) && $_GET['category'] == $cat['id']) ? 'active' : '' ?>">
-                                    <?= htmlspecialchars($cat['name']) ?>
-                                </a>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                </div>
-                
-                <div class="filters-section">
                     <h2>Price Range</h2>
                     <div class="price-range">
                         <div class="range-inputs">
@@ -1150,6 +1226,22 @@ document.addEventListener('DOMContentLoaded', function() {
             
             <!-- Products Grid -->
             <div class="products-content">
+                <!-- Horizontal Category Filter Bar -->
+                <div class="category-filter-bar mb-6 pb-4 border-b border-gray-200" data-aos="fade-up">
+                    <nav class="flex flex-wrap gap-x-4 gap-y-2 items-center">
+                        <a href="index.php?page=products"
+                           class="category-link <?= empty($_GET['category']) ? 'active' : '' ?>">
+                            All Products
+                        </a>
+                        <?php foreach ($categories as $cat): ?>
+                            <a href="index.php?page=products&category=<?= urlencode($cat['id']) ?>"
+                               class="category-link <?= (isset($_GET['category']) && $_GET['category'] == $cat['id']) ? 'active' : '' ?>">
+                                <?= htmlspecialchars($cat['name']) ?>
+                            </a>
+                        <?php endforeach; ?>
+                    </nav>
+                </div>
+                
                 <div class="products-toolbar" data-aos="fade-up">
                     <div class="showing-products">
                         Showing <?= count($products) ?> products
@@ -1282,6 +1374,21 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
     </div>
 </section>
+
+<style>
+    .category-link {
+        color: #4B5563;
+        padding: 0.25rem 0.75rem;
+        border-radius: 0.375rem;
+        transition: background 0.2s, color 0.2s;
+        text-decoration: none;
+    }
+    .category-link.active {
+        color: #1A4D5A;
+        font-weight: 600;
+        background: #A0C1B1;
+    }
+</style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -1425,22 +1532,29 @@ class Product {
     }
     
     public function getAllCategories() {
-        $stmt = $this->pdo->query("SELECT id, name FROM categories ORDER BY name ASC");
+        // Select distinct names and the minimum ID associated with each unique name
+        $stmt = $this->pdo->query("
+            SELECT MIN(id) as id, name
+            FROM categories
+            GROUP BY name
+            ORDER BY name ASC
+        ");
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
     
-    public function getFiltered($conditions = [], $params = [], $sortBy = 'name_asc', $limit = null, $offset = null) {
-        // Prefix ambiguous columns in conditions
+    public function getFiltered($conditions = [], $params = [], $sortBy = 'name_asc', $limit = 12, $offset = 0) {
         $fixedConditions = array_map(function($cond) {
-            $cond = preg_replace('/\bname\b/', 'p.name', $cond);
-            $cond = preg_replace('/\bdescription\b/', 'p.description', $cond);
+            $cond = preg_replace('/\\bname\\b/', 'p.name', $cond);
+            $cond = preg_replace('/\\bdescription\\b/', 'p.description', $cond);
+            $cond = preg_replace('/\\bprice\\b/', 'p.price', $cond);
+            $cond = preg_replace('/\\bcategory_id\\b/', 'p.category_id', $cond);
             return $cond;
         }, $conditions);
         $sql = "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id";
         if (!empty($fixedConditions)) {
             $sql .= " WHERE " . implode(" AND ", $fixedConditions);
         }
-        // Add sorting
+        // Sorting
         switch ($sortBy) {
             case 'price_asc':
                 $sql .= " ORDER BY p.price ASC";
@@ -1454,18 +1568,26 @@ class Product {
             case 'name_asc':
             default:
                 $sql .= " ORDER BY p.name ASC";
+                break;
         }
-        if ($limit !== null) {
-            $sql .= " LIMIT " . (int)$limit;
-            if ($offset !== null) {
-                $sql .= " OFFSET " . (int)$offset;
-            }
-        }
+        $sql .= " LIMIT ? OFFSET ?";
+        $params[] = (int)$limit;
+        $params[] = (int)$offset;
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
-        return $stmt->fetchAll();
+        $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Decode JSON fields if present
+        foreach ($products as &$product) {
+            if (isset($product['benefits'])) {
+                $product['benefits'] = json_decode($product['benefits'], true) ?? [];
+            }
+            if (isset($product['gallery_images'])) {
+                $product['gallery_images'] = json_decode($product['gallery_images'], true) ?? [];
+            }
+        }
+        return $products;
     }
-    
+
     public function getPriceRange() {
         $stmt = $this->pdo->query("
             SELECT MIN(price) as min_price, MAX(price) as max_price 
@@ -1599,9 +1721,27 @@ class Product {
     }
 
     public function getCount($conditions = [], $params = []) {
-        $sql = "SELECT COUNT(*) as count FROM products";
-        if (!empty($conditions)) {
-            $sql .= " WHERE " . implode(" AND ", $conditions);
+        // Ensure this prefixing matches getFiltered if ambiguous columns are possible
+        $fixedConditions = array_map(function($cond) {
+            $cond = preg_replace('/\\bname\\b/', 'p.name', $cond);
+            $cond = preg_replace('/\\bdescription\\b/', 'p.description', $cond);
+            $cond = preg_replace('/\\bprice\\b/', 'p.price', $cond);
+            $cond = preg_replace('/\\bcategory_id\\b/', 'p.category_id', $cond);
+            return $cond;
+        }, $conditions);
+        $needsCategoryJoin = false;
+        foreach($fixedConditions as $cond) {
+            if (strpos($cond, 'c.') !== false) {
+                $needsCategoryJoin = true;
+                break;
+            }
+        }
+        $sql = "SELECT COUNT(p.id) as count FROM products p";
+        if ($needsCategoryJoin) {
+            $sql .= " LEFT JOIN categories c ON p.category_id = c.id";
+        }
+        if (!empty($fixedConditions)) {
+            $sql .= " WHERE " . implode(" AND ", $fixedConditions);
         }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);

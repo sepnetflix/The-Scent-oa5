@@ -183,6 +183,57 @@
                 btn.disabled = false;
             });
         });
+
+        // Mini-cart AJAX update logic
+        function fetchMiniCart() {
+            fetch('index.php?page=cart&action=mini', {
+                credentials: 'same-origin'
+            })
+            .then(response => response.json())
+            .then(data => {
+                const miniCartContent = document.getElementById('mini-cart-content');
+                if (!miniCartContent) return;
+                if (!data.items || data.items.length === 0) {
+                    miniCartContent.innerHTML = '<div class="text-center text-gray-500 py-6">Your cart is empty.</div>';
+                    return;
+                }
+                let html = '<ul class="divide-y divide-gray-200">';
+                data.items.forEach(item => {
+                    html += `<li class="flex items-center gap-3 py-3">
+                        <img src="${item.product.image_url || '/images/placeholder.jpg'}" alt="${item.product.name}" class="w-14 h-14 object-cover rounded border">
+                        <div class="flex-1">
+                            <div class="font-semibold text-gray-800">${item.product.name}</div>
+                            <div class="text-sm text-gray-500">Qty: ${item.quantity}</div>
+                        </div>
+                        <div class="font-semibold text-accent">$${(item.product.price * item.quantity).toFixed(2)}</div>
+                    </li>`;
+                });
+                html += '</ul>';
+                html += `<div class="flex justify-between items-center mt-4">
+                    <span class="font-semibold text-gray-700">Subtotal:</span>
+                    <span class="font-bold text-primary">$${data.subtotal.toFixed(2)}</span>
+                </div>`;
+                html += `<div class="mt-4 text-center">
+                    <a href="index.php?page=cart" class="btn btn-secondary w-full mb-2">View Cart</a>
+                    <a href="index.php?page=checkout" class="btn btn-primary w-full">Checkout</a>
+                </div>`;
+                miniCartContent.innerHTML = html;
+            })
+            .catch(() => {
+                const miniCartContent = document.getElementById('mini-cart-content');
+                if (miniCartContent) {
+                    miniCartContent.innerHTML = '<div class="text-center text-red-500 py-6">Could not load cart.</div>';
+                }
+            });
+        }
+        // Fetch mini-cart on page load
+        document.addEventListener('DOMContentLoaded', fetchMiniCart);
+        // Update mini-cart after cart actions
+        document.body.addEventListener('click', function(e) {
+            if (e.target.closest('.add-to-cart') || e.target.closest('.remove-from-cart') || e.target.closest('.update-cart')) {
+                setTimeout(fetchMiniCart, 400);
+            }
+        });
     </script>
 </body>
 </html>

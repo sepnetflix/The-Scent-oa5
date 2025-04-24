@@ -108,9 +108,15 @@ require_once __DIR__ . '/../../includes/auth.php';
                     <?php else: ?>
                         <a href="index.php?page=login" aria-label="Login"><i class="fas fa-user"></i></a>
                     <?php endif; ?>
-                    <a href="index.php?page=cart" class="cart-link" aria-label="Cart">
+                    <a href="index.php?page=cart" class="cart-link relative group" aria-label="Cart">
                         <i class="fas fa-shopping-bag"></i>
                         <span class="cart-count"><?= isset($_SESSION['cart_count']) ? $_SESSION['cart_count'] : 0 ?></span>
+                        <!-- Mini-cart dropdown -->
+                        <div class="mini-cart-dropdown absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 hidden group-hover:block group-focus-within:block transition-all duration-200" style="min-width:320px;">
+                            <div id="mini-cart-content" class="p-4">
+                                <div class="text-center text-gray-500 py-6">Your cart is empty.</div>
+                            </div>
+                        </div>
                     </a>
                 </div>
                 <button class="mobile-menu-toggle md:hidden" aria-label="Toggle Menu">

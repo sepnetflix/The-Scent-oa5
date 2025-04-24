@@ -481,7 +481,9 @@ class AccountController extends BaseController {
                 
                 // Success - create session
                 $this->createSecureSession($user);
-                
+                // Merge session cart into DB cart
+                require_once __DIR__ . '/CartController.php';
+                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
                 // Audit log
                 $this->logAuditEvent('login_success', $user['id']);
                 

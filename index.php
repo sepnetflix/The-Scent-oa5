@@ -1,5 +1,4 @@
 <?php
-echo '<!-- DEBUG: index.php loaded -->';
 define('ROOT_PATH', __DIR__);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/db.php';
@@ -47,6 +46,12 @@ try {
             if ($action === 'add' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 // AJAX Add to Cart endpoint
                 $controller->addToCart();
+                // jsonResponse will exit
+            }
+            
+            if ($action === 'mini') {
+                // AJAX Mini Cart endpoint
+                $controller->mini();
                 // jsonResponse will exit
             }
             

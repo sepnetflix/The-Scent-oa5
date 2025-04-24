@@ -483,7 +483,9 @@ class AccountController extends BaseController {
                 
                 // Success - create session
                 $this->createSecureSession($user);
-                
+                // Merge session cart into DB cart
+                require_once __DIR__ . '/CartController.php';
+                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
                 // Audit log
                 $this->logAuditEvent('login_success', $user['id']);
                 
@@ -902,60 +904,57 @@ class CheckoutController extends BaseController {
     }
     
     public function showCheckout() {
-        $this->requireLogin();
-        
-        if (empty($_SESSION['cart'])) {
-            $this->redirect('cart');
-        }
-        
+        $isLoggedIn = isset($_SESSION['user_id']);
         $cartItems = [];
         $subtotal = 0;
-        
-        // Get cart items
-        foreach ($_SESSION['cart'] as $productId => $quantity) {
-            $product = $this->productModel->getById($productId);
-            if ($product) {
+        if ($isLoggedIn) {
+            require_once __DIR__ . '/../models/Cart.php';
+            $cartModel = new \Cart($this->pdo, $_SESSION['user_id']);
+            $items = $cartModel->getItems();
+            foreach ($items as $item) {
                 $cartItems[] = [
-                    'product' => $product,
-                    'quantity' => $quantity,
-                    'subtotal' => $product['price'] * $quantity
+                    'product' => $item,
+                    'quantity' => $item['quantity'],
+                    'subtotal' => $item['price'] * $item['quantity']
                 ];
-                $subtotal += $product['price'] * $quantity;
+                $subtotal += $item['price'] * $item['quantity'];
+            }
+        } else {
+            if (empty($_SESSION['cart'])) {
+                $this->redirect('cart');
+            }
+            foreach ($_SESSION['cart'] as $productId => $quantity) {
+                $product = $this->productModel->getById($productId);
+                if ($product) {
+                    $cartItems[] = [
+                        'product' => $product,
+                        'quantity' => $quantity,
+                        'subtotal' => $product['price'] * $quantity
+                    ];
+                    $subtotal += $product['price'] * $quantity;
+                }
             }
         }
-        
-        // Calculate initial tax (0% until country is selected)
         $tax_rate_formatted = '0%';
         $tax_amount = 0;
-        
-        // Calculate shipping cost
         $shipping_cost = $subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
-        
-        // Calculate total
         $total = $subtotal + $shipping_cost + $tax_amount;
-        
         require_once __DIR__ . '/../views/checkout.php';
     }
     
     public function calculateTax() {
-        $this->validateCSRF(); // Enforce CSRF validation for AJAX tax calculation
-        
+        $this->validateCSRF();
         $data = json_decode(file_get_contents('php://input'), true);
         $country = $this->validateInput($data['country'] ?? '', 'string');
         $state = $this->validateInput($data['state'] ?? '', 'string');
-        
         if (empty($country)) {
             $this->jsonResponse(['success' => false, 'error' => 'Country is required'], 400);
         }
-        
         $subtotal = $this->calculateCartSubtotal();
         $shipping_cost = $subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
-        
         $tax_amount = $this->taxController->calculateTax($subtotal, $country, $state);
         $tax_rate = $this->taxController->getTaxRate($country, $state);
-        
         $total = $subtotal + $shipping_cost + $tax_amount;
-        
         $this->jsonResponse([
             'success' => true,
             'tax_rate_formatted' => $this->taxController->formatTaxRate($tax_rate),
@@ -965,61 +964,74 @@ class CheckoutController extends BaseController {
     }
     
     private function calculateCartSubtotal() {
+        $isLoggedIn = isset($_SESSION['user_id']);
         $subtotal = 0;
-        
-        foreach ($_SESSION['cart'] as $productId => $quantity) {
-            $product = $this->productModel->getById($productId);
-            if ($product) {
-                $subtotal += $product['price'] * $quantity;
+        if ($isLoggedIn) {
+            require_once __DIR__ . '/../models/Cart.php';
+            $cartModel = new \Cart($this->pdo, $_SESSION['user_id']);
+            $items = $cartModel->getItems();
+            foreach ($items as $item) {
+                $subtotal += $item['price'] * $item['quantity'];
+            }
+        } else {
+            foreach ($_SESSION['cart'] as $productId => $quantity) {
+                $product = $this->productModel->getById($productId);
+                if ($product) {
+                    $subtotal += $product['price'] * $quantity;
+                }
             }
         }
-        
         return $subtotal;
     }
     
     public function processCheckout() {
         $this->requireLogin();
         $this->validateCSRF();
-        
-        if (empty($_SESSION['cart'])) {
-            $this->redirect('cart');
+        $isLoggedIn = isset($_SESSION['user_id']);
+        $cartItems = [];
+        $subtotal = 0;
+        if ($isLoggedIn) {
+            require_once __DIR__ . '/../models/Cart.php';
+            $cartModel = new \Cart($this->pdo, $_SESSION['user_id']);
+            $items = $cartModel->getItems();
+            foreach ($items as $item) {
+                $cartItems[$item['id']] = $item['quantity'];
+                $subtotal += $item['price'] * $item['quantity'];
+            }
+        } else {
+            if (empty($_SESSION['cart'])) {
+                $this->redirect('cart');
+            }
+            foreach ($_SESSION['cart'] as $productId => $quantity) {
+                $cartItems[$productId] = $quantity;
+                $product = $this->productModel->getById($productId);
+                if ($product) {
+                    $subtotal += $product['price'] * $quantity;
+                }
+            }
         }
-        
-        // Validate form data
         $required = ['shipping_name', 'shipping_email', 'shipping_address', 'shipping_city', 
                     'shipping_state', 'shipping_zip', 'shipping_country'];
-                    
         foreach ($required as $field) {
             if (empty($_POST[$field])) {
                 $this->setFlashMessage('Please fill in all required fields.', 'error');
                 $this->redirect('checkout');
             }
         }
-        
         try {
             $this->beginTransaction();
-            
-            // Validate stock levels before proceeding
-            $stockErrors = $this->validateCartStock();
+            $stockErrors = $this->validateCartStock($cartItems);
             if (!empty($stockErrors)) {
                 throw new Exception('Some items are out of stock: ' . implode(', ', $stockErrors));
             }
-            
-            $subtotal = $this->calculateCartSubtotal();
             $shipping_cost = $subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
-            
-            // Calculate tax
             $tax_amount = $this->taxController->calculateTax(
                 $subtotal,
                 $this->validateInput($_POST['shipping_country'], 'string'),
                 $this->validateInput($_POST['shipping_state'], 'string')
             );
-            
             $total = $subtotal + $shipping_cost + $tax_amount;
-            
-            // Create order
             $userId = $this->getUserId();
-            
             $orderData = [
                 'user_id' => $userId,
                 'subtotal' => $subtotal,
@@ -1034,27 +1046,20 @@ class CheckoutController extends BaseController {
                 'shipping_zip' => $this->validateInput($_POST['shipping_zip'], 'string'),
                 'shipping_country' => $this->validateInput($_POST['shipping_country'], 'string')
             ];
-            
             $orderId = $this->orderModel->create($orderData);
-            
-            // Create order items and update inventory
             $stmt = $this->pdo->prepare("
                 INSERT INTO order_items (order_id, product_id, quantity, price)
                 VALUES (?, ?, ?, ?)
             ");
-            
-            foreach ($_SESSION['cart'] as $productId => $quantity) {
+            foreach ($cartItems as $productId => $quantity) {
                 $product = $this->productModel->getById($productId);
                 if ($product) {
-                    // Add order item
                     $stmt->execute([
                         $orderId,
                         $productId,
                         $quantity,
                         $product['price']
                     ]);
-                    
-                    // Update inventory
                     if (!$this->inventoryController->updateStock(
                         $productId,
                         -$quantity,
@@ -1066,42 +1071,33 @@ class CheckoutController extends BaseController {
                     }
                 }
             }
-            
-            // Process payment
             $paymentResult = $this->paymentController->processPayment($orderId);
-            
             if (!$paymentResult['success']) {
                 throw new Exception($paymentResult['error']);
             }
-            
             $this->commit();
-            // Audit log for order placement
             $this->logAuditTrail('order_placed', $userId, [
                 'order_id' => $orderId,
                 'total_amount' => $total,
                 'ip' => $_SERVER['REMOTE_ADDR'] ?? null
             ]);
-            // Send order confirmation email
             $user = $this->getCurrentUser();
             $order = $this->orderModel->getById($orderId);
-            
             $this->emailService->sendOrderConfirmation($order, $user);
-            
-            // Store order ID for confirmation
             $_SESSION['last_order_id'] = $orderId;
-            $_SESSION['cart'] = [];
-            
-            // Return payment intent client secret for Stripe.js
+            if ($isLoggedIn) {
+                $cartModel->clearCart();
+            } else {
+                $_SESSION['cart'] = [];
+            }
             $this->jsonResponse([
                 'success' => true,
                 'orderId' => $orderId,
                 'clientSecret' => $paymentResult['clientSecret']
             ]);
-            
         } catch (Exception $e) {
             $this->rollback();
             error_log($e->getMessage());
-            
             $this->jsonResponse([
                 'success' => false,
                 'error' => 'An error occurred while processing your order. Please try again.'
@@ -1109,16 +1105,35 @@ class CheckoutController extends BaseController {
         }
     }
     
-    private function validateCartStock() {
+    private function validateCartStock($cartItems = null) {
         $errors = [];
-        
-        foreach ($_SESSION['cart'] as $productId => $quantity) {
-            if (!$this->productModel->isInStock($productId, $quantity)) {
-                $product = $this->productModel->getById($productId);
-                $errors[] = "{$product['name']} has insufficient stock";
+        if ($cartItems === null) {
+            $isLoggedIn = isset($_SESSION['user_id']);
+            if ($isLoggedIn) {
+                require_once __DIR__ . '/../models/Cart.php';
+                $cartModel = new \Cart($this->pdo, $_SESSION['user_id']);
+                $items = $cartModel->getItems();
+                foreach ($items as $item) {
+                    if (!$this->productModel->isInStock($item['product_id'], $item['quantity'])) {
+                        $errors[] = "{$item['name']} has insufficient stock";
+                    }
+                }
+            } else {
+                foreach ($_SESSION['cart'] as $productId => $quantity) {
+                    if (!$this->productModel->isInStock($productId, $quantity)) {
+                        $product = $this->productModel->getById($productId);
+                        $errors[] = "{$product['name']} has insufficient stock";
+                    }
+                }
+            }
+        } else {
+            foreach ($cartItems as $productId => $quantity) {
+                if (!$this->productModel->isInStock($productId, $quantity)) {
+                    $product = $this->productModel->getById($productId);
+                    $errors[] = "{$product['name']} has insufficient stock";
+                }
             }
         }
-        
         return $errors;
     }
     
@@ -1129,7 +1144,6 @@ class CheckoutController extends BaseController {
             $this->redirect('products');
         }
         
-        // Get order details
         $stmt = $this->pdo->prepare("
             SELECT o.*, oi.product_id, oi.quantity, oi.price, p.name as product_name
             FROM orders o
@@ -1159,7 +1173,6 @@ class CheckoutController extends BaseController {
             'items' => $orderItems
         ];
         
-        // Clear the stored order ID
         unset($_SESSION['last_order_id']);
         
         require_once __DIR__ . '/../views/order_confirmation.php';
@@ -1178,10 +1191,8 @@ class CheckoutController extends BaseController {
         try {
             $this->beginTransaction();
             
-            // Update order status
             $this->orderModel->updateStatus($orderId, $status);
             
-            // If order is shipped and tracking info provided, update tracking
             if ($status === 'shipped' && $trackingInfo) {
                 $this->orderModel->updateTracking(
                     $orderId,
@@ -1190,7 +1201,6 @@ class CheckoutController extends BaseController {
                     $trackingInfo['url']
                 );
                 
-                // Send shipping notification email
                 $user = (new User($this->pdo))->getById($order['user_id']);
                 $this->emailService->sendShippingUpdate(
                     $order,
