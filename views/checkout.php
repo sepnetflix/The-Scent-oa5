@@ -362,7 +362,8 @@ function setLoading(isLoading) {
     }
 }
 
-initialize();</script>
+initialize();
+</script>
 
 <style>
 .spinner {

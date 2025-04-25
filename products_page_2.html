@@ -13,75 +13,10 @@
     <!-- Styles -->
     <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Custom JS: Tailwind config and all custom JS (must be before Tailwind CDN) -->
+    <script src="/js/main.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#1A4D5A',
-                        'primary-dark': '#164249',
-                        secondary: '#A0C1B1',
-                        accent: '#D4A76A'
-                    },
-                    fontFamily: {
-                        heading: ['Cormorant Garamond', 'serif'],
-                        body: ['Montserrat', 'sans-serif'],
-                        accent: ['Raleway', 'sans-serif']
-                    }
-                }
-            }
-        }
-    </script>
     <link rel="stylesheet" href="/css/style.css">
-    <!-- Scripts: Only mobile menu JS here, remove AOS/Particles.js init from header -->
-    <script>
-        // Initialize mobile menu functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            const mobileMenuToggle = document.querySelector('.mobile-menu-toggle');
-            const mobileMenu = document.getElementById('mobile-menu');
-            let isMenuOpen = false;
-
-            function toggleMenu() {
-                isMenuOpen = !isMenuOpen;
-                mobileMenu.classList.toggle('active');
-                document.body.classList.toggle('menu-open');
-                mobileMenuToggle.innerHTML = isMenuOpen ? 
-                    '<i class="fas fa-times"></i>' : 
-                    '<i class="fas fa-bars"></i>';
-            }
-
-            function closeMenu() {
-                if (isMenuOpen) {
-                    isMenuOpen = false;
-                    mobileMenu.classList.remove('active');
-                    document.body.classList.remove('menu-open');
-                    mobileMenuToggle.innerHTML = '<i class="fas fa-bars"></i>';
-                }
-            }
-
-            mobileMenuToggle?.addEventListener('click', function(e) {
-                e.stopPropagation();
-                toggleMenu();
-            });
-
-            document.addEventListener('click', function(e) {
-                if (isMenuOpen && !e.target.closest('.main-nav')) {
-                    closeMenu();
-                }
-            });
-
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && isMenuOpen) {
-                    closeMenu();
-                }
-            });
-
-            mobileMenu?.querySelectorAll('a').forEach(link => {
-                link.addEventListener('click', closeMenu);
-            });
-        });
-    </script>
 </head>
 <body>
     <header>
@@ -119,9 +54,10 @@
         </nav>
     </header>
     <main>
-        
+        <body class="page-products">
+
 <!-- Output CSRF token for JS (for AJAX add-to-cart) -->
-<input type="hidden" id="csrf-token-value" value="8904f4e6648558460c0617fd66843646a67e082c3eb01af1edc859c29175d869">
+<input type="hidden" id="csrf-token-value" value="7faf8c74a372c1507b951be8ba018da7b985c307caf90936a275d0a9d053886c">
 
 <section class="products-section">
     <div class="container">
@@ -185,7 +121,7 @@
                 
                 <div class="products-toolbar" data-aos="fade-up">
                     <div class="showing-products">
-                        Showing 12 products
+                        Showing 3 products
                     </div>
                     
                     <div class="sort-options">
@@ -211,22 +147,22 @@
                                                     <!-- Modern product card structure, matching home.php/product_detail.php -->
                             <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="0">
                                 <div class="product-image relative h-64 overflow-hidden">
-                                    <a href="index.php?page=product&id=7">
+                                    <a href="index.php?page=product&id=14">
                                         <img src="/images/placeholder.jpg" 
-                                             alt="Citrus Morning Soap" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
+                                             alt="Stress Relief Blend" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
                                     </a>
                                                                     </div>
                                 <div class="product-info p-4 flex flex-col flex-grow text-center">
                                     <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                        <a href="index.php?page=product&id=7">
-                                            Citrus Morning Soap                                        </a>
+                                        <a href="index.php?page=product&id=14">
+                                            Stress Relief Blend                                        </a>
                                     </h3>
-                                                                            <p class="text-sm text-gray-500 mb-2">Natural Soaps</p>
-                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$11.99</p>
+                                                                            <p class="text-sm text-gray-500 mb-2">Diffuser Blends</p>
+                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$28.99</p>
                                     <div class="product-actions mt-auto flex gap-2 justify-center">
-                                        <a href="index.php?page=product&id=7" class="btn btn-primary">View Details</a>
+                                        <a href="index.php?page=product&id=14" class="btn btn-primary">View Details</a>
                                                                                                                             <button class="btn btn-secondary add-to-cart" 
-                                                    data-product-id="7"
+                                                    data-product-id="14"
                                                     data-low-stock="true">
                                                 Add to Cart
                                             </button>
@@ -236,22 +172,22 @@
                                                     <!-- Modern product card structure, matching home.php/product_detail.php -->
                             <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="100">
                                 <div class="product-image relative h-64 overflow-hidden">
-                                    <a href="index.php?page=product&id=10">
+                                    <a href="index.php?page=product&id=4">
                                         <img src="/images/placeholder.jpg" 
-                                             alt="Mountain Air Soap" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
+                                             alt="Rose Harmony Oil" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
                                     </a>
                                                                     </div>
                                 <div class="product-info p-4 flex flex-col flex-grow text-center">
                                     <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                        <a href="index.php?page=product&id=10">
-                                            Mountain Air Soap                                        </a>
+                                        <a href="index.php?page=product&id=4">
+                                            Rose Harmony Oil                                        </a>
                                     </h3>
-                                                                            <p class="text-sm text-gray-500 mb-2">Natural Soaps</p>
-                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$11.99</p>
+                                                                            <p class="text-sm text-gray-500 mb-2">Essential Oils</p>
+                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$29.99</p>
                                     <div class="product-actions mt-auto flex gap-2 justify-center">
-                                        <a href="index.php?page=product&id=10" class="btn btn-primary">View Details</a>
+                                        <a href="index.php?page=product&id=4" class="btn btn-primary">View Details</a>
                                                                                                                             <button class="btn btn-secondary add-to-cart" 
-                                                    data-product-id="10"
+                                                    data-product-id="4"
                                                     data-low-stock="true">
                                                 Add to Cart
                                             </button>
@@ -261,247 +197,22 @@
                                                     <!-- Modern product card structure, matching home.php/product_detail.php -->
                             <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="200">
                                 <div class="product-image relative h-64 overflow-hidden">
-                                    <a href="index.php?page=product&id=6">
+                                    <a href="index.php?page=product&id=15">
                                         <img src="/images/placeholder.jpg" 
-                                             alt="Lavender Dreams Soap" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
+                                             alt="Balance &amp; Harmony" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
                                     </a>
                                                                     </div>
                                 <div class="product-info p-4 flex flex-col flex-grow text-center">
                                     <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                        <a href="index.php?page=product&id=6">
-                                            Lavender Dreams Soap                                        </a>
-                                    </h3>
-                                                                            <p class="text-sm text-gray-500 mb-2">Natural Soaps</p>
-                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$12.99</p>
-                                    <div class="product-actions mt-auto flex gap-2 justify-center">
-                                        <a href="index.php?page=product&id=6" class="btn btn-primary">View Details</a>
-                                                                                                                            <button class="btn btn-secondary add-to-cart" 
-                                                    data-product-id="6"
-                                                    data-low-stock="true">
-                                                Add to Cart
-                                            </button>
-                                                                            </div>
-                                </div>
-                            </div>
-                                                    <!-- Modern product card structure, matching home.php/product_detail.php -->
-                            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="300">
-                                <div class="product-image relative h-64 overflow-hidden">
-                                    <a href="index.php?page=product&id=8">
-                                        <img src="/images/placeholder.jpg" 
-                                             alt="Forest Walk Soap" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
-                                    </a>
-                                                                    </div>
-                                <div class="product-info p-4 flex flex-col flex-grow text-center">
-                                    <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                        <a href="index.php?page=product&id=8">
-                                            Forest Walk Soap                                        </a>
-                                    </h3>
-                                                                            <p class="text-sm text-gray-500 mb-2">Natural Soaps</p>
-                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$12.99</p>
-                                    <div class="product-actions mt-auto flex gap-2 justify-center">
-                                        <a href="index.php?page=product&id=8" class="btn btn-primary">View Details</a>
-                                                                                                                            <button class="btn btn-secondary add-to-cart" 
-                                                    data-product-id="8"
-                                                    data-low-stock="true">
-                                                Add to Cart
-                                            </button>
-                                                                            </div>
-                                </div>
-                            </div>
-                                                    <!-- Modern product card structure, matching home.php/product_detail.php -->
-                            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="400">
-                                <div class="product-image relative h-64 overflow-hidden">
-                                    <a href="index.php?page=product&id=9">
-                                        <img src="/images/placeholder.jpg" 
-                                             alt="Rose Petal Soap" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
-                                    </a>
-                                                                    </div>
-                                <div class="product-info p-4 flex flex-col flex-grow text-center">
-                                    <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                        <a href="index.php?page=product&id=9">
-                                            Rose Petal Soap                                        </a>
-                                    </h3>
-                                                                            <p class="text-sm text-gray-500 mb-2">Natural Soaps</p>
-                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$13.99</p>
-                                    <div class="product-actions mt-auto flex gap-2 justify-center">
-                                        <a href="index.php?page=product&id=9" class="btn btn-primary">View Details</a>
-                                                                                                                            <button class="btn btn-secondary add-to-cart" 
-                                                    data-product-id="9"
-                                                    data-low-stock="true">
-                                                Add to Cart
-                                            </button>
-                                                                            </div>
-                                </div>
-                            </div>
-                                                    <!-- Modern product card structure, matching home.php/product_detail.php -->
-                            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="500">
-                                <div class="product-image relative h-64 overflow-hidden">
-                                    <a href="index.php?page=product&id=5">
-                                        <img src="/images/placeholder.jpg" 
-                                             alt="Eucalyptus Fresh Oil" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
-                                    </a>
-                                                                    </div>
-                                <div class="product-info p-4 flex flex-col flex-grow text-center">
-                                    <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                        <a href="index.php?page=product&id=5">
-                                            Eucalyptus Fresh Oil                                        </a>
-                                    </h3>
-                                                                            <p class="text-sm text-gray-500 mb-2">Essential Oils</p>
-                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$18.99</p>
-                                    <div class="product-actions mt-auto flex gap-2 justify-center">
-                                        <a href="index.php?page=product&id=5" class="btn btn-primary">View Details</a>
-                                                                                                                            <button class="btn btn-secondary add-to-cart" 
-                                                    data-product-id="5"
-                                                    data-low-stock="true">
-                                                Add to Cart
-                                            </button>
-                                                                            </div>
-                                </div>
-                            </div>
-                                                    <!-- Modern product card structure, matching home.php/product_detail.php -->
-                            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="600">
-                                <div class="product-image relative h-64 overflow-hidden">
-                                    <a href="index.php?page=product&id=2">
-                                        <img src="/images/placeholder.jpg" 
-                                             alt="Citrus Burst Oil" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
-                                    </a>
-                                                                    </div>
-                                <div class="product-info p-4 flex flex-col flex-grow text-center">
-                                    <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                        <a href="index.php?page=product&id=2">
-                                            Citrus Burst Oil                                        </a>
-                                    </h3>
-                                                                            <p class="text-sm text-gray-500 mb-2">Essential Oils</p>
-                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$19.99</p>
-                                    <div class="product-actions mt-auto flex gap-2 justify-center">
-                                        <a href="index.php?page=product&id=2" class="btn btn-primary">View Details</a>
-                                                                                                                            <button class="btn btn-secondary add-to-cart" 
-                                                    data-product-id="2"
-                                                    data-low-stock="true">
-                                                Add to Cart
-                                            </button>
-                                                                            </div>
-                                </div>
-                            </div>
-                                                    <!-- Modern product card structure, matching home.php/product_detail.php -->
-                            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="700">
-                                <div class="product-image relative h-64 overflow-hidden">
-                                    <a href="index.php?page=product&id=3">
-                                        <img src="/images/placeholder.jpg" 
-                                             alt="Forest Pine Oil" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
-                                    </a>
-                                                                    </div>
-                                <div class="product-info p-4 flex flex-col flex-grow text-center">
-                                    <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                        <a href="index.php?page=product&id=3">
-                                            Forest Pine Oil                                        </a>
-                                    </h3>
-                                                                            <p class="text-sm text-gray-500 mb-2">Essential Oils</p>
-                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$22.99</p>
-                                    <div class="product-actions mt-auto flex gap-2 justify-center">
-                                        <a href="index.php?page=product&id=3" class="btn btn-primary">View Details</a>
-                                                                                                                            <button class="btn btn-secondary add-to-cart" 
-                                                    data-product-id="3"
-                                                    data-low-stock="true">
-                                                Add to Cart
-                                            </button>
-                                                                            </div>
-                                </div>
-                            </div>
-                                                    <!-- Modern product card structure, matching home.php/product_detail.php -->
-                            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="800">
-                                <div class="product-image relative h-64 overflow-hidden">
-                                    <a href="index.php?page=product&id=1">
-                                        <img src="/images/placeholder.jpg" 
-                                             alt="Lavender Serenity Oil" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
-                                    </a>
-                                                                    </div>
-                                <div class="product-info p-4 flex flex-col flex-grow text-center">
-                                    <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                        <a href="index.php?page=product&id=1">
-                                            Lavender Serenity Oil                                        </a>
-                                    </h3>
-                                                                            <p class="text-sm text-gray-500 mb-2">Essential Oils</p>
-                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$24.99</p>
-                                    <div class="product-actions mt-auto flex gap-2 justify-center">
-                                        <a href="index.php?page=product&id=1" class="btn btn-primary">View Details</a>
-                                                                                                                            <button class="btn btn-secondary add-to-cart" 
-                                                    data-product-id="1"
-                                                    data-low-stock="true">
-                                                Add to Cart
-                                            </button>
-                                                                            </div>
-                                </div>
-                            </div>
-                                                    <!-- Modern product card structure, matching home.php/product_detail.php -->
-                            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="900">
-                                <div class="product-image relative h-64 overflow-hidden">
-                                    <a href="index.php?page=product&id=12">
-                                        <img src="/images/placeholder.jpg" 
-                                             alt="Morning Energy Blend" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
-                                    </a>
-                                                                    </div>
-                                <div class="product-info p-4 flex flex-col flex-grow text-center">
-                                    <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                        <a href="index.php?page=product&id=12">
-                                            Morning Energy Blend                                        </a>
+                                        <a href="index.php?page=product&id=15">
+                                            Balance &amp; Harmony                                        </a>
                                     </h3>
                                                                             <p class="text-sm text-gray-500 mb-2">Diffuser Blends</p>
-                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$25.99</p>
+                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$29.99</p>
                                     <div class="product-actions mt-auto flex gap-2 justify-center">
-                                        <a href="index.php?page=product&id=12" class="btn btn-primary">View Details</a>
+                                        <a href="index.php?page=product&id=15" class="btn btn-primary">View Details</a>
                                                                                                                             <button class="btn btn-secondary add-to-cart" 
-                                                    data-product-id="12"
-                                                    data-low-stock="true">
-                                                Add to Cart
-                                            </button>
-                                                                            </div>
-                                </div>
-                            </div>
-                                                    <!-- Modern product card structure, matching home.php/product_detail.php -->
-                            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="1000">
-                                <div class="product-image relative h-64 overflow-hidden">
-                                    <a href="index.php?page=product&id=13">
-                                        <img src="/images/placeholder.jpg" 
-                                             alt="Focus Master Blend" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
-                                    </a>
-                                                                    </div>
-                                <div class="product-info p-4 flex flex-col flex-grow text-center">
-                                    <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                        <a href="index.php?page=product&id=13">
-                                            Focus Master Blend                                        </a>
-                                    </h3>
-                                                                            <p class="text-sm text-gray-500 mb-2">Diffuser Blends</p>
-                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$26.99</p>
-                                    <div class="product-actions mt-auto flex gap-2 justify-center">
-                                        <a href="index.php?page=product&id=13" class="btn btn-primary">View Details</a>
-                                                                                                                            <button class="btn btn-secondary add-to-cart" 
-                                                    data-product-id="13"
-                                                    data-low-stock="true">
-                                                Add to Cart
-                                            </button>
-                                                                            </div>
-                                </div>
-                            </div>
-                                                    <!-- Modern product card structure, matching home.php/product_detail.php -->
-                            <div class="product-card sample-card bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col" data-aos="zoom-in" data-aos-delay="1100">
-                                <div class="product-image relative h-64 overflow-hidden">
-                                    <a href="index.php?page=product&id=11">
-                                        <img src="/images/placeholder.jpg" 
-                                             alt="Peaceful Night Blend" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
-                                    </a>
-                                                                    </div>
-                                <div class="product-info p-4 flex flex-col flex-grow text-center">
-                                    <h3 class="text-lg font-semibold mb-1 font-heading text-primary hover:text-accent">
-                                        <a href="index.php?page=product&id=11">
-                                            Peaceful Night Blend                                        </a>
-                                    </h3>
-                                                                            <p class="text-sm text-gray-500 mb-2">Diffuser Blends</p>
-                                                                        <p class="price text-base font-semibold text-accent mb-4 mt-auto">$27.99</p>
-                                    <div class="product-actions mt-auto flex gap-2 justify-center">
-                                        <a href="index.php?page=product&id=11" class="btn btn-primary">View Details</a>
-                                                                                                                            <button class="btn btn-secondary add-to-cart" 
-                                                    data-product-id="11"
+                                                    data-product-id="15"
                                                     data-low-stock="true">
                                                 Add to Cart
                                             </button>
@@ -514,26 +225,26 @@
                         <ul class="inline-flex items-center -space-x-px">
                             <!-- Previous Button -->
                             <li>
-                                <a href="#"
-                                   class="py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 opacity-50 cursor-not-allowed">
+                                <a href="index.php?page=products&amp;page_num=1"
+                                   class="py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 ">
                                     <span class="sr-only">Previous</span>
                                     <i class="fas fa-chevron-left"></i>
                                 </a>
                             </li>
                                                             <li>
                                     <a href="index.php?page=products&amp;page_num=1"
-                                       class="py-2 px-3 leading-tight z-10 text-primary bg-secondary border-primary hover:bg-secondary hover:text-primary">
+                                       class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">
                                         1                                    </a>
                                 </li>
                                                             <li>
                                     <a href="index.php?page=products&amp;page_num=2"
-                                       class="py-2 px-3 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">
+                                       class="py-2 px-3 leading-tight z-10 text-primary bg-secondary border-primary hover:bg-secondary hover:text-primary">
                                         2                                    </a>
                                 </li>
                                                         <!-- Next Button -->
                             <li>
-                                <a href="index.php?page=products&amp;page_num=2"
-                                   class="py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 ">
+                                <a href="#"
+                                   class="py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 opacity-50 cursor-not-allowed">
                                     <span class="sr-only">Next</span>
                                     <i class="fas fa-chevron-right"></i>
                                 </a>
@@ -544,47 +255,6 @@
         </div>
     </div>
 </section>
-
-<style>
-    .category-link {
-        color: #4B5563;
-        padding: 0.25rem 0.75rem;
-        border-radius: 0.375rem;
-        transition: background 0.2s, color 0.2s;
-        text-decoration: none;
-    }
-    .category-link.active {
-        color: #1A4D5A;
-        font-weight: 600;
-        background: #A0C1B1;
-    }
-</style>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Handle sorting
-    const sortSelect = document.getElementById('sort');
-    sortSelect.addEventListener('change', function() {
-        const url = new URL(window.location.href);
-        url.searchParams.set('sort', this.value);
-        window.location.href = url.toString();
-    });
-    
-    // Handle price filter
-    const applyPriceFilter = document.querySelector('.apply-price-filter');
-    applyPriceFilter.addEventListener('click', function() {
-        const minPrice = document.getElementById('minPrice').value;
-        const maxPrice = document.getElementById('maxPrice').value;
-        
-        const url = new URL(window.location.href);
-        if (minPrice) url.searchParams.set('min_price', minPrice);
-        if (maxPrice) url.searchParams.set('max_price', maxPrice);
-        window.location.href = url.toString();
-    });
-    
-    // Handle add to cart (delegated to footer.js, but fallback for legacy)
-});
-</script>
 
 </main>
     <footer>
@@ -626,7 +296,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="8904f4e6648558460c0617fd66843646a67e082c3eb01af1edc859c29175d869">
+                        <input type="hidden" name="csrf_token" value="7faf8c74a372c1507b951be8ba018da7b985c307caf90936a275d0a9d053886c">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>
@@ -650,178 +320,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     <!-- Scripts -->
     <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
-    <script>
-        // Initialize AOS
-        document.addEventListener('DOMContentLoaded', function() {
-            AOS.init({
-                duration: 800,
-                offset: 100,
-                once: true
-            });
-
-            if (document.getElementById('particles-js')) {
-                particlesJS.load('particles-js', '/particles.json');
-            }
-        });
-
-        // Canonical flash message helper
-        window.showFlashMessage = function(message, type = 'info') {
-            let flashContainer = document.querySelector('.flash-message-container');
-            if (!flashContainer) {
-                flashContainer = document.createElement('div');
-                flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full';
-                document.body.appendChild(flashContainer);
-            }
-            const flashDiv = document.createElement('div');
-            const colorMap = {
-                success: 'bg-green-100 border-green-400 text-green-700',
-                error: 'bg-red-100 border-red-400 text-red-700',
-                info: 'bg-blue-100 border-blue-400 text-blue-700',
-                warning: 'bg-yellow-100 border-yellow-400 text-yellow-700'
-            };
-            flashDiv.className = `flash-message border px-4 py-3 rounded relative shadow-md mb-2 ${colorMap[type] || colorMap['info']}`;
-            flashDiv.setAttribute('role', 'alert');
-            const messageSpan = document.createElement('span');
-            messageSpan.className = 'block sm:inline';
-            messageSpan.textContent = message;
-            flashDiv.appendChild(messageSpan);
-            const closeButton = document.createElement('span');
-            closeButton.className = 'absolute top-0 bottom-0 right-0 px-4 py-3';
-            closeButton.innerHTML = '&times;';
-            closeButton.onclick = () => flashDiv.remove();
-            flashDiv.appendChild(closeButton);
-            flashContainer.appendChild(flashDiv);
-            setTimeout(() => {
-                if (flashDiv) {
-                    flashDiv.style.opacity = '0';
-                    flashDiv.style.transition = 'opacity 0.5s ease-out';
-                    setTimeout(() => flashDiv.remove(), 500);
-                }
-            }, 5000);
-        };
-
-        // Canonical Add-to-Cart handler (event delegation)
-        document.body.addEventListener('click', function(e) {
-            const btn = e.target.closest('.add-to-cart');
-            if (!btn) return;
-            e.preventDefault();
-            if (btn.disabled) return;
-            const productId = btn.dataset.productId;
-            // STRICTLY get CSRF token from the standard hidden input by ID
-            let csrfToken = '';
-            const csrfTokenInput = document.getElementById('csrf-token-value');
-            if (csrfTokenInput) {
-                csrfToken = csrfTokenInput.value;
-            }
-            if (!csrfToken) {
-                showFlashMessage('Security token input not found on page. Please refresh.', 'error');
-                console.error('CSRF token input #csrf-token-value not found.');
-                return;
-            }
-            btn.disabled = true;
-            const originalText = btn.textContent;
-            btn.textContent = 'Adding...';
-            fetch('index.php?page=cart&action=add', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `product_id=${encodeURIComponent(productId)}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}`
-            })
-            .then(response => {
-                const contentType = response.headers.get("content-type");
-                if (response.ok && contentType && contentType.indexOf("application/json") !== -1) {
-                    return response.json();
-                }
-                return response.text().then(text => {
-                    console.error('Received non-JSON response:', response.status, text);
-                    throw new Error(`Server returned status ${response.status}. Check server logs.`);
-                });
-            })
-            .then(data => {
-                if (data.success) {
-                    const cartCount = document.querySelector('.cart-count');
-                    if (cartCount) {
-                        cartCount.textContent = data.cart_count;
-                        cartCount.style.display = data.cart_count > 0 ? 'inline' : 'none';
-                    }
-                    showFlashMessage(data.message || 'Product added to cart', 'success');
-                    if (data.stock_status === 'out_of_stock') {
-                        btn.disabled = true;
-                        btn.classList.remove('btn-secondary');
-                        btn.classList.add('btn-disabled');
-                        btn.textContent = 'Out of Stock';
-                    } else if (data.stock_status === 'low_stock') {
-                        showFlashMessage('Limited quantity available', 'info');
-                        btn.dataset.lowStock = 'true';
-                        btn.textContent = originalText;
-                        btn.disabled = false;
-                    } else {
-                        btn.textContent = originalText;
-                        btn.disabled = false;
-                    }
-                } else {
-                    showFlashMessage(data.message || 'Error adding to cart', 'error');
-                    btn.textContent = originalText;
-                    btn.disabled = false;
-                }
-            })
-            .catch(error => {
-                console.error('Add to Cart Fetch Error:', error);
-                showFlashMessage(error.message || 'Error adding to cart. Check connection or refresh.', 'error');
-                btn.textContent = originalText;
-                btn.disabled = false;
-            });
-        });
-
-        // Mini-cart AJAX update logic
-        function fetchMiniCart() {
-            fetch('index.php?page=cart&action=mini', {
-                credentials: 'same-origin'
-            })
-            .then(response => response.json())
-            .then(data => {
-                const miniCartContent = document.getElementById('mini-cart-content');
-                if (!miniCartContent) return;
-                if (!data.items || data.items.length === 0) {
-                    miniCartContent.innerHTML = '<div class="text-center text-gray-500 py-6">Your cart is empty.</div>';
-                    return;
-                }
-                let html = '<ul class="divide-y divide-gray-200">';
-                data.items.forEach(item => {
-                    html += `<li class="flex items-center gap-3 py-3">
-                        <img src="${item.product.image_url || '/images/placeholder.jpg'}" alt="${item.product.name}" class="w-14 h-14 object-cover rounded border">
-                        <div class="flex-1">
-                            <div class="font-semibold text-gray-800">${item.product.name}</div>
-                            <div class="text-sm text-gray-500">Qty: ${item.quantity}</div>
-                        </div>
-                        <div class="font-semibold text-accent">$${(item.product.price * item.quantity).toFixed(2)}</div>
-                    </li>`;
-                });
-                html += '</ul>';
-                html += `<div class="flex justify-between items-center mt-4">
-                    <span class="font-semibold text-gray-700">Subtotal:</span>
-                    <span class="font-bold text-primary">$${data.subtotal.toFixed(2)}</span>
-                </div>`;
-                html += `<div class="mt-4 text-center">
-                    <a href="index.php?page=cart" class="btn btn-secondary w-full mb-2">View Cart</a>
-                    <a href="index.php?page=checkout" class="btn btn-primary w-full">Checkout</a>
-                </div>`;
-                miniCartContent.innerHTML = html;
-            })
-            .catch(() => {
-                const miniCartContent = document.getElementById('mini-cart-content');
-                if (miniCartContent) {
-                    miniCartContent.innerHTML = '<div class="text-center text-red-500 py-6">Could not load cart.</div>';
-                }
-            });
-        }
-        // Fetch mini-cart on page load
-        document.addEventListener('DOMContentLoaded', fetchMiniCart);
-        // Update mini-cart after cart actions
-        document.body.addEventListener('click', function(e) {
-            if (e.target.closest('.add-to-cart') || e.target.closest('.remove-from-cart') || e.target.closest('.update-cart')) {
-                setTimeout(fetchMiniCart, 400);
-            }
-        });
-    </script>
+    <script src="/js/main.js"></script>
 </body>
 </html>

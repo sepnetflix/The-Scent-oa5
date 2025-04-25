@@ -13,75 +13,10 @@
     <!-- Styles -->
     <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Custom JS: Tailwind config and all custom JS (must be before Tailwind CDN) -->
+    <script src="/js/main.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#1A4D5A',
-                        'primary-dark': '#164249',
-                        secondary: '#A0C1B1',
-                        accent: '#D4A76A'
-                    },
-                    fontFamily: {
-                        heading: ['Cormorant Garamond', 'serif'],
-                        body: ['Montserrat', 'sans-serif'],
-                        accent: ['Raleway', 'sans-serif']
-                    }
-                }
-            }
-        }
-    </script>
     <link rel="stylesheet" href="/css/style.css">
-    <!-- Scripts: Only mobile menu JS here, remove AOS/Particles.js init from header -->
-    <script>
-        // Initialize mobile menu functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            const mobileMenuToggle = document.querySelector('.mobile-menu-toggle');
-            const mobileMenu = document.getElementById('mobile-menu');
-            let isMenuOpen = false;
-
-            function toggleMenu() {
-                isMenuOpen = !isMenuOpen;
-                mobileMenu.classList.toggle('active');
-                document.body.classList.toggle('menu-open');
-                mobileMenuToggle.innerHTML = isMenuOpen ? 
-                    '<i class="fas fa-times"></i>' : 
-                    '<i class="fas fa-bars"></i>';
-            }
-
-            function closeMenu() {
-                if (isMenuOpen) {
-                    isMenuOpen = false;
-                    mobileMenu.classList.remove('active');
-                    document.body.classList.remove('menu-open');
-                    mobileMenuToggle.innerHTML = '<i class="fas fa-bars"></i>';
-                }
-            }
-
-            mobileMenuToggle?.addEventListener('click', function(e) {
-                e.stopPropagation();
-                toggleMenu();
-            });
-
-            document.addEventListener('click', function(e) {
-                if (isMenuOpen && !e.target.closest('.main-nav')) {
-                    closeMenu();
-                }
-            });
-
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && isMenuOpen) {
-                    closeMenu();
-                }
-            });
-
-            mobileMenu?.querySelectorAll('a').forEach(link => {
-                link.addEventListener('click', closeMenu);
-            });
-        });
-    </script>
 </head>
 <body>
     <header>
@@ -119,9 +54,10 @@
         </nav>
     </header>
     <main>
-        
+        <body class="page-products">
+
 <!-- Output CSRF token for JS (for AJAX add-to-cart) -->
-<input type="hidden" id="csrf-token-value" value="9469b733bf8edcb8a10391497aea176db6301351a998afbe2feb8879ff35f999">
+<input type="hidden" id="csrf-token-value" value="647aef1595d3a180c701bdce6c797a6e35dfb770d3600da09ad5d48cd1c52c8c">
 
 <section class="products-section">
     <div class="container">
@@ -545,47 +481,6 @@
     </div>
 </section>
 
-<style>
-    .category-link {
-        color: #4B5563;
-        padding: 0.25rem 0.75rem;
-        border-radius: 0.375rem;
-        transition: background 0.2s, color 0.2s;
-        text-decoration: none;
-    }
-    .category-link.active {
-        color: #1A4D5A;
-        font-weight: 600;
-        background: #A0C1B1;
-    }
-</style>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Handle sorting
-    const sortSelect = document.getElementById('sort');
-    sortSelect.addEventListener('change', function() {
-        const url = new URL(window.location.href);
-        url.searchParams.set('sort', this.value);
-        window.location.href = url.toString();
-    });
-    
-    // Handle price filter
-    const applyPriceFilter = document.querySelector('.apply-price-filter');
-    applyPriceFilter.addEventListener('click', function() {
-        const minPrice = document.getElementById('minPrice').value;
-        const maxPrice = document.getElementById('maxPrice').value;
-        
-        const url = new URL(window.location.href);
-        if (minPrice) url.searchParams.set('min_price', minPrice);
-        if (maxPrice) url.searchParams.set('max_price', maxPrice);
-        window.location.href = url.toString();
-    });
-    
-    // Handle add to cart (delegated to footer.js, but fallback for legacy)
-});
-</script>
-
 </main>
     <footer>
         <div class="container">
@@ -626,7 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="9469b733bf8edcb8a10391497aea176db6301351a998afbe2feb8879ff35f999">
+                        <input type="hidden" name="csrf_token" value="647aef1595d3a180c701bdce6c797a6e35dfb770d3600da09ad5d48cd1c52c8c">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>
@@ -650,178 +545,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     <!-- Scripts -->
     <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
-    <script>
-        // Initialize AOS
-        document.addEventListener('DOMContentLoaded', function() {
-            AOS.init({
-                duration: 800,
-                offset: 100,
-                once: true
-            });
-
-            if (document.getElementById('particles-js')) {
-                particlesJS.load('particles-js', '/particles.json');
-            }
-        });
-
-        // Canonical flash message helper
-        window.showFlashMessage = function(message, type = 'info') {
-            let flashContainer = document.querySelector('.flash-message-container');
-            if (!flashContainer) {
-                flashContainer = document.createElement('div');
-                flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full';
-                document.body.appendChild(flashContainer);
-            }
-            const flashDiv = document.createElement('div');
-            const colorMap = {
-                success: 'bg-green-100 border-green-400 text-green-700',
-                error: 'bg-red-100 border-red-400 text-red-700',
-                info: 'bg-blue-100 border-blue-400 text-blue-700',
-                warning: 'bg-yellow-100 border-yellow-400 text-yellow-700'
-            };
-            flashDiv.className = `flash-message border px-4 py-3 rounded relative shadow-md mb-2 ${colorMap[type] || colorMap['info']}`;
-            flashDiv.setAttribute('role', 'alert');
-            const messageSpan = document.createElement('span');
-            messageSpan.className = 'block sm:inline';
-            messageSpan.textContent = message;
-            flashDiv.appendChild(messageSpan);
-            const closeButton = document.createElement('span');
-            closeButton.className = 'absolute top-0 bottom-0 right-0 px-4 py-3';
-            closeButton.innerHTML = '&times;';
-            closeButton.onclick = () => flashDiv.remove();
-            flashDiv.appendChild(closeButton);
-            flashContainer.appendChild(flashDiv);
-            setTimeout(() => {
-                if (flashDiv) {
-                    flashDiv.style.opacity = '0';
-                    flashDiv.style.transition = 'opacity 0.5s ease-out';
-                    setTimeout(() => flashDiv.remove(), 500);
-                }
-            }, 5000);
-        };
-
-        // Canonical Add-to-Cart handler (event delegation)
-        document.body.addEventListener('click', function(e) {
-            const btn = e.target.closest('.add-to-cart');
-            if (!btn) return;
-            e.preventDefault();
-            if (btn.disabled) return;
-            const productId = btn.dataset.productId;
-            // STRICTLY get CSRF token from the standard hidden input by ID
-            let csrfToken = '';
-            const csrfTokenInput = document.getElementById('csrf-token-value');
-            if (csrfTokenInput) {
-                csrfToken = csrfTokenInput.value;
-            }
-            if (!csrfToken) {
-                showFlashMessage('Security token input not found on page. Please refresh.', 'error');
-                console.error('CSRF token input #csrf-token-value not found.');
-                return;
-            }
-            btn.disabled = true;
-            const originalText = btn.textContent;
-            btn.textContent = 'Adding...';
-            fetch('index.php?page=cart&action=add', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `product_id=${encodeURIComponent(productId)}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}`
-            })
-            .then(response => {
-                const contentType = response.headers.get("content-type");
-                if (response.ok && contentType && contentType.indexOf("application/json") !== -1) {
-                    return response.json();
-                }
-                return response.text().then(text => {
-                    console.error('Received non-JSON response:', response.status, text);
-                    throw new Error(`Server returned status ${response.status}. Check server logs.`);
-                });
-            })
-            .then(data => {
-                if (data.success) {
-                    const cartCount = document.querySelector('.cart-count');
-                    if (cartCount) {
-                        cartCount.textContent = data.cart_count;
-                        cartCount.style.display = data.cart_count > 0 ? 'inline' : 'none';
-                    }
-                    showFlashMessage(data.message || 'Product added to cart', 'success');
-                    if (data.stock_status === 'out_of_stock') {
-                        btn.disabled = true;
-                        btn.classList.remove('btn-secondary');
-                        btn.classList.add('btn-disabled');
-                        btn.textContent = 'Out of Stock';
-                    } else if (data.stock_status === 'low_stock') {
-                        showFlashMessage('Limited quantity available', 'info');
-                        btn.dataset.lowStock = 'true';
-                        btn.textContent = originalText;
-                        btn.disabled = false;
-                    } else {
-                        btn.textContent = originalText;
-                        btn.disabled = false;
-                    }
-                } else {
-                    showFlashMessage(data.message || 'Error adding to cart', 'error');
-                    btn.textContent = originalText;
-                    btn.disabled = false;
-                }
-            })
-            .catch(error => {
-                console.error('Add to Cart Fetch Error:', error);
-                showFlashMessage(error.message || 'Error adding to cart. Check connection or refresh.', 'error');
-                btn.textContent = originalText;
-                btn.disabled = false;
-            });
-        });
-
-        // Mini-cart AJAX update logic
-        function fetchMiniCart() {
-            fetch('index.php?page=cart&action=mini', {
-                credentials: 'same-origin'
-            })
-            .then(response => response.json())
-            .then(data => {
-                const miniCartContent = document.getElementById('mini-cart-content');
-                if (!miniCartContent) return;
-                if (!data.items || data.items.length === 0) {
-                    miniCartContent.innerHTML = '<div class="text-center text-gray-500 py-6">Your cart is empty.</div>';
-                    return;
-                }
-                let html = '<ul class="divide-y divide-gray-200">';
-                data.items.forEach(item => {
-                    html += `<li class="flex items-center gap-3 py-3">
-                        <img src="${item.product.image_url || '/images/placeholder.jpg'}" alt="${item.product.name}" class="w-14 h-14 object-cover rounded border">
-                        <div class="flex-1">
-                            <div class="font-semibold text-gray-800">${item.product.name}</div>
-                            <div class="text-sm text-gray-500">Qty: ${item.quantity}</div>
-                        </div>
-                        <div class="font-semibold text-accent">$${(item.product.price * item.quantity).toFixed(2)}</div>
-                    </li>`;
-                });
-                html += '</ul>';
-                html += `<div class="flex justify-between items-center mt-4">
-                    <span class="font-semibold text-gray-700">Subtotal:</span>
-                    <span class="font-bold text-primary">$${data.subtotal.toFixed(2)}</span>
-                </div>`;
-                html += `<div class="mt-4 text-center">
-                    <a href="index.php?page=cart" class="btn btn-secondary w-full mb-2">View Cart</a>
-                    <a href="index.php?page=checkout" class="btn btn-primary w-full">Checkout</a>
-                </div>`;
-                miniCartContent.innerHTML = html;
-            })
-            .catch(() => {
-                const miniCartContent = document.getElementById('mini-cart-content');
-                if (miniCartContent) {
-                    miniCartContent.innerHTML = '<div class="text-center text-red-500 py-6">Could not load cart.</div>';
-                }
-            });
-        }
-        // Fetch mini-cart on page load
-        document.addEventListener('DOMContentLoaded', fetchMiniCart);
-        // Update mini-cart after cart actions
-        document.body.addEventListener('click', function(e) {
-            if (e.target.closest('.add-to-cart') || e.target.closest('.remove-from-cart') || e.target.closest('.update-cart')) {
-                setTimeout(fetchMiniCart, 400);
-            }
-        });
-    </script>
+    <script src="/js/main.js"></script>
 </body>
 </html>

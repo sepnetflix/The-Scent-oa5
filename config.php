@@ -59,7 +59,7 @@ define('SECURITY_SETTINGS', [
         'X-Content-Type-Options' => 'nosniff',
         'Referrer-Policy' => 'strict-origin-when-cross-origin',
         // CSP tightened: removed 'unsafe-inline' from script-src and style-src
-        // 'Content-Security-Policy' => "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; frame-src https://js.stripe.com; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com",
+        'Content-Security-Policy' => "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; frame-src https://js.stripe.com; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com",
         'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains'
     ],
     'file_upload' => [

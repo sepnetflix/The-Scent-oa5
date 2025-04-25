@@ -15,12 +15,14 @@ class ProductController extends BaseController {
     public function showHomePage() {
         try {
             $featuredProducts = $this->productModel->getFeatured();
-            
             if (empty($featuredProducts)) {
                 $this->logSecurityEvent('no_featured_products', null, ['ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             }
-            
             $csrfToken = $this->getCsrfToken();
+            extract([
+                'featuredProducts' => $featuredProducts,
+                'csrfToken' => $csrfToken
+            ]);
             require_once __DIR__ . '/../views/home.php';
         } catch (Exception $e) {
             $this->logSecurityEvent('error_show_home', null, ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
@@ -31,13 +33,14 @@ class ProductController extends BaseController {
     
     public function showProductList() {
         try {
-            // Validate and sanitize inputs
-            $page = max(1, (int)($this->validateInput($_GET['page_num'] ?? 1, 'int')));
+            $page = 1;
+            if (isset($_GET['page_num']) && is_numeric($_GET['page_num']) && (int)$_GET['page_num'] > 0) {
+                $page = (int)$_GET['page_num'];
+            }
             $categoryId = isset($_GET['category']) ? $this->validateInput($_GET['category'], 'int') : null;
             $sortBy = $this->validateInput($_GET['sort'] ?? 'name_asc', 'string');
             $minPrice = $this->validateInput($_GET['min_price'] ?? null, 'float');
             $maxPrice = $this->validateInput($_GET['max_price'] ?? null, 'float');
-            
             // Calculate pagination
             $offset = ($page - 1) * $this->itemsPerPage;
             
@@ -106,7 +109,6 @@ class ProductController extends BaseController {
                 ($categoryId ? ($categoryName ? htmlspecialchars($categoryName) . " Products" : "Category Products") : "All Products");
             
             $csrfToken = $this->getCsrfToken();
-            
             // Prepare pagination data
             $paginationData = [
                 'currentPage' => $page,
@@ -118,9 +120,17 @@ class ProductController extends BaseController {
             if (!empty($queryParams)) {
                 $paginationData['baseUrl'] .= '&' . http_build_query($queryParams);
             }
-            
+            extract([
+                'products' => $products,
+                'categories' => $categories,
+                'csrfToken' => $csrfToken,
+                'pageTitle' => $pageTitle,
+                'searchQuery' => $searchQuery,
+                'sortBy' => $sortBy,
+                'paginationData' => $paginationData,
+                'categoryId' => $categoryId ?? null
+            ]);
             require_once __DIR__ . '/../views/products.php';
-            
         } catch (Exception $e) {
             $this->logSecurityEvent('error_show_product_list', null, ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             $this->setFlashMessage('Error loading products', 'error');

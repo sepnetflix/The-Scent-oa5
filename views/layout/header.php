@@ -16,75 +16,10 @@ require_once __DIR__ . '/../../includes/auth.php';
     <!-- Styles -->
     <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Custom JS: Tailwind config and all custom JS (must be before Tailwind CDN) -->
+    <script src="/js/main.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#1A4D5A',
-                        'primary-dark': '#164249',
-                        secondary: '#A0C1B1',
-                        accent: '#D4A76A'
-                    },
-                    fontFamily: {
-                        heading: ['Cormorant Garamond', 'serif'],
-                        body: ['Montserrat', 'sans-serif'],
-                        accent: ['Raleway', 'sans-serif']
-                    }
-                }
-            }
-        }
-    </script>
     <link rel="stylesheet" href="/css/style.css">
-    <!-- Scripts: Only mobile menu JS here, remove AOS/Particles.js init from header -->
-    <script>
-        // Initialize mobile menu functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            const mobileMenuToggle = document.querySelector('.mobile-menu-toggle');
-            const mobileMenu = document.getElementById('mobile-menu');
-            let isMenuOpen = false;
-
-            function toggleMenu() {
-                isMenuOpen = !isMenuOpen;
-                mobileMenu.classList.toggle('active');
-                document.body.classList.toggle('menu-open');
-                mobileMenuToggle.innerHTML = isMenuOpen ? 
-                    '<i class="fas fa-times"></i>' : 
-                    '<i class="fas fa-bars"></i>';
-            }
-
-            function closeMenu() {
-                if (isMenuOpen) {
-                    isMenuOpen = false;
-                    mobileMenu.classList.remove('active');
-                    document.body.classList.remove('menu-open');
-                    mobileMenuToggle.innerHTML = '<i class="fas fa-bars"></i>';
-                }
-            }
-
-            mobileMenuToggle?.addEventListener('click', function(e) {
-                e.stopPropagation();
-                toggleMenu();
-            });
-
-            document.addEventListener('click', function(e) {
-                if (isMenuOpen && !e.target.closest('.main-nav')) {
-                    closeMenu();
-                }
-            });
-
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && isMenuOpen) {
-                    closeMenu();
-                }
-            });
-
-            mobileMenu?.querySelectorAll('a').forEach(link => {
-                link.addEventListener('click', closeMenu);
-            });
-        });
-    </script>
 </head>
 <body>
     <header>

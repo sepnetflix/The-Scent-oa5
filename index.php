@@ -55,8 +55,8 @@ try {
                 // jsonResponse will exit
             }
             
-            $cartItems = $controller->getCartItems();
-            require_once __DIR__ . '/views/cart.php';
+            // Fix: Let the controller handle data and view rendering
+            $controller->showCart();
             break;
             
         case 'checkout':

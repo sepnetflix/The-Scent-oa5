@@ -121,10 +121,10 @@ class Product {
     
     public function getFiltered($conditions = [], $params = [], $sortBy = 'name_asc', $limit = 12, $offset = 0) {
         $fixedConditions = array_map(function($cond) {
-            $cond = preg_replace('/\\bname\\b/', 'p.name', $cond);
-            $cond = preg_replace('/\\bdescription\\b/', 'p.description', $cond);
-            $cond = preg_replace('/\\bprice\\b/', 'p.price', $cond);
-            $cond = preg_replace('/\\bcategory_id\\b/', 'p.category_id', $cond);
+            $cond = preg_replace('/\bname\b/', 'p.name', $cond);
+            $cond = preg_replace('/\bdescription\b/', 'p.description', $cond);
+            $cond = preg_replace('/\bprice\b/', 'p.price', $cond);
+            $cond = preg_replace('/\bcategory_id\b/', 'p.category_id', $cond);
             return $cond;
         }, $conditions);
         $sql = "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id";
@@ -148,12 +148,15 @@ class Product {
                 break;
         }
         $sql .= " LIMIT ? OFFSET ?";
-        $params[] = (int)$limit;
-        $params[] = (int)$offset;
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        $paramIndex = 1;
+        foreach ($params as $value) {
+            $stmt->bindValue($paramIndex++, $value);
+        }
+        $stmt->bindValue($paramIndex++, (int)$limit, PDO::PARAM_INT);
+        $stmt->bindValue($paramIndex++, (int)$offset, PDO::PARAM_INT);
+        $stmt->execute();
         $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        // Decode JSON fields if present
         foreach ($products as &$product) {
             if (isset($product['benefits'])) {
                 $product['benefits'] = json_decode($product['benefits'], true) ?? [];

@@ -53,7 +53,9 @@ class Cart {
     public function mergeSessionCart($sessionCart) {
         if (!is_array($sessionCart)) return;
         foreach ($sessionCart as $productId => $item) {
-            $this->addItem($productId, $item['quantity']);
+            // Support both [productId => quantity] and [productId => ['quantity' => x]]
+            $quantity = is_array($item) && isset($item['quantity']) ? $item['quantity'] : $item;
+            $this->addItem($productId, $quantity);
         }
     }
 }

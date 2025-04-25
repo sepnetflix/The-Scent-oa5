@@ -107,6 +107,7 @@ class CheckoutController extends BaseController {
     }
     
     public function processCheckout() {
+        $this->validateRateLimit('checkout_submit');
         $this->requireLogin();
         $this->validateCSRF();
         $isLoggedIn = isset($_SESSION['user_id']);

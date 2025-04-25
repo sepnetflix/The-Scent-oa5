@@ -32,7 +32,9 @@ class CartController extends BaseController {
             require_once __DIR__ . '/../models/Cart.php';
             $cartModel = new Cart($pdo, $userId);
             $cartModel->mergeSessionCart($_SESSION['cart']);
+            // Always clear session cart after merging
             $_SESSION['cart'] = [];
+            $_SESSION['cart_count'] = 0;
         }
     }
 
@@ -90,7 +92,9 @@ class CartController extends BaseController {
         }
         if ($this->isLoggedIn) {
             $this->cartModel->addItem($productId, $quantity);
+            $cartCount = $this->getCartCount();
         } else {
+            // Standardize session cart: always [productId => quantity]
             if (isset($_SESSION['cart'][$productId])) {
                 $newQuantity = $_SESSION['cart'][$productId] + $quantity;
                 if (!$this->productModel->isInStock($productId, $newQuantity)) {
@@ -105,9 +109,9 @@ class CartController extends BaseController {
             } else {
                 $_SESSION['cart'][$productId] = $quantity;
             }
+            $cartCount = array_sum($_SESSION['cart']);
+            $_SESSION['cart_count'] = $cartCount;
         }
-        $cartCount = $this->getCartCount();
-        $_SESSION['cart_count'] = $cartCount;
         $stockInfo = $this->productModel->checkStock($productId);
         $currentStock = $stockInfo ? ($stockInfo['stock_quantity'] - $quantity) : 0;
         $stockStatus = 'in_stock';
@@ -153,6 +157,7 @@ class CartController extends BaseController {
                     $this->cartModel->removeItem($productId);
                 }
             }
+            $cartCount = $this->getCartCount();
         } else {
             foreach ($updates as $productId => $quantity) {
                 $productId = $this->validateInput($productId, 'int');
@@ -168,11 +173,13 @@ class CartController extends BaseController {
                     unset($_SESSION['cart'][$productId]);
                 }
             }
+            $cartCount = array_sum($_SESSION['cart']);
+            $_SESSION['cart_count'] = $cartCount;
         }
         $this->jsonResponse([
             'success' => empty($stockErrors),
             'message' => empty($stockErrors) ? 'Cart updated' : 'Some items have insufficient stock',
-            'cartCount' => $this->getCartCount(),
+            'cartCount' => $cartCount,
             'errors' => $stockErrors
         ]);
     }
@@ -182,11 +189,14 @@ class CartController extends BaseController {
         $productId = $this->validateInput($_POST['product_id'] ?? null, 'int');
         if ($this->isLoggedIn) {
             $this->cartModel->removeItem($productId);
+            $cartCount = $this->getCartCount();
         } else {
             if (!$productId || !isset($_SESSION['cart'][$productId])) {
                 $this->jsonResponse(['success' => false, 'message' => 'Product not found in cart'], 404);
             }
             unset($_SESSION['cart'][$productId]);
+            $cartCount = array_sum($_SESSION['cart']);
+            $_SESSION['cart_count'] = $cartCount;
         }
         $userId = $this->userId;
         $this->logAuditTrail('cart_remove', $userId, [
@@ -196,22 +206,25 @@ class CartController extends BaseController {
         $this->jsonResponse([
             'success' => true,
             'message' => 'Product removed from cart',
-            'cartCount' => $this->getCartCount()
+            'cartCount' => $cartCount
         ]);
     }
 
     public function clearCart() {
         if ($this->isLoggedIn) {
             $this->cartModel->clearCart();
+            $cartCount = 0;
         } else {
             $_SESSION['cart'] = [];
+            $cartCount = 0;
+            $_SESSION['cart_count'] = 0;
         }
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $this->validateCSRF();
             $this->jsonResponse([
                 'success' => true,
                 'message' => 'Cart cleared',
-                'cartCount' => 0
+                'cartCount' => $cartCount
             ]);
         } else {
             $this->redirect('cart');
@@ -289,7 +302,7 @@ class CartController extends BaseController {
                     'product' => [
                         'id' => $item['id'],
                         'name' => $item['name'],
-                        'image_url' => $item['image_url'],
+                        'image' => $item['image'], // Use 'image' instead of 'image_url'
                         'price' => $item['price']
                     ],
                     'quantity' => $item['quantity']
@@ -304,7 +317,7 @@ class CartController extends BaseController {
                         'product' => [
                             'id' => $product['id'],
                             'name' => $product['name'],
-                            'image_url' => $product['image_url'],
+                            'image' => $product['image'], // Use 'image' instead of 'image_url'
                             'price' => $product['price']
                         ],
                         'quantity' => $quantity

@@ -29,6 +29,7 @@ class QuizController extends BaseController {
     }
 
     public function handleQuizSubmission() {
+        $this->validateRateLimit('quiz_submit');
         try {
             $this->validateCSRF();
             
@@ -166,6 +167,7 @@ class QuizController extends BaseController {
     }
     
     public function processQuiz() {
+        $this->validateRateLimit('quiz_submit');
         try {
             $startTime = isset($_SESSION['quiz_start_time']) ? $_SESSION['quiz_start_time'] : time();
             $completionTime = time() - $startTime;

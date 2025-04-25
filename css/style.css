@@ -1108,3 +1108,422 @@ footer {
     .footer-bottom .container { flex-direction: column; text-align: center; }
     .payment-methods { margin-top: 1rem; }
 }
+
+.category-link {
+    color: #4B5563;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.375rem;
+    transition: background 0.2s, color 0.2s;
+    text-decoration: none;
+}
+.category-link.active {
+    color: #1A4D5A;
+    font-weight: 600;
+}
+.page-login .auth-container {
+    max-width: 400px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: #fff;
+    border-radius: 0.5rem;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+}
+.page-login .auth-description {
+    text-align: center;
+    color: #6c757d;
+    margin-bottom: 2rem;
+}
+.page-login .password-input {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.page-login .toggle-password {
+    position: absolute;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    padding: 0.25rem;
+}
+.page-login .toggle-password:hover {
+    color: #495057;
+}
+.page-login .forgot-password {
+    text-align: right;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+}
+.page-login .forgot-password a {
+    color: #4a90e2;
+    text-decoration: none;
+}
+.page-login .forgot-password a:hover {
+    text-decoration: underline;
+}
+.page-login .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+.page-login .checkbox-label input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+.page-login .button-loader {
+    display: inline-block;
+}
+.page-login .button-loader.hidden,
+.page-login .button-text.hidden {
+    display: none;
+}
+.page-login .auth-links {
+    text-align: center;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e9ecef;
+}
+.page-login .auth-links a {
+    color: #4a90e2;
+    text-decoration: none;
+}
+.page-login .auth-links a:hover {
+    text-decoration: underline;
+}
+.page-register .password-requirements, .page-reset-password .password-requirements {
+    margin: 1rem 0;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+.page-register .password-requirements h4, .page-reset-password .password-requirements h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.875rem;
+    color: #495057;
+}
+.page-register .password-requirements ul, .page-reset-password .password-requirements ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.page-register .requirement, .page-reset-password .requirement {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin: 0.25rem 0;
+    display: flex;
+    align-items: center;
+}
+.page-register .requirement i, .page-reset-password .requirement i {
+    font-size: 0.625rem;
+    margin-right: 0.5rem;
+}
+.page-register .requirement.met, .page-reset-password .requirement.met {
+    color: #198754;
+}
+.page-register .requirement.met i, .page-reset-password .requirement.met i {
+    color: #198754;
+}
+.page-register .password-input, .page-reset-password .password-input {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.page-register .toggle-password, .page-reset-password .toggle-password {
+    position: absolute;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    padding: 0.25rem;
+}
+.page-register .toggle-password:hover, .page-reset-password .toggle-password:hover {
+    color: #495057;
+}
+.page-register .button-loader, .page-reset-password .button-loader, .page-forgot-password .button-loader {
+    display: inline-block;
+}
+.page-register .button-loader.hidden, .page-reset-password .button-loader.hidden, .page-forgot-password .button-loader.hidden,
+.page-register .button-text.hidden, .page-reset-password .button-text.hidden, .page-forgot-password .button-text.hidden {
+    display: none;
+}
+.page-register .form-hint, .page-forgot-password .form-hint {
+    font-size: 0.875rem;
+    color: #666;
+    margin-top: 0.25rem;
+}
+.page-error .error-section, .page-404 .error-section {
+    padding: 4rem 0;
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+}
+.page-error .error-container {
+    text-align: center;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.page-404 .error-container {
+    text-align: center;
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+.page-error .error-container h1 {
+    color: #dc2626;
+    margin-bottom: 1.5rem;
+}
+.page-404 .error-container h1 {
+    font-size: 2.5rem;
+    color: #1f2937;
+    margin-bottom: 1.5rem;
+}
+.page-error .error-details {
+    text-align: left;
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 6px;
+    margin-top: 1.5rem;
+}
+.page-error .error-message {
+    font-size: 1.1rem;
+    color: #1f2937;
+    margin-bottom: 1rem;
+}
+.page-error .error-location {
+    font-family: monospace;
+    background: #e5e7eb;
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+.page-error .error-trace {
+    margin-top: 1.5rem;
+}
+.page-error .error-trace h3 {
+    color: #4b5563;
+    margin-bottom: 0.5rem;
+}
+.page-error .error-trace pre {
+    background: #e5e7eb;
+    padding: 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.875rem;
+}
+.page-error .error-actions, .page-404 .error-actions {
+    margin-top: 2rem;
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+.page-404 .error-image {
+    margin: 2rem 0;
+}
+.page-404 .error-image img {
+    max-width: 100%;
+    height: auto;
+}
+.page-404 .error-container p {
+    font-size: 1.125rem;
+    color: #4b5563;
+    margin-bottom: 2rem;
+}
+.page-404 .error-actions {
+    margin-bottom: 3rem;
+}
+.page-404 .error-suggestions {
+    text-align: left;
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+}
+.page-404 .error-suggestions h3 {
+    color: #4b5563;
+    margin-bottom: 1rem;
+    font-size: 1.25rem;
+}
+.page-404 .error-suggestions ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.page-404 .error-suggestions li {
+    margin: 0.5rem 0;
+}
+.page-404 .error-suggestions a {
+    color: #4f46e5;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+.page-404 .error-suggestions a:hover {
+    color: #4338ca;
+    text-decoration: underline;
+}
+.page-admin-quiz-analytics .analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+.page-admin-quiz-analytics .stat-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+}
+.page-admin-quiz-analytics .stat-icon {
+    width: 48px;
+    height: 48px;
+    background: #f8f9fa;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1rem;
+}
+.page-admin-quiz-analytics .stat-icon i {
+    font-size: 1.5rem;
+    color: #4a5568;
+}
+.page-admin-quiz-analytics .stat-content h3 {
+    font-size: 0.875rem;
+    color: #4a5568;
+    margin: 0;
+}
+.page-admin-quiz-analytics .stat-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0.25rem 0 0;
+}
+.page-admin-quiz-analytics .analytics-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+.page-admin-quiz-analytics .chart-container {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.page-admin-quiz-analytics .chart-container.full-width {
+    grid-column: 1 / -1;
+}
+.page-admin-quiz-analytics .chart-container h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+}
+.page-admin-quiz-analytics .recommendations-table {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.page-admin-quiz-analytics .table-responsive {
+    overflow-x: auto;
+}
+.page-admin-quiz-analytics .admin-table th {
+    white-space: nowrap;
+}
+.page-admin-coupons .admin-section {
+    padding: 2rem 0;
+}
+.page-admin-coupons .admin-container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+.page-admin-coupons .admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+.page-admin-coupons .admin-form {
+    background: #fff;
+    padding: 2rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+}
+.page-admin-coupons .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.page-admin-coupons .form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+.page-admin-coupons .admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+.page-admin-coupons .admin-table th,
+.page-admin-coupons .admin-table td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+}
+.page-admin-coupons .admin-table th {
+    background: #f9fafb;
+    font-weight: 600;
+}
+.page-admin-coupons .status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+}
+.page-admin-coupons .status-badge.active {
+    background: #dcfce7;
+    color: #166534;
+}
+.page-admin-coupons .status-badge.inactive {
+    background: #fee2e2;
+    color: #991b1b;
+}
+.page-admin-coupons .actions {
+    display: flex;
+    gap: 0.5rem;
+}
+.page-admin-coupons .btn-icon {
+    padding: 0.5rem;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: #6b7280;
+    transition: color 0.2s;
+}
+.page-admin-coupons .btn-icon:hover {
+    color: #4b5563;
+}
+.page-admin-coupons .btn-icon.delete:hover {
+    color: #dc2626;
+}
+.page-admin-coupons .empty-state {
+    text-align: center;
+    padding: 3rem;
+    background: #fff;
+    border-radius: 0.5rem;
+    color: #6b7280;
+}
+.page-admin-coupons .empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}

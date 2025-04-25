@@ -489,19 +489,23 @@ abstract class BaseController {
     }
     
     protected function validateRateLimit($action) {
-        $settings = SECURITY_SETTINGS['rate_limiting']['endpoints'][$action] ?? 
-                   ['window' => SECURITY_SETTINGS['rate_limiting']['default_window'],
-                    'max_requests' => SECURITY_SETTINGS['rate_limiting']['default_max_requests']];
+        $settings = SECURITY_SETTINGS['rate_limiting']['endpoints'][$action] ?? [
+            'window' => SECURITY_SETTINGS['rate_limiting']['default_window'],
+            'max_requests' => SECURITY_SETTINGS['rate_limiting']['default_max_requests']
+        ];
         $ip = $_SERVER['REMOTE_ADDR'];
         $key = "rate_limit:{$action}:{$ip}";
         // Check whitelist
-        if (in_array($ip, SECURITY_SETTINGS['rate_limiting']['ip_whitelist'])) {
+        if (in_array($ip, SECURITY_SETTINGS['rate_limiting']['ip_whitelist'] ?? [])) {
             return true;
         }
-        // Check for APCu availability
+        // Fail closed if APCu is unavailable
         if (!function_exists('apcu_fetch') || !ini_get('apc.enabled')) {
-            error_log('[WARN] APCu not enabled - rate limiting is not enforced for ' . $action . ' from ' . $ip);
-            return true; // Fail open
+            $this->logSecurityEvent('rate_limit_backend_unavailable', [
+                'action' => $action,
+                'ip' => $ip
+            ]);
+            $this->jsonResponse(['error' => 'Rate limiting backend unavailable. Please try again later.'], 503);
         }
         $attempts = apcu_fetch($key) ?: 0;
         if ($attempts >= $settings['max_requests']) {
@@ -510,9 +514,15 @@ abstract class BaseController {
                 'ip' => $ip,
                 'attempts' => $attempts
             ]);
-            $this->jsonResponse(['error' => 'Rate limit exceeded'], 429);
+            $this->jsonResponse(['error' => 'Rate limit exceeded. Please try again later.'], 429);
         }
-        apcu_inc($key, 1, $success, $settings['window']);
+        // Increment the counter or add it if it doesn't exist
+        if ($attempts === 0) {
+            apcu_store($key, 1, $settings['window']);
+        } else {
+            apcu_inc($key);
+        }
+        return true;
     }
     
     protected function validateCSRFToken() {

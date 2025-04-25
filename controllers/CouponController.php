@@ -3,8 +3,6 @@ require_once __DIR__ . '/BaseController.php';
 
 class CouponController extends BaseController {
     private $pdo;
-    private $rateLimit = 10; // Maximum validation attempts per hour
-    private $rateLimitWindow = 3600; // 1 hour in seconds
     
     public function __construct($pdo) {
         $this->pdo = $pdo;
@@ -12,15 +10,8 @@ class CouponController extends BaseController {
     
     public function validateCoupon($code, $subtotal) {
         try {
+            $this->validateRateLimit('coupon_validate');
             $this->validateCSRF();
-            
-            // Rate limiting
-            if (!$this->checkRateLimit($_SERVER['REMOTE_ADDR'])) {
-                return $this->jsonResponse([
-                    'valid' => false,
-                    'message' => 'Too many attempts. Please try again later.'
-                ], 429);
-            }
             
             $code = $this->validateInput($code, 'string');
             $subtotal = $this->validateInput($subtotal, 'float');
@@ -60,7 +51,6 @@ class CouponController extends BaseController {
                 ");
                 $stmt->execute([$coupon['id'], $userId]);
                 $usageCount = $stmt->fetchColumn();
-                
                 if ($usageCount > 0) {
                     return $this->jsonResponse([
                         'valid' => false,
@@ -276,31 +266,6 @@ class CouponController extends BaseController {
                 'success' => false,
                 'message' => 'Failed to create coupon'
             ], 500);
-        }
-    }
-    
-    private function checkRateLimit($ip) {
-        $stmt = $this->pdo->prepare("
-            SELECT COUNT(*) 
-            FROM coupon_validation_attempts
-            WHERE ip_address = ?
-            AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)
-        ");
-        $stmt->execute([$ip]);
-        
-        return $stmt->fetchColumn() < $this->rateLimit;
-    }
-    
-    private function logValidationAttempt($ip, $code, $success) {
-        try {
-            $stmt = $this->pdo->prepare("
-                INSERT INTO coupon_validation_attempts 
-                (ip_address, coupon_code, success)
-                VALUES (?, ?, ?)
-            ");
-            $stmt->execute([$ip, $code, $success]);
-        } catch (Exception $e) {
-            error_log("Failed to log coupon validation attempt: " . $e->getMessage());
         }
     }
 }

@@ -4,26 +4,11 @@ Now carefully reviewed the attached "README.md" and "technical_design_specificat
 
 You will thoroughly review the project description, design documents (README.md, technical_design_specification.md v8), the codebase file structure, database schema in the_scent_schema.sql), the provided PHP code files in includes, views, controllers and models sub-directories, starting with index.php and .htaccess files, and the current HTML outputs (current_landing_page.html, view_details_product_id-1.html, shop_products.html).
 
-Use the information in the attached suggestions_for_improvement.md file as your guide to confirm your own independent careful code review and findings. After validating the issues and suggestions mentioned in "suggestions_for_improvement.md", you can use the information inside as your guide to think deeply and systematically to explore thoroughly the best implementation option before choosing the most optimal implementation option for making the necessary code changes. But before doing anything, first create a detailed step-by-step execution plan. Then proceed cautiously according to your well-thought-out execution plan to effect the code changes, taking care not to affect any of the existing features and functionalities of the application:
-
-You will carefully analyze the project project documentation, code files, HTML outputs, and logs. Then compare your independent code review and problem analysis against the suggested improvements in "suggestions_for_improvement.md".
-
-Current Known Issues:
-I can now "Add to cart" with the button on the main landing page, but when I click on the cart icon on the top right of the header (top) navigation bar. I got an error "Oops something went wrong".
+Use the information in the attached suggestions_for_improvement.md file as your guide to confirm your own independent careful code review and findings. After validating the issues and suggestions mentioned in "suggestions_for_improvement.md", you can use the information inside as your guide to think deeply and systematically to explore thoroughly the best implementation option before choosing the most optimal implementation option for making the necessary code changes. But before doing anything, first create a detailed step-by-step execution plan. Then proceed cautiously according to your well-thought-out execution plan to effect the code changes, taking care not to affect any of the existing features and functionalities of the application.
 
 ---
 please continue to execute according to your plan.
 
-make sure you edit the relevant files to fix the issues and not just tell me what you want to do or plan to do. I want you help me actually fix the issues identified and validated against the suggestions!
+make sure you conduct a thorough review of the existing codebase and project code files to validate against each of the suggestions listed. do this step by step and check whether each suggestion has already been implemented or not before exploring how best to merge each suggestion to the existing code files without breaking any of the exisitng features and functionalities.
 
----
 Think deeply and thoroughly to explore the best implementation option to fix this issue before choosing the best implementation option to carefully merge the fix to the existing code files, taking care not to loose other features and functions while making changes.
-
-Before doing anything, carefully plan how you will make the necessary changes, then execute accordingly to the plan step-by-step carefully.
-
----
-remember to use the same think deeply, explore for the best implementation optio, plan, then execute methodology to proceed with the changes.
-
----
-with your deep understanding of the current project state based on your previously done review of the design documents against the current project code files, now help me to carefully update the attached technical_design_specification.md to reflect the current project state more accurately, also incorporate your latest suggested improvements and fixes. you can remove the previous suggestions from the updated design document if they had already been incorporated, instead include the changes already implemented as part of the main technical specifications for the project. the updated detailed technical design specification document will be the v8 revision, more accurately reflecting the current project status.
-

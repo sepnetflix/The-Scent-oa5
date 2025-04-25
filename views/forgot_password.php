@@ -1,5 +1,5 @@
 <?php require_once __DIR__ . '/layout/header.php'; ?>
-
+<body class="page-forgot-password">
 <section class="auth-section">
     <div class="container">
         <div class="auth-container" data-aos="fade-up">
@@ -37,43 +37,5 @@
         </div>
     </div>
 </section>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('forgotPasswordForm');
-    const submitButton = document.getElementById('submitButton');
-    const buttonText = submitButton.querySelector('.button-text');
-    const buttonLoader = submitButton.querySelector('.button-loader');
-    
-    form.addEventListener('submit', function(e) {
-        const email = document.getElementById('email').value.trim();
-        
-        if (!email) {
-            e.preventDefault();
-            return;
-        }
-        
-        // Show loading state
-        buttonText.classList.add('hidden');
-        buttonLoader.classList.remove('hidden');
-        submitButton.disabled = true;
-    });
-});
-</script>
-
-<style>
-.form-hint {
-    font-size: 0.875rem;
-    color: #666;
-    margin-top: 0.25rem;
-}
-.button-loader {
-    display: inline-block;
-}
-.button-loader.hidden,
-.button-text.hidden {
-    display: none;
-}
-</style>
 
 <?php require_once __DIR__ . '/layout/footer.php'; ?>

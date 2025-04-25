@@ -13,75 +13,10 @@
     <!-- Styles -->
     <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Custom JS: Tailwind config and all custom JS (must be before Tailwind CDN) -->
+    <script src="/js/main.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#1A4D5A',
-                        'primary-dark': '#164249',
-                        secondary: '#A0C1B1',
-                        accent: '#D4A76A'
-                    },
-                    fontFamily: {
-                        heading: ['Cormorant Garamond', 'serif'],
-                        body: ['Montserrat', 'sans-serif'],
-                        accent: ['Raleway', 'sans-serif']
-                    }
-                }
-            }
-        }
-    </script>
     <link rel="stylesheet" href="/css/style.css">
-    <!-- Scripts: Only mobile menu JS here, remove AOS/Particles.js init from header -->
-    <script>
-        // Initialize mobile menu functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            const mobileMenuToggle = document.querySelector('.mobile-menu-toggle');
-            const mobileMenu = document.getElementById('mobile-menu');
-            let isMenuOpen = false;
-
-            function toggleMenu() {
-                isMenuOpen = !isMenuOpen;
-                mobileMenu.classList.toggle('active');
-                document.body.classList.toggle('menu-open');
-                mobileMenuToggle.innerHTML = isMenuOpen ? 
-                    '<i class="fas fa-times"></i>' : 
-                    '<i class="fas fa-bars"></i>';
-            }
-
-            function closeMenu() {
-                if (isMenuOpen) {
-                    isMenuOpen = false;
-                    mobileMenu.classList.remove('active');
-                    document.body.classList.remove('menu-open');
-                    mobileMenuToggle.innerHTML = '<i class="fas fa-bars"></i>';
-                }
-            }
-
-            mobileMenuToggle?.addEventListener('click', function(e) {
-                e.stopPropagation();
-                toggleMenu();
-            });
-
-            document.addEventListener('click', function(e) {
-                if (isMenuOpen && !e.target.closest('.main-nav')) {
-                    closeMenu();
-                }
-            });
-
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && isMenuOpen) {
-                    closeMenu();
-                }
-            });
-
-            mobileMenu?.querySelectorAll('a').forEach(link => {
-                link.addEventListener('click', closeMenu);
-            });
-        });
-    </script>
 </head>
 <body>
     <header>
@@ -119,8 +54,9 @@
         </nav>
     </header>
     <main>
-        <!-- DEBUG: home.php loaded --><!-- Output CSRF token for JS (for AJAX add-to-cart/newsletter) -->
-<input type="hidden" id="csrf-token-value" value="2680591f1ada91088c6b50944cd49db579809019be058ba3518030bba477e845">
+        <!-- DEBUG: home.php loaded --><body class="page-home">
+<!-- Output CSRF token for JS (for AJAX add-to-cart/newsletter) -->
+<input type="hidden" id="csrf-token-value" value="c6227d8b46e5a0feb7a0351bc5c08e804b30377abc97ce40799e5d71354dcff0">
 
 <!-- Hero Section with Video Background -->
 <section class="hero-section relative min-h-screen flex items-center justify-center overflow-hidden">
@@ -381,7 +317,7 @@
             <p class="mb-8">Subscribe to receive updates, exclusive offers, and aromatherapy tips.</p>
             <!-- Apply suggested form structure/style -->
             <form id="newsletter-form" class="newsletter-form flex flex-col sm:flex-row gap-4 justify-center">
-                <input type="hidden" name="csrf_token" value="2680591f1ada91088c6b50944cd49db579809019be058ba3518030bba477e845">
+                <input type="hidden" name="csrf_token" value="c6227d8b46e5a0feb7a0351bc5c08e804b30377abc97ce40799e5d71354dcff0">
                 <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input flex-1 px-4 py-2 rounded-full border border-gray-300 focus:border-primary">
                 <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
             </form>
@@ -389,37 +325,6 @@
         </div>
     </div>
 </section>
-
-<script>
-    // Newsletter form submission
-    const newsletterForm = document.getElementById('newsletter-form');
-    if (newsletterForm) {
-        newsletterForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-            try {
-                const response = await fetch('index.php?page=newsletter&action=subscribe', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: new URLSearchParams(formData)
-                });
-                const data = await response.json();
-                if (data.success) {
-                    showFlashMessage(data.message || 'Thank you for subscribing!', 'success');
-                    newsletterForm.querySelector('input[type="email"]').value = '';
-                    newsletterForm.querySelector('button').disabled = true;
-                } else {
-                    showFlashMessage(data.message || 'Subscription failed', 'error');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                showFlashMessage('Subscription failed', 'error');
-            }
-        });
-    }
-</script>
 
 <!-- Testimonials Section (Keep existing) -->
 <section class="py-20 bg-white" id="testimonials">
@@ -485,7 +390,7 @@
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="2680591f1ada91088c6b50944cd49db579809019be058ba3518030bba477e845">
+                        <input type="hidden" name="csrf_token" value="c6227d8b46e5a0feb7a0351bc5c08e804b30377abc97ce40799e5d71354dcff0">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>
@@ -509,178 +414,6 @@
 
     <!-- Scripts -->
     <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
-    <script>
-        // Initialize AOS
-        document.addEventListener('DOMContentLoaded', function() {
-            AOS.init({
-                duration: 800,
-                offset: 100,
-                once: true
-            });
-
-            if (document.getElementById('particles-js')) {
-                particlesJS.load('particles-js', '/particles.json');
-            }
-        });
-
-        // Canonical flash message helper
-        window.showFlashMessage = function(message, type = 'info') {
-            let flashContainer = document.querySelector('.flash-message-container');
-            if (!flashContainer) {
-                flashContainer = document.createElement('div');
-                flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full';
-                document.body.appendChild(flashContainer);
-            }
-            const flashDiv = document.createElement('div');
-            const colorMap = {
-                success: 'bg-green-100 border-green-400 text-green-700',
-                error: 'bg-red-100 border-red-400 text-red-700',
-                info: 'bg-blue-100 border-blue-400 text-blue-700',
-                warning: 'bg-yellow-100 border-yellow-400 text-yellow-700'
-            };
-            flashDiv.className = `flash-message border px-4 py-3 rounded relative shadow-md mb-2 ${colorMap[type] || colorMap['info']}`;
-            flashDiv.setAttribute('role', 'alert');
-            const messageSpan = document.createElement('span');
-            messageSpan.className = 'block sm:inline';
-            messageSpan.textContent = message;
-            flashDiv.appendChild(messageSpan);
-            const closeButton = document.createElement('span');
-            closeButton.className = 'absolute top-0 bottom-0 right-0 px-4 py-3';
-            closeButton.innerHTML = '&times;';
-            closeButton.onclick = () => flashDiv.remove();
-            flashDiv.appendChild(closeButton);
-            flashContainer.appendChild(flashDiv);
-            setTimeout(() => {
-                if (flashDiv) {
-                    flashDiv.style.opacity = '0';
-                    flashDiv.style.transition = 'opacity 0.5s ease-out';
-                    setTimeout(() => flashDiv.remove(), 500);
-                }
-            }, 5000);
-        };
-
-        // Canonical Add-to-Cart handler (event delegation)
-        document.body.addEventListener('click', function(e) {
-            const btn = e.target.closest('.add-to-cart');
-            if (!btn) return;
-            e.preventDefault();
-            if (btn.disabled) return;
-            const productId = btn.dataset.productId;
-            // STRICTLY get CSRF token from the standard hidden input by ID
-            let csrfToken = '';
-            const csrfTokenInput = document.getElementById('csrf-token-value');
-            if (csrfTokenInput) {
-                csrfToken = csrfTokenInput.value;
-            }
-            if (!csrfToken) {
-                showFlashMessage('Security token input not found on page. Please refresh.', 'error');
-                console.error('CSRF token input #csrf-token-value not found.');
-                return;
-            }
-            btn.disabled = true;
-            const originalText = btn.textContent;
-            btn.textContent = 'Adding...';
-            fetch('index.php?page=cart&action=add', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `product_id=${encodeURIComponent(productId)}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}`
-            })
-            .then(response => {
-                const contentType = response.headers.get("content-type");
-                if (response.ok && contentType && contentType.indexOf("application/json") !== -1) {
-                    return response.json();
-                }
-                return response.text().then(text => {
-                    console.error('Received non-JSON response:', response.status, text);
-                    throw new Error(`Server returned status ${response.status}. Check server logs.`);
-                });
-            })
-            .then(data => {
-                if (data.success) {
-                    const cartCount = document.querySelector('.cart-count');
-                    if (cartCount) {
-                        cartCount.textContent = data.cart_count;
-                        cartCount.style.display = data.cart_count > 0 ? 'inline' : 'none';
-                    }
-                    showFlashMessage(data.message || 'Product added to cart', 'success');
-                    if (data.stock_status === 'out_of_stock') {
-                        btn.disabled = true;
-                        btn.classList.remove('btn-secondary');
-                        btn.classList.add('btn-disabled');
-                        btn.textContent = 'Out of Stock';
-                    } else if (data.stock_status === 'low_stock') {
-                        showFlashMessage('Limited quantity available', 'info');
-                        btn.dataset.lowStock = 'true';
-                        btn.textContent = originalText;
-                        btn.disabled = false;
-                    } else {
-                        btn.textContent = originalText;
-                        btn.disabled = false;
-                    }
-                } else {
-                    showFlashMessage(data.message || 'Error adding to cart', 'error');
-                    btn.textContent = originalText;
-                    btn.disabled = false;
-                }
-            })
-            .catch(error => {
-                console.error('Add to Cart Fetch Error:', error);
-                showFlashMessage(error.message || 'Error adding to cart. Check connection or refresh.', 'error');
-                btn.textContent = originalText;
-                btn.disabled = false;
-            });
-        });
-
-        // Mini-cart AJAX update logic
-        function fetchMiniCart() {
-            fetch('index.php?page=cart&action=mini', {
-                credentials: 'same-origin'
-            })
-            .then(response => response.json())
-            .then(data => {
-                const miniCartContent = document.getElementById('mini-cart-content');
-                if (!miniCartContent) return;
-                if (!data.items || data.items.length === 0) {
-                    miniCartContent.innerHTML = '<div class="text-center text-gray-500 py-6">Your cart is empty.</div>';
-                    return;
-                }
-                let html = '<ul class="divide-y divide-gray-200">';
-                data.items.forEach(item => {
-                    html += `<li class="flex items-center gap-3 py-3">
-                        <img src="${item.product.image_url || '/images/placeholder.jpg'}" alt="${item.product.name}" class="w-14 h-14 object-cover rounded border">
-                        <div class="flex-1">
-                            <div class="font-semibold text-gray-800">${item.product.name}</div>
-                            <div class="text-sm text-gray-500">Qty: ${item.quantity}</div>
-                        </div>
-                        <div class="font-semibold text-accent">$${(item.product.price * item.quantity).toFixed(2)}</div>
-                    </li>`;
-                });
-                html += '</ul>';
-                html += `<div class="flex justify-between items-center mt-4">
-                    <span class="font-semibold text-gray-700">Subtotal:</span>
-                    <span class="font-bold text-primary">$${data.subtotal.toFixed(2)}</span>
-                </div>`;
-                html += `<div class="mt-4 text-center">
-                    <a href="index.php?page=cart" class="btn btn-secondary w-full mb-2">View Cart</a>
-                    <a href="index.php?page=checkout" class="btn btn-primary w-full">Checkout</a>
-                </div>`;
-                miniCartContent.innerHTML = html;
-            })
-            .catch(() => {
-                const miniCartContent = document.getElementById('mini-cart-content');
-                if (miniCartContent) {
-                    miniCartContent.innerHTML = '<div class="text-center text-red-500 py-6">Could not load cart.</div>';
-                }
-            });
-        }
-        // Fetch mini-cart on page load
-        document.addEventListener('DOMContentLoaded', fetchMiniCart);
-        // Update mini-cart after cart actions
-        document.body.addEventListener('click', function(e) {
-            if (e.target.closest('.add-to-cart') || e.target.closest('.remove-from-cart') || e.target.closest('.update-cart')) {
-                setTimeout(fetchMiniCart, 400);
-            }
-        });
-    </script>
+    <script src="/js/main.js"></script>
 </body>
 </html>

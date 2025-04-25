@@ -34,9 +34,7 @@ class CartController extends BaseController {
             require_once __DIR__ . '/../models/Cart.php';
             $cartModel = new Cart($pdo, $userId);
             $cartModel->mergeSessionCart($_SESSION['cart']);
-            // Always clear session cart after merging
             $_SESSION['cart'] = [];
-            $_SESSION['cart_count'] = 0;
         }
     }
 
@@ -94,9 +92,7 @@ class CartController extends BaseController {
         }
         if ($this->isLoggedIn) {
             $this->cartModel->addItem($productId, $quantity);
-            $cartCount = $this->getCartCount();
         } else {
-            // Standardize session cart: always [productId => quantity]
             if (isset($_SESSION['cart'][$productId])) {
                 $newQuantity = $_SESSION['cart'][$productId] + $quantity;
                 if (!$this->productModel->isInStock($productId, $newQuantity)) {
@@ -111,9 +107,9 @@ class CartController extends BaseController {
             } else {
                 $_SESSION['cart'][$productId] = $quantity;
             }
-            $cartCount = array_sum($_SESSION['cart']);
-            $_SESSION['cart_count'] = $cartCount;
         }
+        $cartCount = $this->getCartCount();
+        $_SESSION['cart_count'] = $cartCount;
         $stockInfo = $this->productModel->checkStock($productId);
         $currentStock = $stockInfo ? ($stockInfo['stock_quantity'] - $quantity) : 0;
         $stockStatus = 'in_stock';
@@ -159,7 +155,6 @@ class CartController extends BaseController {
                     $this->cartModel->removeItem($productId);
                 }
             }
-            $cartCount = $this->getCartCount();
         } else {
             foreach ($updates as $productId => $quantity) {
                 $productId = $this->validateInput($productId, 'int');
@@ -175,13 +170,11 @@ class CartController extends BaseController {
                     unset($_SESSION['cart'][$productId]);
                 }
             }
-            $cartCount = array_sum($_SESSION['cart']);
-            $_SESSION['cart_count'] = $cartCount;
         }
         $this->jsonResponse([
             'success' => empty($stockErrors),
             'message' => empty($stockErrors) ? 'Cart updated' : 'Some items have insufficient stock',
-            'cartCount' => $cartCount,
+            'cartCount' => $this->getCartCount(),
             'errors' => $stockErrors
         ]);
     }
@@ -191,14 +184,11 @@ class CartController extends BaseController {
         $productId = $this->validateInput($_POST['product_id'] ?? null, 'int');
         if ($this->isLoggedIn) {
             $this->cartModel->removeItem($productId);
-            $cartCount = $this->getCartCount();
         } else {
             if (!$productId || !isset($_SESSION['cart'][$productId])) {
                 $this->jsonResponse(['success' => false, 'message' => 'Product not found in cart'], 404);
             }
             unset($_SESSION['cart'][$productId]);
-            $cartCount = array_sum($_SESSION['cart']);
-            $_SESSION['cart_count'] = $cartCount;
         }
         $userId = $this->userId;
         $this->logAuditTrail('cart_remove', $userId, [
@@ -208,25 +198,22 @@ class CartController extends BaseController {
         $this->jsonResponse([
             'success' => true,
             'message' => 'Product removed from cart',
-            'cartCount' => $cartCount
+            'cartCount' => $this->getCartCount()
         ]);
     }
 
     public function clearCart() {
         if ($this->isLoggedIn) {
             $this->cartModel->clearCart();
-            $cartCount = 0;
         } else {
             $_SESSION['cart'] = [];
-            $cartCount = 0;
-            $_SESSION['cart_count'] = 0;
         }
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $this->validateCSRF();
             $this->jsonResponse([
                 'success' => true,
                 'message' => 'Cart cleared',
-                'cartCount' => $cartCount
+                'cartCount' => 0
             ]);
         } else {
             $this->redirect('cart');
@@ -304,7 +291,7 @@ class CartController extends BaseController {
                     'product' => [
                         'id' => $item['id'],
                         'name' => $item['name'],
-                        'image' => $item['image'], // Use 'image' instead of 'image_url'
+                        'image_url' => $item['image_url'],
                         'price' => $item['price']
                     ],
                     'quantity' => $item['quantity']
@@ -319,7 +306,7 @@ class CartController extends BaseController {
                         'product' => [
                             'id' => $product['id'],
                             'name' => $product['name'],
-                            'image' => $product['image'], // Use 'image' instead of 'image_url'
+                            'image_url' => $product['image_url'],
                             'price' => $product['price']
                         ],
                         'quantity' => $quantity
@@ -355,14 +342,12 @@ class ProductController extends BaseController {
     public function showHomePage() {
         try {
             $featuredProducts = $this->productModel->getFeatured();
+            
             if (empty($featuredProducts)) {
                 $this->logSecurityEvent('no_featured_products', null, ['ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             }
+            
             $csrfToken = $this->getCsrfToken();
-            extract([
-                'featuredProducts' => $featuredProducts,
-                'csrfToken' => $csrfToken
-            ]);
             require_once __DIR__ . '/../views/home.php';
         } catch (Exception $e) {
             $this->logSecurityEvent('error_show_home', null, ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
@@ -373,14 +358,13 @@ class ProductController extends BaseController {
     
     public function showProductList() {
         try {
-            $page = 1;
-            if (isset($_GET['page_num']) && is_numeric($_GET['page_num']) && (int)$_GET['page_num'] > 0) {
-                $page = (int)$_GET['page_num'];
-            }
+            // Validate and sanitize inputs
+            $page = max(1, (int)($this->validateInput($_GET['page_num'] ?? 1, 'int')));
             $categoryId = isset($_GET['category']) ? $this->validateInput($_GET['category'], 'int') : null;
             $sortBy = $this->validateInput($_GET['sort'] ?? 'name_asc', 'string');
             $minPrice = $this->validateInput($_GET['min_price'] ?? null, 'float');
             $maxPrice = $this->validateInput($_GET['max_price'] ?? null, 'float');
+            
             // Calculate pagination
             $offset = ($page - 1) * $this->itemsPerPage;
             
@@ -449,6 +433,7 @@ class ProductController extends BaseController {
                 ($categoryId ? ($categoryName ? htmlspecialchars($categoryName) . " Products" : "Category Products") : "All Products");
             
             $csrfToken = $this->getCsrfToken();
+            
             // Prepare pagination data
             $paginationData = [
                 'currentPage' => $page,
@@ -460,17 +445,9 @@ class ProductController extends BaseController {
             if (!empty($queryParams)) {
                 $paginationData['baseUrl'] .= '&' . http_build_query($queryParams);
             }
-            extract([
-                'products' => $products,
-                'categories' => $categories,
-                'csrfToken' => $csrfToken,
-                'pageTitle' => $pageTitle,
-                'searchQuery' => $searchQuery,
-                'sortBy' => $sortBy,
-                'paginationData' => $paginationData,
-                'categoryId' => $categoryId ?? null
-            ]);
+            
             require_once __DIR__ . '/../views/products.php';
+            
         } catch (Exception $e) {
             $this->logSecurityEvent('error_show_product_list', null, ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
             $this->setFlashMessage('Error loading products', 'error');
@@ -725,7 +702,6 @@ class ProductController extends BaseController {
 // Enhanced product detail view with image path fix, robust data handling, AJAX add-to-cart, and modern layout
 require_once __DIR__ . '/layout/header.php';
 ?>
-<body class="page-product-detail">
 <!-- Output CSRF token for JS (for AJAX add-to-cart) -->
 <input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
 <section class="product-detail py-12 md:py-20 bg-white">
@@ -1012,78 +988,202 @@ require_once __DIR__ . '/layout/header.php';
         <?php endif; ?>
     </div>
 </section>
-<?php require_once __DIR__ . '/layout/footer.php'; ?>
-```
-
-# views/login.php  
-```php
-<?php require_once __DIR__ . '/layout/header.php'; ?>
-<body class="page-login">
-<section class="auth-section">
-    <div class="container">
-        <div class="auth-container" data-aos="fade-up">
-            <h1>Login</h1>
-            <p class="auth-description">Welcome back! Please enter your credentials to continue.</p>
-
-            <?php if (isset($_SESSION['flash_message'])): ?>
-                <div class="flash-message <?= $_SESSION['flash_type'] ?? 'info' ?>">
-                    <?= htmlspecialchars($_SESSION['flash_message']) ?>
-                </div>
-                <?php unset($_SESSION['flash_message'], $_SESSION['flash_type']); ?>
-            <?php endif; ?>
-
-            <form action="index.php?page=login" method="POST" class="auth-form" id="loginForm">
-                <div class="form-group">
-                    <label for="email">Email Address</label>
-                    <input type="email" id="email" name="email" required 
-                           value="<?= htmlspecialchars($_POST['email'] ?? '') ?>"
-                           placeholder="Enter your email address">
-                </div>
-
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <div class="password-input">
-                        <input type="password" id="password" name="password" required
-                               placeholder="Enter your password">
-                        <button type="button" class="toggle-password">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </div>
-                    <div class="forgot-password">
-                        <a href="index.php?page=forgot-password">Forgot Password?</a>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="remember_me" value="1"
-                               <?= isset($_POST['remember_me']) ? 'checked' : '' ?>>
-                        <span>Keep me logged in</span>
-                    </label>
-                </div>
-
-                <button type="submit" class="btn-primary full-width" id="submitButton">
-                    <span class="button-text">Login</span>
-                    <span class="button-loader hidden">
-                        <i class="fas fa-spinner fa-spin"></i>
-                    </span>
-                </button>
-            </form>
-
-            <div class="auth-links">
-                <p>Don't have an account? <a href="index.php?page=register">Create one now</a></p>
-            </div>
-        </div>
-    </div>
-</section>
-
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- Gallery Logic ---
+    const mainImage = document.getElementById('mainImage');
+    const thumbnails = document.querySelectorAll('.thumbnail-grid img');
+    function updateMainImage(thumbnailElement) {
+        if (mainImage && thumbnailElement) {
+            mainImage.src = thumbnailElement.src;
+            mainImage.alt = thumbnailElement.alt.replace('View', 'Main view');
+            thumbnails.forEach(img => {
+                img.classList.remove('active');
+            });
+            thumbnailElement.classList.add('active');
+        }
+    }
+    window.updateMainImage = updateMainImage;
+    // --- Quantity Selector Logic ---
+    const quantityInput = document.querySelector('.quantity-selector input');
+    if (quantityInput) {
+        const quantityMax = parseInt(quantityInput.getAttribute('max') || '99');
+        document.querySelectorAll('.quantity-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                let value = parseInt(quantityInput.value);
+                if (isNaN(value)) value = 1;
+                if (this.classList.contains('plus')) {
+                    if (value < quantityMax) quantityInput.value = value + 1;
+                    else quantityInput.value = quantityMax;
+                } else if (this.classList.contains('minus')) {
+                    if (value > 1) quantityInput.value = value - 1;
+                }
+            });
+        });
+    }
+    // --- Tab Switching Logic ---
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const tabId = this.dataset.tab;
+            tabBtns.forEach(b => b.classList.remove('active', 'text-primary', 'border-primary'));
+            tabBtns.forEach(b => b.classList.add('text-gray-500', 'border-transparent'));
+            this.classList.add('active', 'text-primary', 'border-primary');
+            this.classList.remove('text-gray-500', 'border-transparent');
+            tabPanes.forEach(pane => {
+                if (pane.id === tabId) {
+                    pane.classList.add('active');
+                    pane.classList.remove('hidden');
+                } else {
+                    pane.classList.remove('active');
+                    pane.classList.add('hidden');
+                }
+            });
+        });
+    });
+    // Ensure initial active tab's pane is visible
+    const initialActiveTab = document.querySelector('.tab-btn.active');
+    if(initialActiveTab) {
+        const initialTabId = initialActiveTab.dataset.tab;
+        tabPanes.forEach(pane => {
+            if (pane.id === initialTabId) {
+                pane.classList.add('active');
+                pane.classList.remove('hidden');
+            } else {
+                pane.classList.remove('active');
+                pane.classList.add('hidden');
+            }
+        });
+    }
+    // --- Add to Cart Form Submission (AJAX) ---
+    const addToCartForm = document.getElementById('product-detail-add-cart-form');
+    if (addToCartForm) {
+        addToCartForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const submitButton = this.querySelector('button[type="submit"].add-to-cart');
+            if (!submitButton || submitButton.disabled) return;
+            const originalButtonHtml = submitButton.innerHTML;
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Adding...';
+            fetch(this.action, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' },
+                body: new URLSearchParams(formData)
+            })
+            .then(response => {
+                const contentType = response.headers.get("content-type");
+                if (response.ok && contentType && contentType.indexOf("application/json") !== -1) {
+                    return response.json();
+                }
+                return response.text().then(text => {
+                    throw new Error(`Server error ${response.status}: ${text.substring(0, 200)}`);
+                });
+            })
+            .then(data => {
+                if (data.success) {
+                    const cartCountSpan = document.querySelector('.cart-count');
+                    if (cartCountSpan) {
+                        cartCountSpan.textContent = data.cart_count;
+                        cartCountSpan.style.display = data.cart_count > 0 ? 'inline-block' : 'none';
+                    }
+                    showFlashMessage(data.message || 'Product added to cart!', 'success');
+                    if(data.stock_status === 'out_of_stock') {
+                        submitButton.classList.remove('btn-primary');
+                        submitButton.classList.add('btn-disabled');
+                        submitButton.innerHTML = '<i class="fas fa-times-circle mr-2"></i> Out of Stock';
+                    } else {
+                        submitButton.innerHTML = originalButtonHtml;
+                        submitButton.disabled = false;
+                    }
+                } else {
+                    showFlashMessage(data.message || 'Could not add product.', 'error');
+                    submitButton.innerHTML = originalButtonHtml;
+                    submitButton.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error adding to cart:', error);
+                showFlashMessage('An error occurred. Please try again.', 'error');
+                if (submitButton) {
+                    submitButton.innerHTML = originalButtonHtml;
+                    submitButton.disabled = false;
+                }
+            });
+        });
+    }
+    // --- Related Products Add to Cart (AJAX) ---
+    document.querySelectorAll('.add-to-cart-related').forEach(button => {
+        button.addEventListener('click', function() {
+            const productId = this.dataset.productId;
+            const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
+            const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
+            if (!csrfToken) {
+                showFlashMessage('Security token not found. Please refresh.', 'error');
+                return;
+            }
+            if (this.disabled) return;
+            const originalButtonText = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            const formData = new URLSearchParams();
+            formData.append('product_id', productId);
+            formData.append('quantity', '1');
+            formData.append('csrf_token', csrfToken);
+            fetch('index.php?page=cart&action=add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: formData
+            })
+            .then(response => {
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    return response.json();
+                } else {
+                    return response.text().then(text => {
+                        throw new Error("Received non-JSON response: " + text.substring(0, 200));
+                    });
+                }
+            })
+            .then(data => {
+                if (data.success) {
+                    const cartCountSpan = document.querySelector('.cart-count');
+                    if (cartCountSpan) {
+                        cartCountSpan.textContent = data.cart_count;
+                        cartCountSpan.style.display = data.cart_count > 0 ? 'inline-block' : 'none';
+                    }
+                    showFlashMessage(data.message || 'Product added to cart!', 'success');
+                    if(data.stock_status === 'out_of_stock') {
+                        this.classList.remove('btn-secondary');
+                        this.classList.add('btn-disabled');
+                        this.innerHTML = 'Out of Stock';
+                    } else {
+                        this.innerHTML = originalButtonText;
+                        this.disabled = false;
+                    }
+                } else {
+                    showFlashMessage(data.message || 'Could not add product.', 'error');
+                    this.innerHTML = originalButtonText;
+                    this.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error adding related product:', error);
+                showFlashMessage('An error occurred. Please try again.', 'error');
+                this.innerHTML = originalButtonText;
+                this.disabled = false;
+            });
+        });
+    });
+});
+</script>
 <?php require_once __DIR__ . '/layout/footer.php'; ?>
 ```
 
 # views/products.php  
 ```php
 <?php require_once __DIR__ . '/layout/header.php'; ?>
-<body class="page-products">
 
 <!-- Output CSRF token for JS (for AJAX add-to-cart) -->
 <input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
@@ -1275,6 +1375,47 @@ require_once __DIR__ . '/layout/header.php';
     </div>
 </section>
 
+<style>
+    .category-link {
+        color: #4B5563;
+        padding: 0.25rem 0.75rem;
+        border-radius: 0.375rem;
+        transition: background 0.2s, color 0.2s;
+        text-decoration: none;
+    }
+    .category-link.active {
+        color: #1A4D5A;
+        font-weight: 600;
+        background: #A0C1B1;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle sorting
+    const sortSelect = document.getElementById('sort');
+    sortSelect.addEventListener('change', function() {
+        const url = new URL(window.location.href);
+        url.searchParams.set('sort', this.value);
+        window.location.href = url.toString();
+    });
+    
+    // Handle price filter
+    const applyPriceFilter = document.querySelector('.apply-price-filter');
+    applyPriceFilter.addEventListener('click', function() {
+        const minPrice = document.getElementById('minPrice').value;
+        const maxPrice = document.getElementById('maxPrice').value;
+        
+        const url = new URL(window.location.href);
+        if (minPrice) url.searchParams.set('min_price', minPrice);
+        if (maxPrice) url.searchParams.set('max_price', maxPrice);
+        window.location.href = url.toString();
+    });
+    
+    // Handle add to cart (delegated to footer.js, but fallback for legacy)
+});
+</script>
+
 <?php require_once __DIR__ . '/layout/footer.php'; ?>
 ```
 
@@ -1403,10 +1544,10 @@ class Product {
     
     public function getFiltered($conditions = [], $params = [], $sortBy = 'name_asc', $limit = 12, $offset = 0) {
         $fixedConditions = array_map(function($cond) {
-            $cond = preg_replace('/\bname\b/', 'p.name', $cond);
-            $cond = preg_replace('/\bdescription\b/', 'p.description', $cond);
-            $cond = preg_replace('/\bprice\b/', 'p.price', $cond);
-            $cond = preg_replace('/\bcategory_id\b/', 'p.category_id', $cond);
+            $cond = preg_replace('/\\bname\\b/', 'p.name', $cond);
+            $cond = preg_replace('/\\bdescription\\b/', 'p.description', $cond);
+            $cond = preg_replace('/\\bprice\\b/', 'p.price', $cond);
+            $cond = preg_replace('/\\bcategory_id\\b/', 'p.category_id', $cond);
             return $cond;
         }, $conditions);
         $sql = "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id";
@@ -1430,15 +1571,12 @@ class Product {
                 break;
         }
         $sql .= " LIMIT ? OFFSET ?";
+        $params[] = (int)$limit;
+        $params[] = (int)$offset;
         $stmt = $this->pdo->prepare($sql);
-        $paramIndex = 1;
-        foreach ($params as $value) {
-            $stmt->bindValue($paramIndex++, $value);
-        }
-        $stmt->bindValue($paramIndex++, (int)$limit, PDO::PARAM_INT);
-        $stmt->bindValue($paramIndex++, (int)$offset, PDO::PARAM_INT);
-        $stmt->execute();
+        $stmt->execute($params);
         $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Decode JSON fields if present
         foreach ($products as &$product) {
             if (isset($product['benefits'])) {
                 $product['benefits'] = json_decode($product['benefits'], true) ?? [];

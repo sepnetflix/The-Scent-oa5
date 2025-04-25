@@ -4,6 +4,7 @@ require_once __DIR__ . '/layout/header.php'; // Uses header-fixed.php content im
 echo '<!-- DEBUG: home.php loaded -->';
 $delay = 0; // Initialize delay counter for animations
 ?>
+<body class="page-home">
 <!-- Output CSRF token for JS (for AJAX add-to-cart/newsletter) -->
 <input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
 
@@ -50,7 +51,7 @@ $delay = 0; // Initialize delay counter for animations
     <div class="container mx-auto text-center">
         <h2 class="text-3xl md:text-4xl font-bold mb-12" data-aos="fade-up">Featured Collections</h2>
         <div class="featured-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 px-6">
-            <?php if (!empty($featuredProducts)): ?>
+            <?php if (isset($featuredProducts) && is_array($featuredProducts) && !empty($featuredProducts)): ?>
                 <?php foreach ($featuredProducts as $product): ?>
                     <!-- Apply suggested card structure/style -->
                     <div class="product-card sample-card" data-aos="zoom-in" style="border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,0.05); overflow:hidden;">
@@ -176,37 +177,6 @@ $delay = 0; // Initialize delay counter for animations
         </div>
     </div>
 </section>
-
-<script>
-    // Newsletter form submission
-    const newsletterForm = document.getElementById('newsletter-form');
-    if (newsletterForm) {
-        newsletterForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-            try {
-                const response = await fetch('index.php?page=newsletter&action=subscribe', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: new URLSearchParams(formData)
-                });
-                const data = await response.json();
-                if (data.success) {
-                    showFlashMessage(data.message || 'Thank you for subscribing!', 'success');
-                    newsletterForm.querySelector('input[type="email"]').value = '';
-                    newsletterForm.querySelector('button').disabled = true;
-                } else {
-                    showFlashMessage(data.message || 'Subscription failed', 'error');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                showFlashMessage('Subscription failed', 'error');
-            }
-        });
-    }
-</script>
 
 <!-- Testimonials Section (Keep existing) -->
 <section class="py-20 bg-white" id="testimonials">

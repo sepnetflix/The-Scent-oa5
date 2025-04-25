@@ -1,4 +1,5 @@
 <?php require_once __DIR__ . '/layout/header.php'; ?>
+<body class="page-quiz">
 
 <div class="quiz-container min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5 py-20">
     <!-- Particles Background -->
@@ -62,37 +63,5 @@
         </div>
     </div>
 </div>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    // Initialize particles
-    particlesJS.load('particles-js', '/particles.json');
-
-    // Handle option selection
-    const options = document.querySelectorAll('.quiz-option');
-    options.forEach(option => {
-        option.addEventListener('click', () => {
-            // Remove selected state from all options
-            options.forEach(opt => opt.querySelector('div').classList.remove('border-primary', 'bg-primary/5'));
-            
-            // Add selected state to clicked option
-            option.querySelector('div').classList.add('border-primary', 'bg-primary/5');
-        });
-    });
-
-    // Optional: Smooth scroll to results
-    document.getElementById('scent-quiz').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const form = e.target;
-        
-        if (!form.mood.value) {
-            alert('Please select an option to continue.');
-            return;
-        }
-
-        form.submit();
-    });
-});
-</script>
 
 <?php require_once __DIR__ . '/layout/footer.php'; ?>

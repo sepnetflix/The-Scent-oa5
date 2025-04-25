@@ -1,4 +1,5 @@
 <?php require_once __DIR__ . '/layout/header.php'; ?>
+<body class="page-products">
 
 <!-- Output CSRF token for JS (for AJAX add-to-cart) -->
 <input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
@@ -189,46 +190,5 @@
         </div>
     </div>
 </section>
-
-<style>
-    .category-link {
-        color: #4B5563;
-        padding: 0.25rem 0.75rem;
-        border-radius: 0.375rem;
-        transition: background 0.2s, color 0.2s;
-        text-decoration: none;
-    }
-    .category-link.active {
-        color: #1A4D5A;
-        font-weight: 600;
-        background: #A0C1B1;
-    }
-</style>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Handle sorting
-    const sortSelect = document.getElementById('sort');
-    sortSelect.addEventListener('change', function() {
-        const url = new URL(window.location.href);
-        url.searchParams.set('sort', this.value);
-        window.location.href = url.toString();
-    });
-    
-    // Handle price filter
-    const applyPriceFilter = document.querySelector('.apply-price-filter');
-    applyPriceFilter.addEventListener('click', function() {
-        const minPrice = document.getElementById('minPrice').value;
-        const maxPrice = document.getElementById('maxPrice').value;
-        
-        const url = new URL(window.location.href);
-        if (minPrice) url.searchParams.set('min_price', minPrice);
-        if (maxPrice) url.searchParams.set('max_price', maxPrice);
-        window.location.href = url.toString();
-    });
-    
-    // Handle add to cart (delegated to footer.js, but fallback for legacy)
-});
-</script>
 
 <?php require_once __DIR__ . '/layout/footer.php'; ?>

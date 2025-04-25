@@ -1,5 +1,5 @@
 <?php require_once __DIR__ . '/layout/header.php'; ?>
-
+<body class="page-quiz-results">
 <div class="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5 py-20">
     <!-- Particles Background -->
     <div id="particles-js" class="absolute inset-0 z-0"></div>
@@ -14,6 +14,7 @@
 
             <!-- Product Recommendations -->
             <div class="grid md:grid-cols-3 gap-8 mb-12">
+                <?php if (!isset($products) || !is_array($products)): $products = []; endif; ?>
                 <?php foreach ($products as $product): ?>
                     <div class="bg-white rounded-xl shadow-lg overflow-hidden" data-aos="fade-up">
                         <div class="aspect-w-1 aspect-h-1">
@@ -72,19 +73,5 @@
         </div>
     </div>
 </div>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    // Initialize particles
-    particlesJS.load('particles-js', '/particles.json');
-
-    // Initialize AOS
-    AOS.init({
-        duration: 800,
-        offset: 100,
-        once: true
-    });
-});
-</script>
 
 <?php require_once __DIR__ . '/layout/footer.php'; ?>
