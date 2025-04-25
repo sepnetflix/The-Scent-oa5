@@ -1,1544 +1,777 @@
-# js/main.js  
+# controllers/AccountController.php  
 ```php
-// --- START OF UPDATED main.js ---
+<?php
 
-// Mobile menu toggle
-window.addEventListener('DOMContentLoaded', function() {
-    var menuToggle = document.querySelector('.mobile-menu-toggle');
-    var navLinks = document.querySelector('.nav-links');
-    if (menuToggle && navLinks) {
-        menuToggle.addEventListener('click', function() {
-            // Toggle navigation visibility
-            navLinks.classList.toggle('active');
-            // Toggle body class to prevent scrolling when menu is open
-            document.body.classList.toggle('menu-open');
-            // Toggle icon class (optional, if you want fa-times)
-             const icon = menuToggle.querySelector('i');
-             if (icon) {
-                 icon.classList.toggle('fa-bars');
-                 icon.classList.toggle('fa-times');
-             }
-        });
-    }
-    // Close menu if clicking outside of it on mobile
-    document.addEventListener('click', function(e) {
-        if (navLinks && navLinks.classList.contains('active') && !menuToggle.contains(e.target) && !navLinks.contains(e.target)) {
-             navLinks.classList.remove('active');
-             document.body.classList.remove('menu-open');
-             const icon = menuToggle.querySelector('i');
-             if (icon) {
-                 icon.classList.remove('fa-times');
-                 icon.classList.add('fa-bars');
-             }
-        }
-    });
-});
+// Ensure all required files are loaded. BaseController should handle session start.
+require_once __DIR__ . '/BaseController.php';
+require_once __DIR__ . '/../models/Order.php';
+require_once __DIR__ . '/../models/Quiz.php';
+require_once __DIR__ . '/../models/User.php';
+require_once __DIR__ . '/../includes/EmailService.php';
+require_once __DIR__ . '/../includes/SecurityMiddleware.php'; // Needed for static methods
+require_once __DIR__ . '/../controllers/CartController.php'; // Needed for mergeSessionCartOnLogin (ensure file exists)
+require_once __DIR__ . '/../config.php'; // Needed for BASE_URL
 
-// showFlashMessage utility
-window.showFlashMessage = function(message, type = 'info') {
-    let flashContainer = document.querySelector('.flash-message-container');
-    // Create container if it doesn't exist
-    if (!flashContainer) {
-        flashContainer = document.createElement('div');
-        // Apply Tailwind classes for positioning and styling the container
-        flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full space-y-2';
-        document.body.appendChild(flashContainer);
+class AccountController extends BaseController {
+    private EmailService $emailService;
+    private User $userModel;
+    private Order $orderModel;
+    private Quiz $quizModel;
+
+    // Constants from SECURITY_SETTINGS in config.php can be used if needed,
+    // but keeping specific controller logic separate can also be fine.
+    // private int $maxLoginAttempts = SECURITY_SETTINGS['password']['max_attempts'] ?? 5;
+    // private int $lockoutDuration = SECURITY_SETTINGS['password']['lockout_duration'] ?? 900;
+    private int $resetTokenExpiry = 3600; // 1 hour
+
+    // Security Headers are likely handled by SecurityMiddleware::apply() called in index.php
+    // Or potentially set via BaseController. Avoid duplicating header() calls here.
+
+    public function __construct(PDO $pdo) {
+        parent::__construct($pdo); // Calls BaseController constructor
+        // Initialize models and services (EmailService is already initialized in BaseController)
+        $this->userModel = new User($pdo);
+        $this->orderModel = new Order($pdo);
+        $this->quizModel = new Quiz($pdo);
     }
 
-    const flashDiv = document.createElement('div');
-    // Define color mapping using Tailwind classes
-    const colorMap = {
-        success: 'bg-green-100 border-green-400 text-green-700',
-        error: 'bg-red-100 border-red-400 text-red-700',
-        info: 'bg-blue-100 border-blue-400 text-blue-700',
-        warning: 'bg-yellow-100 border-yellow-400 text-yellow-700'
-    };
-    // Apply Tailwind classes for the message appearance
-    flashDiv.className = `flash-message border px-4 py-3 rounded relative shadow-md flex justify-between items-center transition-opacity duration-300 ease-out opacity-0 ${colorMap[type] || colorMap['info']}`;
-    flashDiv.setAttribute('role', 'alert');
+    // --- Account Management Pages ---
 
-    const messageSpan = document.createElement('span');
-    messageSpan.className = 'block sm:inline';
-    messageSpan.textContent = message;
-    flashDiv.appendChild(messageSpan);
+    /**
+     * Displays the user's account dashboard.
+     * Assumes route like: index.php?page=account&action=dashboard (or similar)
+     */
+    public function showDashboard() {
+        try {
+            $this->requireLogin(); // From BaseController
+            $userId = $this->getUserId(); // From BaseController
 
-    const closeButton = document.createElement('button'); // Use button for accessibility
-    closeButton.className = 'ml-4 text-xl leading-none font-semibold hover:text-black';
-    closeButton.innerHTML = '&times;';
-    closeButton.setAttribute('aria-label', 'Close message');
-    closeButton.onclick = () => {
-        flashDiv.style.opacity = '0';
-        // Remove after transition
-        setTimeout(() => flashDiv.remove(), 300);
-    };
-    flashDiv.appendChild(closeButton);
+            // Use transaction for consistency if needed, though reads might not require it strictly.
+            $this->beginTransaction(); // From BaseController
 
-    // Add to container and fade in
-    flashContainer.appendChild(flashDiv);
-    // Force reflow before adding opacity class for transition
-    void flashDiv.offsetWidth;
-    flashDiv.style.opacity = '1';
+            try {
+                $recentOrders = $this->orderModel->getRecentByUserId($userId, 5);
+                $quizResults = $this->quizModel->getResultsByUserId($userId);
 
+                $this->commit(); // From BaseController
 
-    // Auto-dismiss timer
-    setTimeout(() => {
-        if (flashDiv && flashDiv.parentNode) { // Check if it wasn't already closed
-             flashDiv.style.opacity = '0';
-             setTimeout(() => flashDiv.remove(), 300); // Remove after fade out
+                // Use renderView from BaseController - Adjusted path
+                echo $this->renderView('account_dashboard', [
+                    'pageTitle' => 'My Account - The Scent',
+                    'recentOrders' => $recentOrders,
+                    'quizResults' => $quizResults,
+                    // BaseController might automatically add csrfToken, or add it here if needed
+                    'csrfToken' => $this->generateCSRFToken()
+                ]);
+                return; // Stop execution after rendering
+
+            } catch (Exception $e) {
+                $this->rollback(); // From BaseController
+                throw $e; // Re-throw to be caught by the outer catch block
+            }
+
+        } catch (Exception $e) {
+            error_log("Account Dashboard error for user {$userId}: " . $e->getMessage());
+            $this->setFlashMessage('Error loading dashboard. Please try again later.', 'error'); // From BaseController
+            $this->redirect('error'); // From BaseController (assuming 'error' page/route exists)
         }
-    }, 5000); // Keep message for 5 seconds
-};
+    }
+
+    /**
+     * Displays the user's order history with pagination.
+     * Assumes route like: index.php?page=account&action=orders
+     */
+    public function showOrders() {
+        try {
+            $this->requireLogin();
+            $userId = $this->getUserId();
+
+            // Validate and sanitize pagination params using SecurityMiddleware
+            $page = SecurityMiddleware::validateInput($_GET['p'] ?? 1, 'int', ['min' => 1]) ?: 1;
+            $perPage = 10; // Consider making this configurable
+
+            // Get paginated orders
+            $orders = $this->orderModel->getAllByUserId($userId, $page, $perPage);
+            $totalOrders = $this->orderModel->getTotalOrdersByUserId($userId);
+            $totalPages = ceil($totalOrders / $perPage);
+
+            // Render view - Adjusted path
+            echo $this->renderView('account_orders', [
+                'pageTitle' => 'My Orders - The Scent',
+                'orders' => $orders,
+                'currentPage' => $page,
+                'totalPages' => $totalPages,
+                'csrfToken' => $this->generateCSRFToken()
+            ]);
+            return;
+
+        } catch (Exception $e) {
+            error_log("Account Orders error for user {$userId}: " . $e->getMessage());
+            $this->setFlashMessage('Error loading orders. Please try again later.', 'error');
+            $this->redirect('error');
+        }
+    }
+
+    /**
+     * Displays the details of a specific order.
+     * Assumes route like: index.php?page=account&action=order_details&id=123
+     */
+    public function showOrderDetails(int $orderId) { // Type hint parameter
+        try {
+            $this->requireLogin();
+            $userId = $this->getUserId();
+
+            // Basic validation (Type hint helps, also check > 0)
+            if ($orderId <= 0) {
+                 $this->setFlashMessage('Invalid order ID.', 'error');
+                 $this->redirect(BASE_URL . 'index.php?page=account&action=orders'); // Redirect to orders list
+                 return; // Stop execution
+            }
+
+            // Get order with auth check
+            $order = $this->orderModel->getByIdAndUserId($orderId, $userId);
+            if (!$order) {
+                // Log attempt to access unauthorized/non-existent order
+                error_log("User {$userId} failed to access order {$orderId}");
+                $this->setFlashMessage('Order not found or access denied.', 'error');
+                 // Render 404 view - using BaseController method
+                 http_response_code(404);
+                 echo $this->renderView('404', ['pageTitle' => 'Order Not Found']);
+                 return;
+            }
+
+            // Render view - Adjusted path
+            echo $this->renderView('account_order_details', [
+                'pageTitle' => "Order #" . htmlspecialchars(str_pad($order['id'], 6, '0', STR_PAD_LEFT), ENT_QUOTES, 'UTF-8') . " - The Scent",
+                'order' => $order,
+                'csrfToken' => $this->generateCSRFToken()
+            ]);
+            return;
+
+        } catch (Exception $e) {
+            error_log("Order details error for user {$userId}, order {$orderId}: " . $e->getMessage());
+            $this->setFlashMessage('Error loading order details. Please try again later.', 'error');
+            $this->redirect(BASE_URL . 'index.php?page=account&action=orders');
+        }
+    }
+
+    /**
+     * Displays the user profile editing form.
+     * Assumes route like: index.php?page=account&action=profile
+     */
+    public function showProfile() {
+        try {
+            $this->requireLogin();
+            $user = $this->getCurrentUser(); // Assumes BaseController provides this securely
+
+            if (!$user) {
+                 $this->setFlashMessage('Could not load user profile data.', 'error');
+                 $this->redirect('login'); // Redirect to login if user somehow lost
+                 return;
+            }
+
+            // Render view - Adjusted path
+            echo $this->renderView('account_profile', [
+                'pageTitle' => 'My Profile - The Scent',
+                'user' => $user,
+                'csrfToken' => $this->generateCSRFToken()
+            ]);
+            return;
+
+        } catch (Exception $e) {
+            $userId = $this->getUserId() ?? 'unknown';
+            error_log("Show Profile error for user {$userId}: " . $e->getMessage());
+            $this->setFlashMessage('Error loading profile. Please try again later.', 'error');
+            $this->redirect('error');
+        }
+    }
+
+    /**
+     * Handles the submission of the profile update form.
+     * Assumes route like: index.php?page=account&action=update_profile (POST)
+     */
+    public function updateProfile() {
+        $userId = null; // Initialize for error logging
+        try {
+            $this->requireLogin();
+            $userId = $this->getUserId();
+            $this->validateCSRF(); // From BaseController, checks POST token
+
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                $this->setFlashMessage('Invalid request method.', 'warning');
+                $this->redirect(BASE_URL . 'index.php?page=account&action=profile');
+                return;
+            }
 
 
-// Global AJAX handlers (Add-to-Cart, Newsletter, etc.)
-window.addEventListener('DOMContentLoaded', function() {
-    // Add-to-Cart handler (using event delegation on the body)
-    document.body.addEventListener('click', function(e) {
-        const btn = e.target.closest('.add-to-cart');
-        if (!btn) return; // Exit if the clicked element is not an add-to-cart button or its child
-        e.preventDefault();
-        if (btn.disabled) return; // Prevent multiple clicks while processing
+            // Validate inputs using SecurityMiddleware
+            $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 1, 'max' => 100]); // Ensure name is not empty
+            $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
+            $currentPassword = $_POST['current_password'] ?? ''; // Keep direct access for password checking
+            $newPassword = $_POST['new_password'] ?? '';         // Keep direct access
 
-        const productId = btn.dataset.productId;
-        const csrfTokenInput = document.getElementById('csrf-token-value');
-        const csrfToken = csrfTokenInput?.value;
+            // Validation checks
+            if ($name === false || empty(trim($name))) { // SecurityMiddleware returns false on fail
+                throw new Exception('Name is required and cannot be empty.');
+            }
+            if ($email === false) {
+                 throw new Exception('A valid email address is required.');
+            }
 
-        if (!productId || !csrfToken) {
-            showFlashMessage('Cannot add to cart. Missing product or security token. Please refresh.', 'error');
-            console.error('Add to Cart Error: Missing productId or CSRF token input.');
+            $this->beginTransaction();
+
+            try {
+                // Check if email is taken by another user
+                if ($this->userModel->isEmailTakenByOthers($email, $userId)) {
+                    throw new Exception('Email address is already in use by another account.');
+                }
+
+                // Update basic info
+                $this->userModel->updateBasicInfo($userId, $name, $email);
+
+                // Update password if a new one is provided
+                if (!empty($newPassword)) {
+                    if (empty($currentPassword)) {
+                        throw new Exception('Current password is required to set a new password.');
+                    }
+                    if (!$this->userModel->verifyPassword($userId, $currentPassword)) {
+                        // Log security event for failed password attempt during profile update
+                        $this->logSecurityEvent('profile_update_password_fail', ['user_id' => $userId, 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN']);
+                        // Monitor suspicious activity? (Optional)
+                        // $this->monitorSuspiciousActivity($userId, 'profile_update_failed_password');
+                        throw new Exception('Current password provided is incorrect.');
+                    }
+
+                    // Validate new password strength
+                    if (!$this->isPasswordStrong($newPassword)) {
+                        throw new Exception('New password does not meet the security requirements (min 12 chars, upper, lower, number, special).');
+                    }
+
+                    $this->userModel->updatePassword($userId, $newPassword);
+                    $this->setFlashMessage('Password updated successfully.', 'info'); // Add separate message
+                }
+
+                $this->commit();
+
+                // IMPORTANT: Update session data after successful update
+                $_SESSION['user']['name'] = $name;
+                $_SESSION['user']['email'] = $email;
+
+                $this->setFlashMessage('Profile updated successfully.', 'success');
+
+                // Log the profile update using BaseController method
+                $this->logAuditTrail('profile_update', $userId, ['name' => $name, 'email' => $email]);
+
+                // Monitor activity after successful update
+                // $this->monitorSuspiciousActivity($userId, 'profile_updates'); // Uncomment if monitorSuspiciousActivity is needed/implemented
+
+                $this->redirect(BASE_URL . 'index.php?page=account&action=profile');
+                return;
+
+            } catch (Exception $e) {
+                $this->rollback();
+                // Log the specific error during the transaction
+                error_log("Profile update transaction error for user {$userId}: " . $e->getMessage());
+                throw $e; // Rethrow to be caught by the outer catch
+            }
+
+        } catch (Exception $e) {
+            $userId = $userId ?? ($this->getUserId() ?? 'unknown'); // Ensure userId is set for logging
+            error_log("Profile update failed for user {$userId}: " . $e->getMessage());
+            $this->setFlashMessage($e->getMessage(), 'error'); // Show specific error message from exception
+            $this->redirect(BASE_URL . 'index.php?page=account&action=profile'); // Redirect back to profile page
+        }
+    }
+
+    // --- Password Reset ---
+
+    /**
+     * Handles the request to reset a password (submitting email).
+     * Assumes route like: index.php?page=request_password_reset (POST)
+     * Also handles GET request to show the form.
+     */
+    public function requestPasswordReset() {
+        // Handle showing the form on GET
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            // Render the 'forgot_password' view using BaseController method
+            echo $this->renderView('forgot_password', [
+                'pageTitle' => 'Forgot Password - The Scent',
+                'csrfToken' => $this->generateCSRFToken()
+            ]);
             return;
         }
 
-        btn.disabled = true;
-        const originalText = btn.textContent;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Adding...'; // Adding state with spinner
+        // Handle POST request
+        try {
+            $this->validateCSRF();
+            $this->validateRateLimit('password_reset_request'); // Use a specific key
 
-        fetch('index.php?page=cart&action=add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            // Ensure quantity=1 is sent if your backend expects it
-            body: `product_id=${encodeURIComponent(productId)}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}`
-        })
-        .then(response => {
-            // Check for JSON response type before parsing
-            const contentType = response.headers.get("content-type");
-            if (response.ok && contentType && contentType.indexOf("application/json") !== -1) {
-                return response.json();
+            $email = SecurityMiddleware::validateInput($_POST['email'] ?? null, 'email');
+
+            // Don't reveal if email is valid or not here for security
+            if ($email === false) {
+                 // Log invalid email format attempt
+                 $this->logSecurityEvent('password_reset_invalid_email_format', ['submitted_email' => $_POST['email'] ?? '', 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN']);
+                 // Still show generic message
+                 $this->setFlashMessage('If an account exists with that email, we have sent password reset instructions.', 'success');
+                 $this->redirect('forgot_password'); // Redirect back to form
+                 return;
             }
-            // Handle non-JSON responses or errors gracefully
-            return response.text().then(text => {
-                 console.error('Add to Cart - Non-JSON response:', response.status, text);
-                 throw new Error(`Server returned status ${response.status}. Check server logs or network response.`);
-            });
-        })
-        .then(data => {
-            if (data.success) {
-                showFlashMessage(data.message || 'Product added to cart!', 'success');
-                // Update cart count in header dynamically
-                const cartCountSpan = document.querySelector('.cart-count');
-                if (cartCountSpan) {
-                    cartCountSpan.textContent = data.cart_count || 0;
-                    cartCountSpan.style.display = (data.cart_count || 0) > 0 ? 'flex' : 'none'; // Use flex if it's display:flex initially
-                }
-                // Optionally change button text briefly or add a checkmark icon
-                btn.textContent = 'Added!';
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    // Re-enable button unless out of stock
-                    if (data.stock_status !== 'out_of_stock') {
-                       btn.disabled = false;
+
+            $this->beginTransaction();
+
+            try {
+                // Find user *before* generating token to avoid unnecessary token generation
+                $user = $this->userModel->getByEmail($email);
+
+                if ($user) {
+                    // Generate a secure random token
+                    $token = bin2hex(random_bytes(32));
+                    $expiry = date('Y-m-d H:i:s', time() + $this->resetTokenExpiry);
+
+                    // Update user record with reset token
+                    $updated = $this->userModel->setResetToken($user['id'], $token, $expiry);
+
+                    if ($updated) {
+                        $resetLink = $this->getResetPasswordUrl($token);
+
+                        // Send password reset email using EmailService from BaseController
+                        $this->emailService->sendPasswordReset($user, $token, $resetLink);
+
+                        // Log the password reset request using BaseController method
+                        $this->logAuditTrail('password_reset_request', $user['id']);
+
+                        // Monitor potential abuse (optional)
+                        // $this->monitorSuspiciousActivity($user['id'], 'password_resets');
                     } else {
-                        // Keep disabled and update text if out of stock now
-                        btn.textContent = 'Out of Stock';
-                        btn.classList.add('btn-disabled'); // Add a class if needed
+                        // Log failure to update token (DB issue?)
+                        error_log("Failed to set password reset token for user {$user['id']}");
+                        // Don't reveal error to user
                     }
-                }, 1500); // Reset after 1.5 seconds
-                 // Update mini cart if applicable
-                 if (typeof fetchMiniCart === 'function') {
-                     fetchMiniCart();
-                 }
-            } else {
-                // Handle specific errors from backend if available
-                showFlashMessage(data.message || 'Could not add product to cart.', 'error');
-                btn.innerHTML = originalText; // Reset button text immediately on failure
-                btn.disabled = false;
-            }
-        })
-        .catch((error) => {
-            console.error('Add to Cart Fetch Error:', error);
-            showFlashMessage(error.message || 'Error adding to cart. Please try again.', 'error');
-            btn.innerHTML = originalText; // Reset button text
-            btn.disabled = false;
-        });
-    });
-
-    // Newsletter AJAX handler (if present)
-    var newsletterForm = document.getElementById('newsletter-form'); // Main newsletter form
-    var newsletterFormFooter = document.getElementById('newsletter-form-footer'); // Footer newsletter form
-
-    function handleNewsletterSubmit(formElement) {
-        formElement.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const emailInput = formElement.querySelector('input[name="email"]');
-            const submitButton = formElement.querySelector('button[type="submit"]');
-            const csrfTokenInput = formElement.querySelector('input[name="csrf_token"]'); // Get token from specific form
-
-            if (!emailInput || !submitButton || !csrfTokenInput) {
-                 console.error("Newsletter form elements missing.");
-                 showFlashMessage('An error occurred. Please try again.', 'error');
-                 return;
-            }
-
-            const email = emailInput.value.trim();
-            const csrfToken = csrfTokenInput.value;
-
-            // Basic email validation
-            if (!email || !/\S+@\S+\.\S+/.test(email)) {
-                showFlashMessage('Please enter a valid email address.', 'error');
-                return;
-            }
-            if (!csrfToken) {
-                 showFlashMessage('Security token missing. Please refresh the page.', 'error');
-                 return;
-            }
-
-            // Disable button and show loading state
-            const originalButtonText = submitButton.textContent;
-            submitButton.disabled = true;
-            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Subscribing...';
-
-            fetch('index.php?page=newsletter&action=subscribe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `email=${encodeURIComponent(email)}&csrf_token=${encodeURIComponent(csrfToken)}`
-            })
-            .then(res => {
-                 const contentType = res.headers.get("content-type");
-                 if (res.ok && contentType && contentType.indexOf("application/json") !== -1) {
-                     return res.json();
-                 }
-                 return res.text().then(text => {
-                     console.error('Newsletter - Non-JSON response:', res.status, text);
-                     throw new Error(`Server returned status ${res.status}.`);
-                 });
-            })
-            .then(data => {
-                showFlashMessage(data.message || (data.success ? 'Subscription successful!' : 'Subscription failed.'), data.success ? 'success' : 'error');
-                if (data.success) {
-                    formElement.reset(); // Clear the form on success
-                }
-            })
-            .catch((error) => {
-                console.error('Newsletter Fetch Error:', error);
-                showFlashMessage(error.message || 'Error subscribing. Please try again later.', 'error');
-            })
-            .finally(() => {
-                 // Re-enable button and restore text
-                 submitButton.disabled = false;
-                 submitButton.textContent = originalButtonText;
-            });
-        });
-    }
-
-    if (newsletterForm) {
-        handleNewsletterSubmit(newsletterForm);
-    }
-    if (newsletterFormFooter) {
-        handleNewsletterSubmit(newsletterFormFooter);
-    }
-});
-
-
-// --- Page Specific Initializers ---
-// These functions are called based on the body class set in PHP
-
-function initHomePage() {
-    // console.log("Initializing Home Page");
-    // Potentially initialize sliders, specific home page elements, etc.
-    // AOS is initialized globally now, so no need to call AOS.init() here unless specific options are needed ONLY for home.
-}
-
-function initProductsPage() {
-    // console.log("Initializing Products Page");
-    // Sorting dropdown logic
-    const sortSelect = document.getElementById('sort');
-    if (sortSelect) {
-        sortSelect.addEventListener('change', function() {
-            const url = new URL(window.location.href);
-            url.searchParams.set('sort', this.value);
-            // Reset page number when sorting changes
-            url.searchParams.delete('page_num');
-            window.location.href = url.toString();
-        });
-    }
-
-    // Price range filter logic
-    const applyPriceFilter = document.querySelector('.apply-price-filter');
-    const minPriceInput = document.getElementById('minPrice');
-    const maxPriceInput = document.getElementById('maxPrice');
-
-    if (applyPriceFilter && minPriceInput && maxPriceInput) {
-        applyPriceFilter.addEventListener('click', function() {
-            const minPrice = minPriceInput.value.trim();
-            const maxPrice = maxPriceInput.value.trim();
-            const url = new URL(window.location.href);
-
-            if (minPrice) url.searchParams.set('min_price', minPrice);
-            else url.searchParams.delete('min_price'); // Remove if empty
-
-            if (maxPrice) url.searchParams.set('max_price', maxPrice);
-            else url.searchParams.delete('max_price'); // Remove if empty
-
-             // Reset page number when filtering
-            url.searchParams.delete('page_num');
-            window.location.href = url.toString();
-        });
-    }
-     // Add logic for category filters if needed
-}
-
-function initProductDetailPage() {
-    // console.log("Initializing Product Detail Page");
-    // Image Gallery Logic
-    const mainImage = document.getElementById('mainImage');
-    const thumbnails = document.querySelectorAll('.thumbnail-grid img');
-
-    function updateMainImage(thumbnailElement) {
-        if (mainImage && thumbnailElement) {
-            // Update source and alt text
-            mainImage.src = thumbnailElement.dataset.largeImage || thumbnailElement.src; // Prefer data attribute for larger URL
-            mainImage.alt = thumbnailElement.alt.replace('Thumbnail', 'Main view');
-
-            // Update active state for thumbnails
-            thumbnails.forEach(img => img.classList.remove('border-primary', 'ring-2', 'ring-primary', 'ring-offset-2')); // More robust active state removal
-            thumbnailElement.classList.add('border-primary', 'ring-2', 'ring-primary', 'ring-offset-2'); // Example active state
-        }
-    }
-
-    // Make updateMainImage globally accessible if needed by inline onclick, but delegation is better
-    // window.updateMainImage = updateMainImage;
-
-    // Event delegation for thumbnails is more efficient
-    const thumbnailGrid = document.querySelector('.thumbnail-grid');
-    if (thumbnailGrid) {
-        thumbnailGrid.addEventListener('click', function(e) {
-            if (e.target.tagName === 'IMG') {
-                updateMainImage(e.target);
-            }
-        });
-         // Set initial active thumbnail if needed
-        const firstThumbnail = thumbnailGrid.querySelector('img');
-        if (firstThumbnail) {
-             // Ensure first one starts active if needed by design
-             // firstThumbnail.classList.add('border-primary', 'ring-2', 'ring-primary', 'ring-offset-2');
-        }
-    }
-
-
-    // Quantity Selector Logic
-    const quantityInput = document.querySelector('.quantity-selector input[name="quantity"]');
-    const quantityMax = quantityInput ? parseInt(quantityInput.getAttribute('max') || '99') : 99;
-    const quantityMin = quantityInput ? parseInt(quantityInput.getAttribute('min') || '1') : 1;
-
-    document.querySelectorAll('.quantity-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            if (!quantityInput) return;
-            let currentValue = parseInt(quantityInput.value);
-            if (isNaN(currentValue)) currentValue = quantityMin; // Default to min if invalid
-
-            if (this.classList.contains('plus')) {
-                if (currentValue < quantityMax) {
-                    quantityInput.value = currentValue + 1;
                 } else {
-                     quantityInput.value = quantityMax; // Don't exceed max
-                     // Optionally show a message or disable button further
+                    // Log attempt for non-existent email, but don't reveal to user
+                    $this->logSecurityEvent('password_reset_nonexistent_email', ['email' => $email, 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN']);
                 }
-            } else if (this.classList.contains('minus')) {
-                if (currentValue > quantityMin) {
-                    quantityInput.value = currentValue - 1;
-                } else {
-                     quantityInput.value = quantityMin; // Don't go below min
-                }
+
+                // Commit transaction regardless of whether user was found or email sent
+                // This prevents timing attacks revealing valid emails.
+                $this->commit();
+
+            } catch (Exception $e) {
+                $this->rollback();
+                // Log internal error but don't reveal details
+                error_log("Password reset request internal error: " . $e->getMessage());
+                // Fall through to generic success message
             }
-        });
-    });
-     // Ensure input value doesn't exceed max/min if user types manually
-     if (quantityInput) {
-         quantityInput.addEventListener('change', function() {
-             let value = parseInt(this.value);
-             if (isNaN(value) || value < quantityMin) this.value = quantityMin;
-             if (value > quantityMax) this.value = quantityMax;
-         });
-     }
 
+            // Always show the same message to prevent email enumeration
+            $this->setFlashMessage('If an account exists with that email, we have sent password reset instructions.', 'success');
 
-    // Tab Switching Logic
-    const tabContainer = document.querySelector('.tabs-container'); // Assuming a container for tabs
-    if (tabContainer) {
-         const tabBtns = tabContainer.querySelectorAll('.tab-btn');
-         const tabPanes = tabContainer.querySelectorAll('.tab-pane');
+        } catch (Exception $e) {
+            // Catch CSRF or Rate Limit errors specifically if needed
+            error_log("Password reset request processing error: " . $e->getMessage());
+            $this->logSecurityEvent('password_reset_request_error', ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN']);
+            $this->setFlashMessage('An error occurred while processing your request. Please try again later.', 'error');
+        }
 
-         tabContainer.addEventListener('click', function(e) {
-             const clickedButton = e.target.closest('.tab-btn');
-             if (!clickedButton || clickedButton.classList.contains('active')) return; // Only act on inactive buttons
-
-             const tabId = clickedButton.dataset.tab; // e.g., 'description', 'reviews'
-
-             // Deactivate all buttons and hide all panes
-             tabBtns.forEach(b => b.classList.remove('active', 'text-primary', 'border-primary'));
-             tabBtns.forEach(b => b.classList.add('text-gray-500', 'border-transparent', 'hover:text-gray-700', 'hover:border-gray-300')); // Reset styles
-             tabPanes.forEach(pane => pane.classList.add('hidden'));
-
-             // Activate the clicked button
-             clickedButton.classList.add('active', 'text-primary', 'border-primary');
-             clickedButton.classList.remove('text-gray-500', 'border-transparent', 'hover:text-gray-700', 'hover:border-gray-300');
-
-             // Show the corresponding pane
-             const activePane = tabContainer.querySelector(`.tab-pane#${tabId}`);
-             if (activePane) {
-                 activePane.classList.remove('hidden');
-             }
-         });
-
-         // Ensure initial active tab's pane is visible on load (if needed)
-         const initialActiveTab = tabContainer.querySelector('.tab-btn.active');
-         if (initialActiveTab) {
-             const initialTabId = initialActiveTab.dataset.tab;
-             const initialActivePane = tabContainer.querySelector(`.tab-pane#${initialTabId}`);
-             if (initialActivePane) {
-                 initialActivePane.classList.remove('hidden');
-             }
-         } else {
-            // If no tab is active by default, maybe activate the first one?
-            const firstTab = tabContainer.querySelector('.tab-btn');
-            const firstPane = tabContainer.querySelector('.tab-pane');
-            if (firstTab && firstPane) {
-                 firstTab.classList.add('active', 'text-primary', 'border-primary');
-                 firstTab.classList.remove('text-gray-500', 'border-transparent', 'hover:text-gray-700', 'hover:border-gray-300');
-                 firstPane.classList.remove('hidden');
-            }
-         }
-    }
-     // Note: Add-to-cart on product page uses the global handler now.
-     // Ensure the main product form has necessary IDs/classes if submitting quantity etc.
-}
-
-
-function initCartPage() {
-    // console.log("Initializing Cart Page");
-    const cartForm = document.getElementById('cartForm'); // The main form wrapping the cart items
-    if (!cartForm) return;
-
-    // --- Helper Functions for Cart ---
-    function updateCartItem(cartItemElement) {
-        // Placeholder for potential future AJAX update without full form submission
-        // console.log('Updating item:', cartItemElement.dataset.productId);
-        // You might fetch new totals or validate quantity here via AJAX later
-        // For now, just update totals locally
-        updateCartTotalsDisplay();
+        $this->redirect('forgot_password'); // Redirect back to the form page
     }
 
-    function updateCartTotalsDisplay() {
-        let subtotal = 0;
-        let itemCount = 0;
-        document.querySelectorAll('.cart-item').forEach(item => {
-            const priceElement = item.querySelector('.item-price'); // Assumes an element shows item price *per unit*
-            const quantityInput = item.querySelector('.item-quantity input');
-            const subtotalElement = item.querySelector('.item-subtotal'); // Assumes an element shows line item total
+    /**
+     * Handles both showing the reset form (GET) and processing the reset (POST).
+     * Assumes route like: index.php?page=reset_password
+     * GET requires a 'token' parameter.
+     * POST requires 'token', 'password', 'confirm_password'.
+     */
+    public function resetPassword() {
+        // Get token from GET or POST, sanitize it
+        $token = SecurityMiddleware::validateInput($_REQUEST['token'] ?? '', 'string', ['max' => 64]); // Validate as string, check length
 
-            if (priceElement && quantityInput) {
-                const price = parseFloat(priceElement.dataset.price || priceElement.textContent.replace(/[^0-9.]/g, '')); // Get price per unit
-                const quantity = parseInt(quantityInput.value);
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            try {
+                $this->validateCSRF();
+                $this->validateRateLimit('password_reset_attempt'); // Specific key
 
-                if (!isNaN(price) && !isNaN(quantity)) {
-                    const lineTotal = price * quantity;
-                    subtotal += lineTotal;
-                    itemCount += quantity;
-                    if (subtotalElement) {
-                        subtotalElement.textContent = '$' + lineTotal.toFixed(2); // Update line item total display
+                // Re-validate token from POST data specifically
+                $token = SecurityMiddleware::validateInput($_POST['token'] ?? '', 'string', ['max' => 64]);
+                $password = $_POST['password'] ?? ''; // Keep direct access for password checking
+                $confirmPassword = $_POST['confirm_password'] ?? '';
+
+                if ($token === false || empty($token)) { // Check validation result
+                    throw new Exception('Invalid or missing password reset token.');
+                }
+
+                if (empty($password)) {
+                    throw new Exception('Password cannot be empty.');
+                }
+
+                if ($password !== $confirmPassword) {
+                    throw new Exception('Passwords do not match.');
+                }
+
+                if (!$this->isPasswordStrong($password)) {
+                    throw new Exception('Password does not meet security requirements (min 12 chars, upper, lower, number, special).');
+                }
+
+                $this->beginTransaction();
+
+                try {
+                    // Verify token and get user - Ensure token is checked against expiry *now*
+                    $user = $this->userModel->getUserByValidResetToken($token);
+                    if (!$user) {
+                        // Log invalid/expired token usage
+                        $this->logSecurityEvent('password_reset_invalid_token', ['token' => $token, 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN']);
+                        throw new Exception('This password reset link is invalid or has expired. Please request a new one.');
                     }
+
+                    // Update password and clear reset token (important!)
+                    $this->userModel->resetPassword($user['id'], $password);
+
+                    // Log the successful password reset using BaseController method
+                    $this->logAuditTrail('password_reset_complete', $user['id']);
+
+                    $this->commit();
+
+                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
+                    $this->redirect('login'); // Redirect to login page
+                    return;
+
+                } catch (Exception $e) {
+                    $this->rollback();
+                    // Log the specific transaction error
+                    error_log("Password reset transaction error for token {$token}: " . $e->getMessage());
+                    throw $e; // Re-throw to be caught by outer catch
                 }
+
+            } catch (Exception $e) {
+                error_log("Password reset processing error: " . $e->getMessage());
+                $this->logSecurityEvent('password_reset_error', ['error' => $e->getMessage(), 'token' => $token, 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN']);
+                $this->setFlashMessage($e->getMessage(), 'error');
+                // Redirect back to the reset form, preserving the token in the URL
+                $redirectUrl = BASE_URL . 'index.php?page=reset_password&token=' . urlencode($token ?: '');
+                $this->redirect($redirectUrl);
+                return;
             }
-        });
-
-        // Update overall subtotal display
-        const subtotalDisplay = document.getElementById('cart-subtotal'); // Needs an element with this ID
-        if (subtotalDisplay) {
-            subtotalDisplay.textContent = '$' + subtotal.toFixed(2);
-        }
-
-        // Update other totals like taxes, shipping, grand total if they exist
-        const grandTotalDisplay = document.getElementById('cart-grandtotal'); // Needs an element with this ID
-        if (grandTotalDisplay) {
-             // Add logic for taxes/shipping if needed, otherwise just show subtotal
-            grandTotalDisplay.textContent = '$' + subtotal.toFixed(2);
-        }
-
-        // Update cart count in header
-        updateCartCountHeader(itemCount);
-
-        // Handle empty cart state
-        const emptyCartMessage = document.getElementById('empty-cart-message');
-        const cartItemsContainer = document.getElementById('cart-items-container'); // Container holding items and summary
-        const checkoutButton = document.querySelector('.checkout-button'); // Checkout button
-
-        if (itemCount === 0 && emptyCartMessage && cartItemsContainer) {
-             cartItemsContainer.classList.add('hidden');
-             emptyCartMessage.classList.remove('hidden');
-        } else if (emptyCartMessage && cartItemsContainer) {
-             cartItemsContainer.classList.remove('hidden');
-             emptyCartMessage.classList.add('hidden');
-        }
-        if (checkoutButton) {
-            checkoutButton.disabled = itemCount === 0;
-            checkoutButton.classList.toggle('opacity-50', itemCount === 0);
-            checkoutButton.classList.toggle('cursor-not-allowed', itemCount === 0);
-        }
-
-    }
-
-    function updateCartCountHeader(count) {
-        const cartCountSpan = document.querySelector('.cart-count');
-        if (cartCountSpan) {
-            cartCountSpan.textContent = count;
-            // Use flex display properties consistent with your CSS for the count bubble
-            cartCountSpan.style.display = count > 0 ? 'flex' : 'none';
-            cartCountSpan.classList.toggle('animate-pulse', count > 0); // Optional: add a pulse effect
-             setTimeout(() => cartCountSpan.classList.remove('animate-pulse'), 1000);
-        }
-    }
-
-    // --- Event Listeners for Cart Actions ---
-
-    // Use event delegation on the form for quantity changes and removals
-    cartForm.addEventListener('click', function(e) {
-        // Quantity Buttons (+/-)
-        const quantityBtn = e.target.closest('.quantity-btn');
-        if (quantityBtn) {
-            const input = quantityBtn.parentElement.querySelector('input[name^="quantity["]'); // Target input by name pattern
-            if (!input) return;
-
-            const max = parseInt(input.getAttribute('max') || '99');
-            const min = parseInt(input.getAttribute('min') || '1');
-            let value = parseInt(input.value);
-            if (isNaN(value)) value = min;
-
-            if (quantityBtn.classList.contains('plus')) {
-                if (value < max) input.value = value + 1;
-                else input.value = max;
-            } else if (quantityBtn.classList.contains('minus')) {
-                if (value > min) input.value = value - 1;
-                else input.value = min;
-            }
-            // Trigger change event to update totals
-            input.dispatchEvent(new Event('change', { bubbles: true }));
-            return; // Stop further processing for this click
-        }
-
-        // Remove Item Button
-        const removeItemBtn = e.target.closest('.remove-item');
-        if (removeItemBtn) {
-            e.preventDefault(); // Prevent default button behavior if it's not type="button"
-            const cartItemRow = removeItemBtn.closest('.cart-item'); // Find the parent item row
-            if (!cartItemRow) return;
-
-            const productId = removeItemBtn.dataset.productId;
-            const csrfToken = cartForm.querySelector('input[name="csrf_token"]')?.value;
-
-            if (!productId || !csrfToken) {
-                showFlashMessage('Error removing item: Missing data.', 'error');
+        } else {
+            // --- GET request: Show the password reset form ---
+            if ($token === false || empty($token)) {
+                $this->setFlashMessage('Invalid password reset link.', 'error');
+                $this->redirect('forgot_password');
                 return;
             }
 
-            if (confirm('Are you sure you want to remove this item from your cart?')) {
-                 // Optimistic UI update: Remove visually first
-                cartItemRow.style.opacity = '0';
-                cartItemRow.style.transition = 'opacity 0.3s ease-out';
-                setTimeout(() => {
-                    cartItemRow.remove();
-                    updateCartTotalsDisplay(); // Update totals after removing element
-                }, 300);
+            // Optional: Check if token is valid *before* showing the form
+            // $user = $this->userModel->getUserByValidResetToken($token);
+            // if (!$user) {
+            //     $this->logSecurityEvent('password_reset_invalid_token_get', ['token' => $token, 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN']);
+            //     $this->setFlashMessage('This password reset link is invalid or has expired.', 'error');
+            //     $this->redirect('forgot_password');
+            //     return;
+            // }
 
-                // Send request to backend
-                fetch('index.php?page=cart&action=remove', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `product_id=${encodeURIComponent(productId)}&csrf_token=${encodeURIComponent(csrfToken)}`
-                })
-                .then(response => response.json().catch(() => ({ success: false, message: 'Invalid response from server.' }))) // Graceful JSON error handling
-                .then(data => {
-                    if (data.success) {
-                        showFlashMessage(data.message || 'Item removed from cart.', 'success');
-                        // UI already updated optimistically, totals updated. Header count updated by totals function.
-                         // Fetch mini cart to update dropdown
-                         if (typeof fetchMiniCart === 'function') {
-                             fetchMiniCart();
-                         }
-                    } else {
-                        showFlashMessage(data.message || 'Error removing item. Please try again.', 'error');
-                        // If removal failed, we might need to revert the UI change (more complex)
-                        // For simplicity, often a page reload is triggered or user manually refreshes
-                        // Or simply rely on the flash message and let totals be potentially wrong until refresh/update.
-                        // Re-fetch totals might be safer if optimistic update is reverted.
-                         updateCartTotalsDisplay(); // Re-run totals in case of failure to ensure consistency
-                    }
-                })
-                .catch(error => {
-                    console.error('Error removing item:', error);
-                    showFlashMessage('Failed to remove item due to a network error.', 'error');
-                     updateCartTotalsDisplay(); // Re-run totals
-                });
-            }
-            return; // Stop further processing for this click
+            // Render the reset password form view using BaseController method
+            echo $this->renderView('reset_password', [ // View name matches file
+                'pageTitle' => 'Reset Your Password - The Scent',
+                'token' => $token, // Pass token to the view's form
+                'csrfToken' => $this->generateCSRFToken()
+            ]);
+            return;
         }
-    });
-
-    // Listener for direct quantity input changes
-    cartForm.addEventListener('change', function(e) {
-        if (e.target.matches('.item-quantity input')) {
-            const input = e.target;
-            const max = parseInt(input.getAttribute('max') || '99');
-            const min = parseInt(input.getAttribute('min') || '1');
-            let value = parseInt(input.value);
-
-            // Validate input value
-            if (isNaN(value) || value < min) {
-                 input.value = min;
-                 value = min;
-            }
-            if (value > max) {
-                input.value = max;
-                value = max;
-                showFlashMessage(`Quantity cannot exceed ${max}.`, 'warning');
-            }
-
-            updateCartItem(input.closest('.cart-item')); // Update totals based on validated input
-        }
-    });
-
-
-    // Optional: AJAX Update Cart Button (if you have one, otherwise form submits normally)
-    const updateCartButton = document.getElementById('update-cart-button');
-    if (updateCartButton) {
-        updateCartButton.addEventListener('click', function(e) {
-            e.preventDefault();
-            const formData = new FormData(cartForm);
-            const submitButton = this; // Reference to the button
-            const originalButtonText = submitButton.textContent;
-            submitButton.disabled = true;
-            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Updating...';
-
-
-            fetch('index.php?page=cart&action=update', { // Assuming this endpoint updates quantities
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json().catch(() => ({ success: false, message: 'Invalid response from server.' })))
-            .then(data => {
-                if (data.success) {
-                    showFlashMessage(data.message || 'Cart updated successfully!', 'success');
-                    // Optionally update totals based on response if backend sends them
-                    updateCartTotalsDisplay(); // Recalculate totals locally
-                     if (typeof fetchMiniCart === 'function') {
-                         fetchMiniCart(); // Update mini cart dropdown
-                     }
-                } else {
-                    showFlashMessage(data.message || 'Failed to update cart.', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error updating cart:', error);
-                showFlashMessage('Failed to update cart due to a network error.', 'error');
-            })
-            .finally(() => {
-                 submitButton.disabled = false;
-                 submitButton.textContent = originalButtonText;
-            });
-        });
     }
 
-     // Initial calculation of totals when page loads
-     updateCartTotalsDisplay();
-}
 
+    // --- Newsletter Preferences ---
 
-function initLoginPage() {
-    // console.log("Initializing Login Page");
-    const form = document.getElementById('loginForm');
-    if (!form) return;
-    const submitButton = form.querySelector('button[type="submit"]'); // More specific selector
+    /**
+     * Updates the user's newsletter subscription preference.
+     * Assumes route like: index.php?page=account&action=update_newsletter (POST)
+     */
+    public function updateNewsletterPreferences() {
+        $userId = null; // Initialize for logging
+        try {
+            $this->requireLogin();
+            $userId = $this->getUserId();
+            $this->validateCSRF();
 
-    // Password visibility toggle
-    form.querySelectorAll('.toggle-password').forEach(toggleBtn => {
-        toggleBtn.addEventListener('click', function() {
-            const passwordInput = this.previousElementSibling; // Assumes button is immediately after input
-            if (passwordInput && passwordInput.type) {
-                 const icon = this.querySelector('i');
-                 if (passwordInput.type === 'password') {
-                     passwordInput.type = 'text';
-                     icon?.classList.remove('fa-eye');
-                     icon?.classList.add('fa-eye-slash');
-                 } else {
-                     passwordInput.type = 'password';
-                     icon?.classList.remove('fa-eye-slash');
-                     icon?.classList.add('fa-eye');
-                 }
-            }
-        });
-    });
-
-
-    // Add loading state on form submission
-    if (form && submitButton) {
-        form.addEventListener('submit', function(e) {
-            // Add basic validation if needed
-            const email = form.querySelector('#email')?.value.trim();
-            const password = form.querySelector('#password')?.value;
-            if (!email || !password) {
-                 showFlashMessage('Please enter both email and password.', 'error');
-                 e.preventDefault(); // Prevent submission if fields are empty
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                 $this->setFlashMessage('Invalid request method.', 'warning');
+                 $this->redirect(BASE_URL . 'index.php?page=account&action=profile');
                  return;
             }
 
-            // Show loading state
-            const buttonText = submitButton.querySelector('.button-text');
-            const buttonLoader = submitButton.querySelector('.button-loader');
-            if(buttonText) buttonText.classList.add('hidden');
-            if(buttonLoader) buttonLoader.classList.remove('hidden');
-            submitButton.disabled = true;
+            // Use filter_var for explicit boolean conversion from POST data
+            $newsletterSubscribed = filter_input(INPUT_POST, 'newsletter', FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
 
-            // Note: The form will submit normally after this unless prevented.
-            // If using AJAX login, preventDefault() and add fetch logic here.
-        });
-    }
-}
+            // Handle case where checkbox isn't sent if unchecked (value becomes false)
+            $newsletterSubscribed = ($newsletterSubscribed === true);
 
+            $this->beginTransaction();
 
-function initRegisterPage() {
-    // console.log("Initializing Register Page");
-    const form = document.getElementById('registerForm');
-    if (!form) return;
+            try {
+                $this->userModel->updateNewsletterPreference($userId, $newsletterSubscribed);
 
-    const passwordInput = form.querySelector('#password');
-    const confirmPasswordInput = form.querySelector('#confirm_password');
-    const submitButton = form.querySelector('button[type="submit"]');
+                // Log the preference update using BaseController method
+                $action = $newsletterSubscribed ? 'newsletter_subscribe_profile' : 'newsletter_unsubscribe_profile';
+                $this->logAuditTrail($action, $userId);
 
-    // Password requirements elements (assuming they exist with these IDs)
-    const requirements = {
-        length: { regex: /.{12,}/, element: document.getElementById('req-length') }, // Example IDs, adjust as needed
-        uppercase: { regex: /[A-Z]/, element: document.getElementById('req-uppercase') },
-        lowercase: { regex: /[a-z]/, element: document.getElementById('req-lowercase') },
-        number: { regex: /[0-9]/, element: document.getElementById('req-number') },
-        special: { regex: /[@$!%*?&]/, element: document.getElementById('req-special') },
-        match: { element: document.getElementById('req-match') }
-    };
+                $this->commit();
 
-    function validatePassword() {
-        if (!passwordInput || !confirmPasswordInput || !submitButton) return; // Exit if elements aren't found
+                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
 
-        let allMet = true;
-        const passwordValue = passwordInput.value;
-        const confirmPasswordValue = confirmPasswordInput.value;
-
-        for (const reqKey in requirements) {
-            const req = requirements[reqKey];
-            if (!req.element) continue; // Skip if requirement element doesn't exist
-
-            let isMet = false;
-            if (reqKey === 'match') {
-                isMet = passwordValue && passwordValue === confirmPasswordValue; // Ensure password is not empty
-            } else if (req.regex) {
-                isMet = req.regex.test(passwordValue);
+            } catch (Exception $e) {
+                $this->rollback();
+                error_log("Newsletter preference update transaction error for user {$userId}: " . $e->getMessage());
+                throw $e; // Re-throw
             }
 
-            // Update UI feedback (e.g., add/remove a 'met' class)
-            req.element.classList.toggle('met', isMet); // Assumes 'met' class styles the requirement
-            req.element.classList.toggle('not-met', !isMet); // Optional class for unmet state
-            const icon = req.element.querySelector('i'); // Find icon within requirement li/div
-            if (icon) {
-                icon.classList.toggle('fa-check-circle', isMet); // Example icons
-                icon.classList.toggle('fa-times-circle', !isMet);
-            }
-
-            if (!isMet) {
-                allMet = false;
-            }
+        } catch (Exception $e) {
+            $userId = $userId ?? ($this->getUserId() ?? 'unknown');
+            error_log("Newsletter preference update failed for user {$userId}: " . $e->getMessage());
+            $this->logSecurityEvent('newsletter_update_fail', ['user_id' => $userId, 'error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN']);
+            $this->setFlashMessage('Failed to update newsletter preferences. Please try again.', 'error');
         }
 
-        // Enable/disable submit button based on validation
-        submitButton.disabled = !allMet;
-        submitButton.classList.toggle('opacity-50', !allMet);
-        submitButton.classList.toggle('cursor-not-allowed', !allMet);
+        $this->redirect(BASE_URL . 'index.php?page=account&action=profile'); // Always redirect back
     }
 
-    // Add event listeners if password fields exist
-    if (passwordInput && confirmPasswordInput) {
-        passwordInput.addEventListener('input', validatePassword);
-        confirmPasswordInput.addEventListener('input', validatePassword);
-        // Initial validation check in case fields are pre-filled
-        validatePassword();
-    }
 
-    // Password visibility toggles
-     form.querySelectorAll('.toggle-password').forEach(toggleBtn => {
-        toggleBtn.addEventListener('click', function() {
-            const passwordInputEl = this.previousElementSibling;
-            if (passwordInputEl && passwordInputEl.type) {
-                 const icon = this.querySelector('i');
-                 if (passwordInputEl.type === 'password') {
-                     passwordInputEl.type = 'text';
-                     icon?.classList.remove('fa-eye');
-                     icon?.classList.add('fa-eye-slash');
-                 } else {
-                     passwordInputEl.type = 'password';
-                     icon?.classList.remove('fa-eye-slash');
-                     icon?.classList.add('fa-eye');
-                 }
-            }
-        });
-    });
+    // --- Authentication (Login / Register) ---
+    // These primarily return JSON for AJAX forms but also handle GET requests to show the form.
 
-    // Loading state on submit
-    if (form && submitButton) {
-        form.addEventListener('submit', function(e) {
-            // Re-validate just before submit, although button state should be correct
-            validatePassword();
-            if (submitButton.disabled) {
-                e.preventDefault(); // Prevent submission if validation fails
-                showFlashMessage('Please ensure all password requirements are met.', 'error');
-                return;
-            }
-
-            // Show loading state
-            const buttonText = submitButton.querySelector('.button-text');
-            const buttonLoader = submitButton.querySelector('.button-loader');
-            if(buttonText) buttonText.classList.add('hidden');
-            if(buttonLoader) buttonLoader.classList.remove('hidden');
-            submitButton.disabled = true; // Keep disabled during submission
-        });
-    }
-}
-
-
-function initForgotPasswordPage() {
-    // console.log("Initializing Forgot Password Page");
-    const form = document.getElementById('forgotPasswordForm');
-    if (!form) return;
-    const submitButton = form.querySelector('button[type="submit"]');
-
-    if (form && submitButton) {
-        form.addEventListener('submit', function(e) {
-            const email = form.querySelector('#email')?.value.trim();
-             if (!email || !/\S+@\S+\.\S+/.test(email)) { // Basic validation
-                 showFlashMessage('Please enter a valid email address.', 'error');
-                 e.preventDefault();
-                 return;
-             }
-
-            const buttonText = submitButton.querySelector('.button-text');
-            const buttonLoader = submitButton.querySelector('.button-loader');
-            if(buttonText) buttonText.classList.add('hidden');
-            if(buttonLoader) buttonLoader.classList.remove('hidden');
-            submitButton.disabled = true;
-        });
-    }
-}
-
-
-function initResetPasswordPage() {
-     // console.log("Initializing Reset Password Page");
-     // This is very similar to Register page validation
-    const form = document.getElementById('resetPasswordForm');
-    if (!form) return;
-
-    const passwordInput = form.querySelector('#password');
-    const confirmPasswordInput = form.querySelector('#password_confirm'); // Corrected ID if needed
-    const submitButton = form.querySelector('button[type="submit"]');
-
-    // Adjust requirement IDs if they differ from register page
-    const requirements = {
-        length: { regex: /.{12,}/, element: document.getElementById('req-length') },
-        uppercase: { regex: /[A-Z]/, element: document.getElementById('req-uppercase') },
-        lowercase: { regex: /[a-z]/, element: document.getElementById('req-lowercase') },
-        number: { regex: /[0-9]/, element: document.getElementById('req-number') },
-        special: { regex: /[@$!%*?&]/, element: document.getElementById('req-special') },
-        match: { element: document.getElementById('req-match') }
-    };
-
-    // Re-use or adapt the validation logic from initRegisterPage
-    function validateResetPassword() {
-        if (!passwordInput || !confirmPasswordInput || !submitButton) return;
-        let allMet = true;
-        const passwordValue = passwordInput.value;
-        const confirmPasswordValue = confirmPasswordInput.value;
-
-        for (const reqKey in requirements) {
-            const req = requirements[reqKey];
-            if (!req.element) continue;
-            let isMet = false;
-            if (reqKey === 'match') {
-                isMet = passwordValue && passwordValue === confirmPasswordValue;
-            } else if (req.regex) {
-                isMet = req.regex.test(passwordValue);
-            }
-            req.element.classList.toggle('met', isMet);
-            req.element.classList.toggle('not-met', !isMet);
-            const icon = req.element.querySelector('i');
-            if (icon) {
-                icon.classList.toggle('fa-check-circle', isMet);
-                icon.classList.toggle('fa-times-circle', !isMet);
-            }
-            if (!isMet) allMet = false;
+    /**
+     * Handles user login (GET shows form, POST processes).
+     * Assumes route: index.php?page=login
+     */
+    public function login() {
+        // Handle showing the login form on GET
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+             echo $this->renderView('login', [ // Use BaseController render
+                 'pageTitle' => 'Login - The Scent',
+                 'csrfToken' => $this->generateCSRFToken()
+             ]);
+             return;
         }
-        submitButton.disabled = !allMet;
-        submitButton.classList.toggle('opacity-50', !allMet);
-        submitButton.classList.toggle('cursor-not-allowed', !allMet);
-    }
 
-    if (passwordInput && confirmPasswordInput) {
-        passwordInput.addEventListener('input', validateResetPassword);
-        confirmPasswordInput.addEventListener('input', validateResetPassword);
-        validateResetPassword(); // Initial check
-    }
-
-    // Password visibility toggles
-    form.querySelectorAll('.toggle-password').forEach(toggleBtn => {
-         toggleBtn.addEventListener('click', function() {
-             const passwordInputEl = this.previousElementSibling;
-             if (passwordInputEl && passwordInputEl.type) {
-                  const icon = this.querySelector('i');
-                  if (passwordInputEl.type === 'password') {
-                      passwordInputEl.type = 'text';
-                      icon?.classList.remove('fa-eye');
-                      icon?.classList.add('fa-eye-slash');
-                  } else {
-                      passwordInputEl.type = 'password';
-                      icon?.classList.remove('fa-eye-slash');
-                      icon?.classList.add('fa-eye');
-                  }
-             }
-         });
-     });
-
-    // Loading state on submit
-    if (form && submitButton) {
-        form.addEventListener('submit', function(e) {
-            validateResetPassword(); // Final validation check
-            if (submitButton.disabled) {
-                e.preventDefault();
-                showFlashMessage('Please ensure all password requirements are met.', 'error');
-                return;
-            }
-            const buttonText = submitButton.querySelector('.button-text');
-            const buttonLoader = submitButton.querySelector('.button-loader');
-             if(buttonText) buttonText.classList.add('hidden');
-             if(buttonLoader) buttonLoader.classList.remove('hidden');
-            submitButton.disabled = true;
-        });
-    }
-}
-
-
-function initQuizPage() {
-    // console.log("Initializing Quiz Page");
-    // Initialize particles.js if the element exists and library is loaded
-    if (typeof particlesJS !== 'undefined' && document.getElementById('particles-js')) {
-        particlesJS.load('particles-js', '/particles.json', function() {
-            // console.log('particles.js loaded - callback');
-        });
-    } else if (document.getElementById('particles-js')) {
-         console.warn('particlesJS library not loaded, skipping initialization.');
-    }
-
-    // Handle quiz option selection using event delegation
-    const quizForm = document.getElementById('scent-quiz');
-    if (quizForm) {
-         const optionsContainer = quizForm.querySelector('.quiz-options-container'); // Need a container for options
-         if (optionsContainer) {
-             optionsContainer.addEventListener('click', (e) => {
-                 const selectedOption = e.target.closest('.quiz-option');
-                 if (!selectedOption) return; // Exit if click wasn't on an option
-
-                 // Remove active styles from all options first
-                 optionsContainer.querySelectorAll('.quiz-option').forEach(opt => {
-                     const innerDiv = opt.querySelector('div'); // Find the div to style
-                     innerDiv?.classList.remove('border-primary', 'bg-primary/10', 'ring-2', 'ring-primary'); // Example active styles
-                     innerDiv?.classList.add('border-gray-300'); // Reset to default border
-                 });
-
-                 // Apply active styles to the clicked option's inner div
-                 const selectedInnerDiv = selectedOption.querySelector('div');
-                 selectedInnerDiv?.classList.add('border-primary', 'bg-primary/10', 'ring-2', 'ring-primary');
-                 selectedInnerDiv?.classList.remove('border-gray-300');
-
-                 // Update the hidden input value (if using hidden input)
-                 const hiddenInput = quizForm.querySelector('input[name="mood"]'); // Or appropriate name
-                 if (hiddenInput) {
-                    hiddenInput.value = selectedOption.dataset.value; // Assuming value is stored in data-value
-                 }
-             });
-         }
-
-        // Handle form submission
-        quizForm.addEventListener('submit', (e) => {
-             // Validate if an option was selected (check hidden input or radio button)
-             const selectedValue = quizForm.querySelector('input[name="mood"]')?.value; // Check hidden input first
-             const selectedRadio = quizForm.querySelector('input[name="mood_radio"]:checked'); // Check radio if used instead
-
-             if (!selectedValue && !selectedRadio) {
-                 e.preventDefault(); // Prevent submission
-                 showFlashMessage('Please select an option to continue.', 'warning');
-                 // Optionally scroll to the options
-                 optionsContainer?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                 return;
-             }
-             // Allow form submission if valid
-             // Add loading state to submit button if needed
-              const submitButton = quizForm.querySelector('button[type="submit"]');
-              if (submitButton) {
-                  submitButton.disabled = true;
-                  submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Finding your scent...';
-              }
-        });
-    }
-}
-
-
-function initQuizResultsPage() {
-    // console.log("Initializing Quiz Results Page");
-    // Initialize particles if element exists
-    if (typeof particlesJS !== 'undefined' && document.getElementById('particles-js')) {
-        particlesJS.load('particles-js', '/particles.json');
-    }
-    // AOS is initialized globally, but ensure it's needed/configured for this page if specific settings apply
-    // e.g., if AOS wasn't initialized globally, you would call it here:
-    // if (typeof AOS !== 'undefined') {
-    //     AOS.init({ duration: 800, offset: 100, once: true });
-    // }
-}
-
-
-function initAdminQuizAnalyticsPage() {
-    // console.log("Initializing Admin Quiz Analytics");
-    // Ensure Chart.js is loaded before trying to use it
-    if (typeof Chart === 'undefined') {
-        console.error('Chart.js library is not loaded.');
-        return;
-    }
-
-    let charts = {}; // Store chart instances to destroy them before redraw
-
-    const timeRangeSelect = document.getElementById('timeRange');
-    const statsContainer = document.getElementById('statsContainer'); // Container for cards
-    const chartsContainer = document.getElementById('chartsContainer'); // Container for charts
-    const recommendationsTableBody = document.getElementById('recommendationsTableBody'); // Tbody for recommendations
-
-    // --- Chart Configuration Defaults ---
-    Chart.defaults.font.family = "'Montserrat', sans-serif";
-    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-    Chart.defaults.plugins.tooltip.titleFont = { size: 14, weight: 'bold' };
-    Chart.defaults.plugins.tooltip.bodyFont = { size: 12 };
-    Chart.defaults.plugins.legend.position = 'bottom';
-
-    // --- Fetch and Update Function ---
-    async function updateAnalytics() {
-        const timeRange = timeRangeSelect ? timeRangeSelect.value : '7d'; // Default time range
-
-        // Show loading states (optional)
-        statsContainer?.classList.add('opacity-50');
-        chartsContainer?.classList.add('opacity-50');
-        recommendationsTableBody?.classList.add('opacity-50');
+        // Handle POST request for login attempt
+        $emailSubmitted = $_POST['email'] ?? ''; // Get email for logging even if invalid
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN';
 
         try {
-            const response = await fetch(`index.php?page=admin&action=quiz_analytics&range=${timeRange}`, {
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest', // Identify as AJAX request
-                    'Accept': 'application/json'
-                }
-            });
+            $this->validateCSRFToken(); // From BaseController
+            $this->validateRateLimit('login'); // From BaseController
 
-            if (!response.ok) {
-                 const errorText = await response.text();
-                 throw new Error(`Network response was not ok (${response.status}): ${errorText}`);
+            // Validate input using SecurityMiddleware
+            $email = SecurityMiddleware::validateInput($emailSubmitted, 'email');
+            $password = $_POST['password'] ?? ''; // Keep direct access
+
+            if ($email === false || empty($password)) {
+                $this->logSecurityEvent('login_invalid_input', ['email' => $emailSubmitted, 'ip' => $ipAddress]);
+                throw new Exception('Invalid email or password format.'); // More specific error
             }
 
-            const data = await response.json();
+            // Attempt login
+            $user = $this->userModel->findByEmail($email);
 
-            if (!data.success) {
-                throw new Error(data.error || 'Failed to fetch analytics data from the server.');
+            // Use password_verify - crucial!
+            if (!$user || !password_verify($password, $user['password'])) {
+                $userId = $user['id'] ?? null; // Get user ID if user exists, for logging
+                // Log failed login attempt using BaseController method
+                $this->logSecurityEvent('login_failure', ['email' => $email, 'ip' => $ipAddress, 'user_id' => $userId]);
+                // Monitor suspicious activity? (Optional) Needs implementation in UserModel.
+                // $this->monitorSuspiciousActivity($userId, 'multiple_failed_logins');
+                throw new Exception('Invalid email or password.'); // Generic error for security
             }
 
-            // Update UI elements with fetched data
-            updateStatCards(data.data?.statistics);
-            updateCharts(data.data?.preferences);
-            updateRecommendationsTable(data.data?.recommendations);
+            // Check if account is locked (assuming 'status' column exists)
+            if (isset($user['status']) && $user['status'] === 'locked') {
+                 $this->logSecurityEvent('login_attempt_locked', ['user_id' => $user['id'], 'email' => $email, 'ip' => $ipAddress]);
+                 throw new Exception('Your account is currently locked. Please contact support.');
+            }
 
-        } catch (error) {
-            console.error('Error fetching or processing analytics data:', error);
-            showFlashMessage(`Failed to load analytics: ${error.message}`, 'error');
-            // Optionally clear or show error messages in the UI sections
-             if (statsContainer) statsContainer.innerHTML = '<p class="text-red-500">Could not load stats.</p>';
-             if (chartsContainer) chartsContainer.innerHTML = '<p class="text-red-500">Could not load charts.</p>';
-             if (recommendationsTableBody) recommendationsTableBody.innerHTML = '<tr><td colspan="5" class="text-center text-red-500">Could not load recommendations.</td></tr>';
+            // --- Success ---
+            // Regenerate session ID and set user data in session
+            // This should ideally be handled within a dedicated auth service/helper
+            // For now, mimic expected session setup. BaseController regenerateSession handles the ID.
+            $this->regenerateSession(); // Call BaseController method explicitly here after successful login
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_role'] = $user['role'] ?? 'customer'; // Assuming a role column
+            $_SESSION['user'] = [ // Store essential, non-sensitive data
+                 'id' => $user['id'],
+                 'name' => $user['name'],
+                 'email' => $user['email'],
+                 'role' => $_SESSION['user_role']
+            ];
+            // Set session integrity markers (done by BaseController::regenerateSession or here)
+             $_SESSION['user_agent'] = $_SERVER['HTTP_USER_AGENT'] ?? '';
+             $_SESSION['ip_address'] = $ipAddress;
+             $_SESSION['last_login'] = time();
 
-        } finally {
-            // Remove loading states
-             statsContainer?.classList.remove('opacity-50');
-             chartsContainer?.classList.remove('opacity-50');
-             recommendationsTableBody?.classList.remove('opacity-50');
+
+            // Merge session cart into DB cart (Ensure CartController and method exist)
+            CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
+
+            // Log successful login using BaseController method
+            $this->logAuditTrail('login_success', $user['id']);
+
+            // Clear any previous failed login attempts tracking for this user/IP if implemented
+
+            // Determine redirect URL (e.g., intended page or dashboard)
+             $redirectUrl = $_SESSION['redirect_after_login'] ?? (BASE_URL . 'index.php?page=account&action=dashboard'); // Use constant/helper
+             unset($_SESSION['redirect_after_login']); // Clear redirect destination
+
+
+            // Use jsonResponse from BaseController
+            return $this->jsonResponse(['success' => true, 'redirect' => $redirectUrl]);
+
+        } catch (Exception $e) {
+            // Log specific error for debugging
+            error_log("Login failed for email '{$emailSubmitted}' from IP {$ipAddress}: " . $e->getMessage());
+            // Return generic error in JSON response using BaseController method
+            return $this->jsonResponse([
+                'success' => false,
+                'error' => $e->getMessage() // Show specific validation/auth message
+            ], 401); // Unauthorized status code
         }
     }
 
-    // --- UI Update Functions ---
-    function updateStatCards(stats) {
-        if (!stats || !statsContainer) return;
-        document.getElementById('totalParticipants').textContent = stats.total_quizzes ?? 'N/A';
-        document.getElementById('conversionRate').textContent = stats.conversion_rate != null ? `${stats.conversion_rate}%` : 'N/A'; // Check for null explicitly
-        document.getElementById('avgCompletionTime').textContent = stats.avg_completion_time != null ? `${stats.avg_completion_time}s` : 'N/A';
-    }
-
-    function updateCharts(preferences) {
-         if (!preferences || !chartsContainer) return;
-
-         // Destroy existing charts before creating new ones
-         Object.values(charts).forEach(chart => chart?.destroy());
-         charts = {}; // Reset chart store
-
-         // Example Chart Colors
-         const chartColors = ['#1A4D5A', '#A0C1B1', '#D4A76A', '#6B7280', '#F59E0B', '#10B981'];
-
-         // Scent Preference Chart (Doughnut)
-         const scentCtx = document.getElementById('scentChart')?.getContext('2d');
-         if (scentCtx && preferences.scent_types?.length > 0) {
-             charts.scent = new Chart(scentCtx, {
-                 type: 'doughnut',
-                 data: {
-                     labels: preferences.scent_types.map(p => p.type),
-                     datasets: [{
-                         label: 'Scent Preferences',
-                         data: preferences.scent_types.map(p => p.count),
-                         backgroundColor: chartColors,
-                         hoverOffset: 4
-                     }]
-                 },
-                 options: {
-                     responsive: true,
-                     plugins: { legend: { display: true }, title: { display: true, text: 'Scent Type Preferences' } }
-                 }
-             });
-         } else if (scentCtx) {
-            scentCtx.canvas.parentElement.innerHTML = '<p class="text-center text-gray-500">No scent preference data.</p>';
+     /**
+     * Handles user registration (GET shows form, POST processes).
+     * Assumes route: index.php?page=register
+     */
+    public function register() {
+         // Handle showing the registration form on GET
+         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+             echo $this->renderView('register', [ // Use BaseController render
+                 'pageTitle' => 'Register - The Scent',
+                 'csrfToken' => $this->generateCSRFToken()
+             ]);
+             return;
          }
 
+        // Handle POST request for registration attempt
+        $emailSubmitted = $_POST['email'] ?? ''; // Get for logging
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN';
 
-         // Mood Effect Chart (Bar)
-         const moodCtx = document.getElementById('moodChart')?.getContext('2d');
-         if (moodCtx && preferences.mood_effects?.length > 0) {
-            charts.mood = new Chart(moodCtx, {
-                type: 'bar',
-                data: {
-                     labels: preferences.mood_effects.map(p => p.effect),
-                     datasets: [{
-                         label: 'Desired Mood Effects',
-                         data: preferences.mood_effects.map(p => p.count),
-                         backgroundColor: chartColors[1], // Use a color from palette
-                         borderColor: chartColors[1],
-                         borderWidth: 1
-                     }]
-                 },
-                 options: {
-                     indexAxis: 'y', // Horizontal bar chart might be better for long labels
-                     responsive: true,
-                     scales: { x: { beginAtZero: true } },
-                     plugins: { legend: { display: false }, title: { display: true, text: 'Desired Mood Effects' } }
-                 }
-             });
-         } else if (moodCtx) {
-             moodCtx.canvas.parentElement.innerHTML = '<p class="text-center text-gray-500">No mood effect data.</p>';
-         }
+        try {
+            $this->validateRateLimit('register'); // From BaseController
+            $this->validateCSRFToken(); // From BaseController
 
-         // Daily Completions Chart (Line)
-          const completionsCtx = document.getElementById('completionsChart')?.getContext('2d');
-          if (completionsCtx && preferences.daily_completions?.length > 0) {
-             charts.completions = new Chart(completionsCtx, {
-                 type: 'line',
-                 data: {
-                     labels: preferences.daily_completions.map(d => d.date), // Assuming date is formatted nicely
-                     datasets: [{
-                         label: 'Daily Quiz Completions',
-                         data: preferences.daily_completions.map(d => d.count),
-                         borderColor: chartColors[0],
-                         backgroundColor: 'rgba(26, 77, 90, 0.1)', // Optional fill
-                         fill: true,
-                         tension: 0.1 // Smooth curve
-                     }]
-                 },
-                 options: {
-                     responsive: true,
-                     scales: { y: { beginAtZero: true } },
-                     plugins: { legend: { display: false }, title: { display: true, text: 'Quiz Completions Over Time' } }
-                 }
-             });
-         } else if (completionsCtx) {
-              completionsCtx.canvas.parentElement.innerHTML = '<p class="text-center text-gray-500">No completion data for this period.</p>';
-         }
-    }
+            // Validate input using SecurityMiddleware
+            $email = SecurityMiddleware::validateInput($emailSubmitted, 'email');
+            $password = $_POST['password'] ?? ''; // Keep direct access for strength check
+            $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
 
-    function updateRecommendationsTable(recommendations) {
-        if (!recommendations || !recommendationsTableBody) return;
-
-        if (recommendations.length === 0) {
-            recommendationsTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">No product recommendations data available for this period.</td></tr>';
-            return;
-        }
-
-        // Generate table rows
-        recommendationsTableBody.innerHTML = recommendations.map(product => `
-            <tr class="hover:bg-gray-50">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${product.name || 'N/A'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${product.category || 'N/A'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${product.recommendation_count ?? 'N/A'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${product.conversion_rate != null ? `${product.conversion_rate}%` : 'N/A'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
-                    <a href="index.php?page=admin&action=products&view=${product.id}" class="text-indigo-600 hover:text-indigo-900" title="View Product Details">
-                        <i class="fas fa-eye"></i>
-                    </a>
-                    <!-- Add other actions like edit if needed -->
-                </td>
-            </tr>
-        `).join('');
-    }
-
-    // --- Initial Load and Event Listener ---
-    if (timeRangeSelect) {
-        timeRangeSelect.addEventListener('change', updateAnalytics);
-         // Trigger initial load
-         updateAnalytics();
-    } else {
-         console.warn("Time range selector not found.");
-         // Load with default if selector missing? Or show error.
-         updateAnalytics(); // Attempt load with default range
-    }
-}
-
-
-function initAdminCouponsPage() {
-    // console.log("Initializing Admin Coupons Page");
-    const createButton = document.getElementById('createCouponBtn');
-    const couponFormContainer = document.getElementById('couponFormContainer'); // Container for the form
-    const couponForm = document.getElementById('couponForm'); // The form itself
-    const cancelFormButton = document.getElementById('cancelCouponForm');
-    const couponListTable = document.getElementById('couponListTable'); // The table body
-    const discountTypeSelect = document.getElementById('discount_type');
-    const valueHint = document.getElementById('valueHint');
-
-    // --- Helper Functions ---
-    function showCouponForm(couponData = null) {
-        if (!couponForm || !couponFormContainer) return;
-        couponForm.reset(); // Clear previous data
-        couponForm.querySelector('input[name="coupon_id"]').value = ''; // Clear ID field
-
-        if (couponData) {
-            // Populate form for editing
-            couponForm.querySelector('input[name="coupon_id"]').value = couponData.id;
-            couponForm.querySelector('input[name="code"]').value = couponData.code || '';
-            couponForm.querySelector('textarea[name="description"]').value = couponData.description || '';
-            couponForm.querySelector('select[name="discount_type"]').value = couponData.discount_type || 'fixed';
-            couponForm.querySelector('input[name="value"]').value = couponData.value || '';
-            couponForm.querySelector('input[name="min_spend"]').value = couponData.min_spend || '';
-            couponForm.querySelector('input[name="usage_limit"]').value = couponData.usage_limit || '';
-            // Format dates for datetime-local input (YYYY-MM-DDTHH:mm)
-            if (couponData.valid_from) {
-                 couponForm.querySelector('input[name="valid_from"]').value = couponData.valid_from.replace(' ', 'T').substring(0, 16);
+            // Explicit check after validation
+            if ($email === false || empty($password) || $name === false) {
+                // Log invalid input attempt
+                 $this->logSecurityEvent('register_invalid_input', ['email' => $emailSubmitted, 'name_valid' => ($name !== false), 'ip' => $ipAddress]);
+                 throw new Exception('Invalid input provided. Please check email, name, and password.');
             }
-            if (couponData.valid_to) {
-                 couponForm.querySelector('input[name="valid_to"]').value = couponData.valid_to.replace(' ', 'T').substring(0, 16);
+
+            // Check if email exists *before* hashing password
+            if ($this->userModel->findByEmail($email)) {
+                 throw new Exception('This email address is already registered.');
             }
-             couponForm.querySelector('input[name="is_active"][value="1"]').checked = couponData.is_active == 1;
-             couponForm.querySelector('input[name="is_active"][value="0"]').checked = couponData.is_active == 0;
 
-             // Update form title/button text for editing
-             couponFormContainer.querySelector('h2').textContent = 'Edit Coupon';
-        } else {
-             // Update form title/button text for creating
-             couponFormContainer.querySelector('h2').textContent = 'Create New Coupon';
-        }
-
-        updateValueHint(); // Update hint based on potentially pre-filled type
-        couponFormContainer.classList.remove('hidden'); // Show the form section
-        couponForm.scrollIntoView({ behavior: 'smooth' });
-    }
-
-    function hideCouponForm() {
-        if (!couponForm || !couponFormContainer) return;
-        couponForm.reset();
-        couponFormContainer.classList.add('hidden'); // Hide the form section
-    }
-
-    function updateValueHint() {
-        if (!discountTypeSelect || !valueHint) return;
-        const selectedType = discountTypeSelect.value;
-        if (selectedType === 'percentage') {
-            valueHint.textContent = 'Enter value as a percentage (e.g., 10 for 10%). Max 100.';
-        } else if (selectedType === 'fixed') {
-            valueHint.textContent = 'Enter value as a fixed amount (e.g., 15.50 for $15.50).';
-        } else {
-            valueHint.textContent = ''; // Clear hint for other types if any
-        }
-    }
-
-     function handleCouponAction(url, successMessage, errorMessage) {
-         // Show loading state?
-         fetch(url, {
-             method: 'POST', // Or GET if appropriate (e.g., simple toggle)
-             headers: {
-                 'X-Requested-With': 'XMLHttpRequest',
-                 // Include CSRF token if needed for POST requests
-                 // 'X-CSRF-TOKEN': document.querySelector('input[name="csrf_token"]').value
-             }
-         })
-         .then(response => response.json().catch(() => ({ success: false, message: 'Invalid server response.' })))
-         .then(data => {
-             if (data.success) {
-                 showFlashMessage(successMessage, 'success');
-                 // Reload the page or update the list dynamically
-                 location.reload(); // Simple solution: reload the page
-             } else {
-                 showFlashMessage(data.message || errorMessage, 'error');
-             }
-         })
-         .catch(error => {
-             console.error('Coupon action error:', error);
-             showFlashMessage('An error occurred. Please try again.', 'error');
-         });
-     }
-
-    // --- Event Listeners ---
-    if (createButton) {
-        createButton.addEventListener('click', () => showCouponForm());
-    }
-
-    if (cancelFormButton) {
-        cancelFormButton.addEventListener('click', hideCouponForm);
-    }
-
-    if (discountTypeSelect) {
-        discountTypeSelect.addEventListener('change', updateValueHint);
-        // Initial call
-        updateValueHint();
-    }
-
-    // Event delegation for Edit, Toggle Status, Delete buttons in the table
-    if (couponListTable) {
-         couponListTable.addEventListener('click', function(e) {
-             const editButton = e.target.closest('.edit-coupon');
-             const toggleButton = e.target.closest('.toggle-status');
-             const deleteButton = e.target.closest('.delete-coupon');
-
-             if (editButton) {
-                 e.preventDefault();
-                 try {
-                     // Assumes coupon data is embedded in a data attribute on the button or row
-                     const couponData = JSON.parse(editButton.dataset.coupon || '{}');
-                     if (couponData.id) {
-                        showCouponForm(couponData);
-                     } else {
-                        console.error("Could not parse coupon data for editing.");
-                     }
-                 } catch (err) {
-                     console.error("Error parsing coupon data:", err);
-                     showFlashMessage('Could not load coupon data for editing.', 'error');
-                 }
-                 return;
-             }
-
-             if (toggleButton) {
-                  e.preventDefault();
-                 const couponId = toggleButton.dataset.couponId;
-                 if (couponId && confirm('Are you sure you want to toggle the status of this coupon?')) {
-                     handleCouponAction(
-                         `index.php?page=admin&action=coupons&task=toggle_status&id=${couponId}`,
-                         'Coupon status updated successfully.',
-                         'Failed to update coupon status.'
-                     );
-                 }
-                 return;
-             }
-
-             if (deleteButton) {
-                  e.preventDefault();
-                 const couponId = deleteButton.dataset.couponId;
-                 if (couponId && confirm('Are you sure you want to permanently delete this coupon? This cannot be undone.')) {
-                      handleCouponAction(
-                         `index.php?page=admin&action=coupons&task=delete&id=${couponId}`,
-                         'Coupon deleted successfully.',
-                         'Failed to delete coupon.'
-                     );
-                 }
-                 return;
-             }
-         });
-    }
-
-     // Handle form submission (assuming standard form post, not AJAX for simplicity here)
-     // Add loading state if desired
-     if (couponForm) {
-         couponForm.addEventListener('submit', function() {
-             const submitBtn = couponForm.querySelector('button[type="submit"]');
-             if (submitBtn) {
-                 submitBtn.disabled = true;
-                 submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Saving...';
-             }
-             // Form submits normally unless prevented
-         });
-     }
-}
-
-
-// --- Main DOMContentLoaded Listener ---
-// This is where page-specific initializers are called based on body class
-
-document.addEventListener('DOMContentLoaded', function() {
-    // !!! FIX: Initialize AOS globally here !!!
-    // Ensures animations work on all pages using data-aos attributes
-    if (typeof AOS !== 'undefined') {
-        AOS.init({
-            duration: 800, // Animation duration in milliseconds
-            offset: 120,   // Offset (in px) from the original trigger point
-            once: true,    // Whether animation should happen only once - while scrolling down
-            // easing: 'ease-in-out', // Example easing
-            // anchorPlacement: 'top-bottom', // Defines which position of the element regarding to window should trigger the animation
-        });
-        // console.log('AOS Initialized Globally'); // For debugging
-    } else {
-        console.warn('AOS library not loaded, skipping initialization.');
-    }
-
-    // Get the body element to check its class list
-    const body = document.body;
-
-    // --- Call Initializers Based on Body Class ---
-    // This routing determines which page-specific JS functions to run.
-    // Ensure your PHP backend adds the correct class (e.g., 'page-home', 'page-products') to the <body> tag.
-
-    if (body.classList.contains('page-home')) {
-        initHomePage();
-    } else if (body.classList.contains('page-products')) {
-        initProductsPage();
-    } else if (body.classList.contains('page-product-detail')) {
-        initProductDetailPage();
-    } else if (body.classList.contains('page-cart')) {
-        initCartPage();
-    } else if (body.classList.contains('page-login')) {
-        initLoginPage();
-    } else if (body.classList.contains('page-register')) {
-        initRegisterPage();
-    } else if (body.classList.contains('page-forgot-password')) {
-        initForgotPasswordPage();
-    } else if (body.classList.contains('page-reset-password')) {
-        initResetPasswordPage();
-    } else if (body.classList.contains('page-quiz')) {
-        initQuizPage();
-    } else if (body.classList.contains('page-quiz-results')) {
-        initQuizResultsPage(); // This one might also call AOS.init, which is okay.
-    } else if (body.classList.contains('page-admin-quiz-analytics')) {
-        initAdminQuizAnalyticsPage();
-    } else if (body.classList.contains('page-admin-coupons')) {
-        initAdminCouponsPage();
-    }
-    // Add more 'else if' blocks for other page types as needed
-
-    // Fallback/Debug: Log if no specific page class matched
-    // const pageClasses = ['page-home', 'page-products', 'page-product-detail', 'page-cart', 'page-login', 'page-register', 'page-forgot-password', 'page-reset-password', 'page-quiz', 'page-quiz-results', 'page-admin-quiz-analytics', 'page-admin-coupons'];
-    // let matched = false;
-    // pageClasses.forEach(cls => { if (body.classList.contains(cls)) matched = true; });
-    // if (!matched) {
-    //     console.log('No specific page initialization class found on body.');
-    // }
-
-});
-
-// --- Optional: Mini Cart AJAX Update Function ---
-// Define globally if it needs to be called from multiple places (e.g., after add-to-cart)
-function fetchMiniCart() {
-    const miniCartContent = document.getElementById('mini-cart-content');
-    if (!miniCartContent) return; // Exit if mini-cart element doesn't exist
-
-    // Show loading state (optional)
-    // miniCartContent.innerHTML = '<div class="text-center text-gray-500 py-6"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
-
-    fetch('index.php?page=cart&action=mini', { // Assuming this endpoint returns JSON for the mini cart
-        method: 'GET', // Typically GET for fetching data
-        headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-    })
-    .then(response => {
-        if (!response.ok) {
-             throw new Error(`Network response was not ok (${response.status})`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.success && data.html) {
-            // If backend sends pre-rendered HTML
-            miniCartContent.innerHTML = data.html;
-        } else if (data.success && data.items) {
-            // If backend sends item data to be rendered client-side
-            if (data.items.length === 0) {
-                miniCartContent.innerHTML = '<div class="text-center text-gray-500 py-6">Your cart is empty.</div>';
-            } else {
-                let html = '<ul class="divide-y divide-gray-200 max-h-60 overflow-y-auto">'; // Add scroll for many items
-                data.items.forEach(item => {
-                     // Use placeholder if image is missing
-                     const imageUrl = item.product?.image_url || '/images/placeholder.jpg';
-                     const productName = item.product?.name || 'Unknown Product';
-                     const productPrice = item.product?.price != null ? parseFloat(item.product.price) : 0;
-                     const quantity = item.quantity || 0;
-                     const lineTotal = productPrice * quantity;
-
-                     html += `
-                        <li class="flex items-center gap-3 py-3 px-1">
-                             <img src="${imageUrl}" alt="${productName}" class="w-12 h-12 object-cover rounded border flex-shrink-0">
-                             <div class="flex-1 min-w-0">
-                                 <a href="index.php?page=product&id=${item.product_id}" class="font-medium text-sm text-gray-800 hover:text-primary truncate block" title="${productName}">${productName}</a>
-                                 <div class="text-xs text-gray-500">Qty: ${quantity} &times; $${productPrice.toFixed(2)}</div>
-                             </div>
-                             <div class="text-sm font-semibold text-gray-700">$${lineTotal.toFixed(2)}</div>
-                         </li>`;
-                });
-                html += '</ul>';
-
-                // Add Subtotal and Buttons
-                 const subtotal = data.subtotal != null ? parseFloat(data.subtotal) : 0;
-                 html += `<div class="border-t border-gray-200 pt-4 mt-4">
-                     <div class="flex justify-between items-center mb-4">
-                         <span class="font-semibold text-gray-700">Subtotal:</span>
-                         <span class="font-bold text-primary text-lg">$${subtotal.toFixed(2)}</span>
-                     </div>
-                     <div class="flex flex-col gap-2">
-                         <a href="index.php?page=cart" class="btn btn-secondary w-full text-center">View Cart</a>
-                         <a href="index.php?page=checkout" class="btn btn-primary w-full text-center ${subtotal === 0 ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}">Checkout</a>
-                     </div>
-                 </div>`;
-
-                miniCartContent.innerHTML = html;
+            // Validate password strength explicitly here
+            if (!$this->isPasswordStrong($password)) {
+                throw new Exception('Password does not meet security requirements (min 12 chars, upper, lower, number, special).');
             }
-        } else {
-             // Handle case where success is false or data structure is wrong
-             miniCartContent.innerHTML = '<div class="text-center text-red-500 py-6">Could not load cart items.</div>';
-             console.warn('Mini cart fetch succeeded but data was not as expected:', data);
+
+            // Hash the password securely
+            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+            if ($hashedPassword === false) {
+                 error_log("Password hashing failed for registration: " . print_r(error_get_last(), true));
+                throw new Exception('Could not process password securely.'); // Handle hashing failure
+            }
+
+            // Create user within a transaction
+            $this->beginTransaction();
+            try {
+                $userId = $this->userModel->create([
+                    'email' => $email,
+                    'password' => $hashedPassword, // Use the securely hashed password
+                    'name' => $name,
+                    'role' => 'customer' // Default role
+                    // Add other fields like 'newsletter' preference if applicable from form
+                    // 'newsletter' => filter_input(INPUT_POST, 'newsletter', FILTER_VALIDATE_BOOLEAN) ?? false,
+                ]);
+
+                 if (!$userId) {
+                     throw new Exception('Failed to create user account in database.');
+                 }
+
+                 // Send welcome email (consider doing this outside transaction or async)
+                 $this->emailService->sendWelcome($email, $name); // Use EmailService from BaseController
+
+                 // Log successful registration using BaseController method
+                 $this->logAuditTrail('user_registered', $userId);
+
+                 $this->commit();
+
+                 $this->setFlashMessage('Registration successful! Please log in.', 'success');
+                 return $this->jsonResponse(['success' => true, 'redirect' => BASE_URL . 'index.php?page=login']); // Use constant/helper
+
+            } catch (Exception $e) {
+                 $this->rollback();
+                 error_log("User creation transaction error: " . $e->getMessage());
+                 // Don't leak DB errors, rethrow a generic message if needed
+                 throw new Exception('An error occurred during registration. Please try again.');
+            }
+
+
+        } catch (Exception $e) {
+            error_log("Registration failed for email '{$emailSubmitted}' from IP {$ipAddress}: " . $e->getMessage());
+            $this->logSecurityEvent('register_failure', ['email' => $emailSubmitted, 'error' => $e->getMessage(), 'ip' => $ipAddress]);
+            return $this->jsonResponse([
+                'success' => false,
+                'error' => $e->getMessage() // Show specific error message
+            ], 400); // Bad Request status code
         }
-    })
-    .catch(error => {
-        console.error('Error fetching mini cart:', error);
-        miniCartContent.innerHTML = '<div class="text-center text-red-500 py-6">Could not load cart.</div>';
-    });
-}
+    }
 
+    // --- Private Helper Methods ---
 
-// --- END OF UPDATED main.js ---
+    /**
+     * Checks if a password meets the defined strength requirements.
+     * Aligned with potential checks in SecurityMiddleware/config.php
+     */
+    private function isPasswordStrong(string $password): bool {
+        $minLength = SECURITY_SETTINGS['password']['min_length'] ?? 12;
+        $reqSpecial = SECURITY_SETTINGS['password']['require_special'] ?? true;
+        $reqNumber = SECURITY_SETTINGS['password']['require_number'] ?? true;
+        $reqMixedCase = SECURITY_SETTINGS['password']['require_mixed_case'] ?? true;
+
+        if (strlen($password) < $minLength) return false;
+        if ($reqMixedCase && (!preg_match('/[A-Z]/', $password) || !preg_match('/[a-z]/', $password))) return false;
+        if ($reqNumber && !preg_match('/[0-9]/', $password)) return false;
+        // Adjusted regex slightly for common special chars, ensure it matches config intent
+        if ($reqSpecial && !preg_match('/[^A-Za-z0-9]/', $password)) return false;
+        // Optional: Check for repeated characters (e.g., aaa, 111)
+        // if (preg_match('/(.)\1{2,}/', $password)) { return false; }
+        return true;
+    }
+
+    /**
+     * Generates the full URL for the password reset link.
+     */
+    private function getResetPasswordUrl(string $token): string {
+        // Ensure HTTPS is used if appropriate (check server vars or config)
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        // Use BASE_URL constant from config.php for path robustness
+        $basePath = rtrim(BASE_URL, '/');
+        // Construct the URL carefully using the standard routing parameter
+        return $scheme . "://" . $host . $basePath . "/index.php?page=reset_password&token=" . urlencode($token);
+    }
+
+    // logAuditTrail is inherited from BaseController
+    // monitorSuspiciousActivity - Requires implementation in UserModel (getRecentActivityCount) and EmailService (notifyAdminOfSuspiciousActivity)
+    // lockAccount - Requires implementation in UserModel (updateAccountStatus) and EmailService (sendAccountLockoutNotification)
+
+    // Other helpers like regenerateSession, logSecurityEvent are in BaseController.
+
+} // End of AccountController class
 
 ```
 
