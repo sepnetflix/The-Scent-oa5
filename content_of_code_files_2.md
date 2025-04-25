@@ -18,8 +18,9 @@ class CartController extends BaseController {
         $this->isLoggedIn = $this->userId !== null;
         if ($this->isLoggedIn) {
             $this->cartModel = new Cart($pdo, $this->userId);
+        } else {
+            $this->initCart();
         }
-        $this->initCart();
     }
     
     private function initCart() {
@@ -34,10 +35,10 @@ class CartController extends BaseController {
             require_once __DIR__ . '/../models/Cart.php';
             $cartModel = new Cart($pdo, $userId);
             $cartModel->mergeSessionCart($_SESSION['cart']);
-            // Always clear session cart after merging
-            $_SESSION['cart'] = [];
-            $_SESSION['cart_count'] = 0;
         }
+        // Always clear session cart after merging
+        $_SESSION['cart'] = [];
+        $_SESSION['cart_count'] = 0;
     }
 
     public function showCart() {
@@ -54,6 +55,7 @@ class CartController extends BaseController {
                 $total += $item['price'] * $item['quantity'];
             }
         } else {
+            $this->initCart();
             foreach ($_SESSION['cart'] as $productId => $quantity) {
                 $product = $this->productModel->getById($productId);
                 if ($product) {
@@ -254,7 +256,6 @@ class CartController extends BaseController {
     }
 
     public function getCartItems() {
-        $this->initCart();
         $cartItems = [];
         if ($this->isLoggedIn) {
             $items = $this->cartModel->getItems();
@@ -266,6 +267,7 @@ class CartController extends BaseController {
                 ];
             }
         } else {
+            $this->initCart();
             foreach ($_SESSION['cart'] as $productId => $quantity) {
                 $product = $this->productModel->getById($productId);
                 if ($product) {
@@ -280,21 +282,7 @@ class CartController extends BaseController {
         return $cartItems;
     }
 
-    private function getCartCount() {
-        if ($this->isLoggedIn) {
-            $items = $this->cartModel->getItems();
-            $count = 0;
-            foreach ($items as $item) {
-                $count += $item['quantity'];
-            }
-            return $count;
-        } else {
-            return array_sum($_SESSION['cart']);
-        }
-    }
-
     public function mini() {
-        $this->initCart();
         $items = [];
         $subtotal = 0;
         if ($this->isLoggedIn) {
@@ -304,7 +292,7 @@ class CartController extends BaseController {
                     'product' => [
                         'id' => $item['id'],
                         'name' => $item['name'],
-                        'image' => $item['image'], // Use 'image' instead of 'image_url'
+                        'image' => $item['image'],
                         'price' => $item['price']
                     ],
                     'quantity' => $item['quantity']
@@ -312,6 +300,7 @@ class CartController extends BaseController {
                 $subtotal += $item['price'] * $item['quantity'];
             }
         } else {
+            $this->initCart();
             foreach ($_SESSION['cart'] as $productId => $quantity) {
                 $product = $this->productModel->getById($productId);
                 if ($product) {
@@ -319,7 +308,7 @@ class CartController extends BaseController {
                         'product' => [
                             'id' => $product['id'],
                             'name' => $product['name'],
-                            'image' => $product['image'], // Use 'image' instead of 'image_url'
+                            'image' => $product['image'],
                             'price' => $product['price']
                         ],
                         'quantity' => $quantity
