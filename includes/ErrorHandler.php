@@ -217,7 +217,11 @@ class ErrorHandler {
                 echo "\nStack trace:\n{$error['trace']}\n";
             }
         } else {
-            require_once __DIR__ . '/../views/error.php';
+            ob_start();
+            $errorVar = $error; // for compact/extract
+            extract(['error' => $errorVar]);
+            require __DIR__ . '/../views/error.php';
+            ob_end_flush();
         }
     }
     
@@ -226,7 +230,9 @@ class ErrorHandler {
         if (php_sapi_name() === 'cli') {
             echo "\nAn error occurred. Please check the error logs for details.\n";
         } else {
-            require_once __DIR__ . '/../views/error.php';
+            ob_start();
+            require __DIR__ . '/../views/error.php';
+            ob_end_flush();
         }
     }
 }

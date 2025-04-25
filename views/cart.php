@@ -21,8 +21,11 @@
                         <?php foreach ($cartItems as $item): ?>
                             <div class="cart-item" data-product-id="<?= $item['product']['id'] ?>">
                                 <div class="item-image">
-                                    <img src="<?= htmlspecialchars($item['product']['image_url']) ?>" 
-                                         alt="<?= htmlspecialchars($item['product']['name']) ?>">
+                                    <?php
+                                        $image_path = $item['product']['image'] ?? '/images/placeholder.jpg';
+                                    ?>
+                                    <img src="<?= htmlspecialchars($image_path) ?>" 
+                                         alt="<?= htmlspecialchars($item['product']['name'] ?? 'Product Image') ?>">
                                 </div>
                                 <div class="item-details">
                                     <h3><?= htmlspecialchars($item['product']['name']) ?></h3>
