@@ -16,8 +16,26 @@ require_once __DIR__ . '/../../includes/auth.php';
     <!-- Styles -->
     <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <!-- Custom JS: Tailwind config and all custom JS (must be before Tailwind CDN) -->
-    <script src="/js/main.js"></script>
+    <!-- Tailwind CSS custom config (must be loaded before Tailwind CDN) -->
+    <script>
+        window.tailwind = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1A4D5A',
+                        'primary-dark': '#164249',
+                        secondary: '#A0C1B1',
+                        accent: '#D4A76A',
+                    },
+                    fontFamily: {
+                        heading: ['Cormorant Garamond', 'serif'],
+                        body: ['Montserrat', 'sans-serif'],
+                        accent: ['Raleway', 'sans-serif'],
+                    },
+                },
+            },
+        };
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/css/style.css">
 </head>

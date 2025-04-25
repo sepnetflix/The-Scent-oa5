@@ -1,3 +1,8 @@
+Okay, let's update `index.php` to correctly route requests to the refactored `AccountController` methods and address potential impacts on other files.
+
+**Updated `index.php`:**
+
+```php
 <?php
 define('ROOT_PATH', __DIR__);
 require_once __DIR__ . '/config.php'; // Defines BASE_URL, etc.
@@ -326,3 +331,52 @@ try {
     // require_once __DIR__ . '/views/error.php'; // Fallback
     exit();
 }
+```
+
+**Explanation of Changes in `index.php`:**
+
+1.  **Account Routes Added:**
+    *   `case 'login'`: Calls `AccountController->login()`.
+    *   `case 'register'`: Simplified to call `AccountController->register()`.
+    *   `case 'logout'`: Added a simple logout mechanism calling `logoutUser()` (from `includes/auth.php`) and redirecting.
+    *   `case 'account'`: Added a new block with an inner `switch ($action)` to handle dashboard, profile, orders, etc., calling the respective methods in `AccountController`. Includes checks for logged-in status and required IDs.
+    *   `case 'forgot_password'`: Calls `AccountController->requestPasswordReset()`.
+    *   `case 'reset_password'`: Calls `AccountController->resetPassword()`.
+2.  **Login Checks:** Added `isLoggedIn()` checks before accessing account pages or checkout, redirecting to login if necessary. Also added checks to redirect *away* from login/register/forgot/reset if the user *is* already logged in.
+3.  **Parameter Handling:** Ensured `$id` is validated and passed where needed (e.g., `order_details`).
+4.  **Base URL:** Used the `BASE_URL` constant from `config.php` for more reliable redirects.
+5.  **Newsletter Route:** Added a dedicated `case 'newsletter':` for clarity, calling the `NewsletterController`.
+6.  **Admin Route:** Refined the admin section slightly, adding a `$task` variable concept for actions within a section (example shown for coupons).
+7.  **Error Handling:** Ensured the main `try...catch` delegates to the `ErrorHandler` for consistency.
+8.  **Dependencies:** Included `AccountController.php` where needed.
+9.  **Code Style:** Minor adjustments for consistency.
+
+**Other Files Needing Updates/Verification:**
+
+1.  **`js/main.js` (CRITICAL):**
+    *   The `login()`, `register()`, `requestPasswordReset()`, and `resetPassword()` methods in `AccountController` now primarily return JSON.
+    *   The corresponding event listeners in `main.js` (within `initLoginPage`, `initRegisterPage`, `initForgotPasswordPage`, `initResetPasswordPage`) need to be **rewritten** to:
+        *   Use `fetch` to submit the form data asynchronously.
+        *   Call `event.preventDefault()` to stop the default form submission.
+        *   Handle the JSON response (`{success: true/false, message: '...', redirect: '...'}`).
+        *   Show success/error messages using `showFlashMessage()`.
+        *   Perform the redirect using `window.location.href = data.redirect;` on success.
+        *   Handle potential network errors.
+        *   Update the button's loading state correctly during and after the AJAX request.
+    *   The `updateNewsletterPreferences()` method also likely expects an AJAX submission if the profile form updates parts of the page dynamically, otherwise, its standard form post + redirect might be acceptable. The current JS doesn't seem to handle profile updates via AJAX.
+
+2.  **`views/` Directory:**
+    *   **New Account Views:** You need to create the view files corresponding to the `renderView` calls in `AccountController`:
+        *   `views/account_dashboard.php`
+        *   `views/account_profile.php` (Must contain forms submitting to `action=update_profile` and `action=update_newsletter` with CSRF tokens)
+        *   `views/account_orders.php`
+        *   `views/account_order_details.php`
+    *   **Existing Views:** Ensure `login.php`, `register.php`, `forgot_password.php`, `reset_password.php` have the necessary form elements (including CSRF token inputs) and potentially elements for displaying AJAX validation errors if you implement that in JS.
+
+3.  **`includes/auth.php`:**
+    *   Verify it provides `isLoggedIn()`, `isAdmin()`, and `logoutUser()` functions that work correctly with the session structure set by `AccountController::login()`.
+
+4.  **Models (`User.php`, `Order.php`, etc.):**
+    *   Double-check that all methods called by `AccountController` (e.g., `isEmailTakenByOthers`, `updateBasicInfo`, `verifyPassword`, `setResetToken`, `getUserByValidResetToken`, `resetPassword`, `updateNewsletterPreference`, `getRecentByUserId`, `getAllByUserId`, `getTotalOrdersByUserId`, `getByIdAndUserId`) exist and function as expected.
+
+The `index.php` update provides the necessary routing structure. The **most critical next step** is updating `js/main.js` to handle the AJAX form submissions for login, registration, and password reset to work seamlessly with the controller's JSON responses.

@@ -13,8 +13,26 @@
     <!-- Styles -->
     <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <!-- Custom JS: Tailwind config and all custom JS (must be before Tailwind CDN) -->
-    <script src="/js/main.js"></script>
+    <!-- Tailwind CSS custom config (must be loaded before Tailwind CDN) -->
+    <script>
+        window.tailwind = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1A4D5A',
+                        'primary-dark': '#164249',
+                        secondary: '#A0C1B1',
+                        accent: '#D4A76A',
+                    },
+                    fontFamily: {
+                        heading: ['Cormorant Garamond', 'serif'],
+                        body: ['Montserrat', 'sans-serif'],
+                        accent: ['Raleway', 'sans-serif'],
+                    },
+                },
+            },
+        };
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/css/style.css">
 </head>
@@ -57,7 +75,7 @@
         <body class="page-products">
 
 <!-- Output CSRF token for JS (for AJAX add-to-cart) -->
-<input type="hidden" id="csrf-token-value" value="8052f5274a556cef91a685326355b0112ba78f4049362ec8f9f911d10e1b3584">
+<input type="hidden" id="csrf-token-value" value="5c9d74da1f020890b35b7d86a367847745b993554acb90f964666cbecc1a6309">
 
 <section class="products-section">
     <div class="container">
@@ -296,7 +314,7 @@
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="8052f5274a556cef91a685326355b0112ba78f4049362ec8f9f911d10e1b3584">
+                        <input type="hidden" name="csrf_token" value="5c9d74da1f020890b35b7d86a367847745b993554acb90f964666cbecc1a6309">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>

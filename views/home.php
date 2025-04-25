@@ -4,9 +4,9 @@ require_once __DIR__ . '/layout/header.php'; // Uses header-fixed.php content im
 echo '<!-- DEBUG: home.php loaded -->';
 $delay = 0; // Initialize delay counter for animations
 ?>
-<body class="page-home">
 <!-- Output CSRF token for JS (for AJAX add-to-cart/newsletter) -->
-<input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+<input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars(
+    $csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
 
 <!-- Hero Section with Video Background -->
 <section class="hero-section relative min-h-screen flex items-center justify-center overflow-hidden">

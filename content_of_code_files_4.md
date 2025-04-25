@@ -1,10560 +1,1545 @@
-# controllers/AccountController.php  
+# js/main.js  
 ```php
-<?php
-require_once __DIR__ . '/BaseController.php';
-require_once __DIR__ . '/../models/Order.php';
-require_once __DIR__ . '/../models/Quiz.php';
-require_once __DIR__ . '/../models/User.php';
-require_once __DIR__ . '/../includes/EmailService.php';
-require_once __DIR__ . '/../includes/SecurityMiddleware.php';
+// --- START OF UPDATED main.js ---
 
-class AccountController extends BaseController {
-    private $emailService;
-    private $userModel;
-    private $orderModel;
-    private $quizModel;
-    private $maxLoginAttempts = 5;
-    private $lockoutDuration = 900; // 15 minutes
-    private $resetTokenExpiry = 3600; // 1 hour
-    private $securityHeaders = [
-        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
-        'X-Content-Type-Options' => 'nosniff',
-        'X-Frame-Options' => 'SAMEORIGIN',
-        'X-XSS-Protection' => '1; mode=block',
-        'Content-Security-Policy' => "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';",
-        'Referrer-Policy' => 'strict-origin-when-cross-origin'
-    ];
+// Mobile menu toggle
+window.addEventListener('DOMContentLoaded', function() {
+    var menuToggle = document.querySelector('.mobile-menu-toggle');
+    var navLinks = document.querySelector('.nav-links');
+    if (menuToggle && navLinks) {
+        menuToggle.addEventListener('click', function() {
+            // Toggle navigation visibility
+            navLinks.classList.toggle('active');
+            // Toggle body class to prevent scrolling when menu is open
+            document.body.classList.toggle('menu-open');
+            // Toggle icon class (optional, if you want fa-times)
+             const icon = menuToggle.querySelector('i');
+             if (icon) {
+                 icon.classList.toggle('fa-bars');
+                 icon.classList.toggle('fa-times');
+             }
+        });
+    }
+    // Close menu if clicking outside of it on mobile
+    document.addEventListener('click', function(e) {
+        if (navLinks && navLinks.classList.contains('active') && !menuToggle.contains(e.target) && !navLinks.contains(e.target)) {
+             navLinks.classList.remove('active');
+             document.body.classList.remove('menu-open');
+             const icon = menuToggle.querySelector('i');
+             if (icon) {
+                 icon.classList.remove('fa-times');
+                 icon.classList.add('fa-bars');
+             }
+        }
+    });
+});
 
-    public function __construct($pdo) {
-        parent::__construct($pdo);
-        $this->emailService = new EmailService();
-        $this->userModel = new User($pdo);
-        $this->orderModel = new Order($pdo);
-        $this->quizModel = new Quiz($pdo);
-        
-        // Set security headers
-        foreach ($this->securityHeaders as $header => $value) {
-            header("$header: $value");
-        }
+// showFlashMessage utility
+window.showFlashMessage = function(message, type = 'info') {
+    let flashContainer = document.querySelector('.flash-message-container');
+    // Create container if it doesn't exist
+    if (!flashContainer) {
+        flashContainer = document.createElement('div');
+        // Apply Tailwind classes for positioning and styling the container
+        flashContainer.className = 'flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full space-y-2';
+        document.body.appendChild(flashContainer);
     }
-    
-    public function showDashboard() {
-        try {
-            $this->requireLogin();
-            $userId = $this->getUserId();
-            
-            // Get recent orders with transaction
-            $this->beginTransaction();
-            
-            try {
-                $recentOrders = $this->orderModel->getRecentByUserId($userId, 5);
-                $quizResults = $this->quizModel->getResultsByUserId($userId);
-                
-                $this->commit();
-                
-                return $this->renderView('account/dashboard', [
-                    'pageTitle' => 'My Account - The Scent',
-                    'recentOrders' => $recentOrders,
-                    'quizResults' => $quizResults
-                ]);
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Dashboard error: " . $e->getMessage());
-            $this->setFlashMessage('Error loading dashboard', 'error');
-            return $this->redirect('error');
+
+    const flashDiv = document.createElement('div');
+    // Define color mapping using Tailwind classes
+    const colorMap = {
+        success: 'bg-green-100 border-green-400 text-green-700',
+        error: 'bg-red-100 border-red-400 text-red-700',
+        info: 'bg-blue-100 border-blue-400 text-blue-700',
+        warning: 'bg-yellow-100 border-yellow-400 text-yellow-700'
+    };
+    // Apply Tailwind classes for the message appearance
+    flashDiv.className = `flash-message border px-4 py-3 rounded relative shadow-md flex justify-between items-center transition-opacity duration-300 ease-out opacity-0 ${colorMap[type] || colorMap['info']}`;
+    flashDiv.setAttribute('role', 'alert');
+
+    const messageSpan = document.createElement('span');
+    messageSpan.className = 'block sm:inline';
+    messageSpan.textContent = message;
+    flashDiv.appendChild(messageSpan);
+
+    const closeButton = document.createElement('button'); // Use button for accessibility
+    closeButton.className = 'ml-4 text-xl leading-none font-semibold hover:text-black';
+    closeButton.innerHTML = '&times;';
+    closeButton.setAttribute('aria-label', 'Close message');
+    closeButton.onclick = () => {
+        flashDiv.style.opacity = '0';
+        // Remove after transition
+        setTimeout(() => flashDiv.remove(), 300);
+    };
+    flashDiv.appendChild(closeButton);
+
+    // Add to container and fade in
+    flashContainer.appendChild(flashDiv);
+    // Force reflow before adding opacity class for transition
+    void flashDiv.offsetWidth;
+    flashDiv.style.opacity = '1';
+
+
+    // Auto-dismiss timer
+    setTimeout(() => {
+        if (flashDiv && flashDiv.parentNode) { // Check if it wasn't already closed
+             flashDiv.style.opacity = '0';
+             setTimeout(() => flashDiv.remove(), 300); // Remove after fade out
         }
-    }
-    
-    public function showOrders() {
-        try {
-            $this->requireLogin();
-            $userId = $this->getUserId();
-            
-            // Validate and sanitize pagination params
-            $page = max(1, (int)$this->validateInput($_GET['p'] ?? 1, 'int'));
-            $perPage = 10;
-            
-            // Get paginated orders
-            $orders = $this->orderModel->getAllByUserId($userId, $page, $perPage);
-            $totalOrders = $this->orderModel->getTotalOrdersByUserId($userId);
-            $totalPages = ceil($totalOrders / $perPage);
-            
-            return $this->renderView('account/orders', [
-                'pageTitle' => 'My Orders - The Scent',
-                'orders' => $orders,
-                'currentPage' => $page,
-                'totalPages' => $totalPages
-            ]);
-            
-        } catch (Exception $e) {
-            error_log("Orders error: " . $e->getMessage());
-            $this->setFlashMessage('Error loading orders', 'error');
-            return $this->redirect('error');
+    }, 5000); // Keep message for 5 seconds
+};
+
+
+// Global AJAX handlers (Add-to-Cart, Newsletter, etc.)
+window.addEventListener('DOMContentLoaded', function() {
+    // Add-to-Cart handler (using event delegation on the body)
+    document.body.addEventListener('click', function(e) {
+        const btn = e.target.closest('.add-to-cart');
+        if (!btn) return; // Exit if the clicked element is not an add-to-cart button or its child
+        e.preventDefault();
+        if (btn.disabled) return; // Prevent multiple clicks while processing
+
+        const productId = btn.dataset.productId;
+        const csrfTokenInput = document.getElementById('csrf-token-value');
+        const csrfToken = csrfTokenInput?.value;
+
+        if (!productId || !csrfToken) {
+            showFlashMessage('Cannot add to cart. Missing product or security token. Please refresh.', 'error');
+            console.error('Add to Cart Error: Missing productId or CSRF token input.');
+            return;
         }
-    }
-    
-    public function showOrderDetails($orderId) {
-        try {
-            $this->requireLogin();
-            $userId = $this->getUserId();
-            
-            // Validate input
-            $orderId = $this->validateInput($orderId, 'int');
-            if (!$orderId) {
-                throw new Exception('Invalid order ID');
+
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Adding...'; // Adding state with spinner
+
+        fetch('index.php?page=cart&action=add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            // Ensure quantity=1 is sent if your backend expects it
+            body: `product_id=${encodeURIComponent(productId)}&quantity=1&csrf_token=${encodeURIComponent(csrfToken)}`
+        })
+        .then(response => {
+            // Check for JSON response type before parsing
+            const contentType = response.headers.get("content-type");
+            if (response.ok && contentType && contentType.indexOf("application/json") !== -1) {
+                return response.json();
             }
-            
-            // Get order with auth check
-            $order = $this->orderModel->getByIdAndUserId($orderId, $userId);
-            if (!$order) {
-                return $this->renderView('404');
-            }
-            
-            return $this->renderView('account/order_details', [
-                'pageTitle' => "Order #" . str_pad($order['id'], 6, '0', STR_PAD_LEFT) . " - The Scent",
-                'order' => $order
-            ]);
-            
-        } catch (Exception $e) {
-            error_log("Order details error: " . $e->getMessage());
-            $this->setFlashMessage('Error loading order details', 'error');
-            return $this->redirect('account/orders');
-        }
-    }
-    
-    public function showProfile() {
-        try {
-            $this->requireLogin();
-            $user = $this->getCurrentUser();
-            
-            return $this->renderView('account/profile', [
-                'pageTitle' => 'My Profile - The Scent',
-                'user' => $user
-            ]);
-            
-        } catch (Exception $e) {
-            error_log("Profile error: " . $e->getMessage());
-            $this->setFlashMessage('Error loading profile', 'error');
-            return $this->redirect('error');
-        }
-    }
-    
-    public function updateProfile() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            
-            // Validate inputs
-            $name = $this->validateInput($_POST['name'] ?? '', 'string');
-            $email = $this->validateInput($_POST['email'] ?? '', 'email');
-            $currentPassword = $_POST['current_password'] ?? '';
-            $newPassword = $_POST['new_password'] ?? '';
-            
-            if (empty($name) || empty($email)) {
-                throw new Exception('Name and email are required.');
-            }
-            
-            $this->beginTransaction();
-            
-            try {
-                // Check if email is taken by another user
-                if ($this->userModel->isEmailTakenByOthers($email, $userId)) {
-                    throw new Exception('Email already in use.');
+            // Handle non-JSON responses or errors gracefully
+            return response.text().then(text => {
+                 console.error('Add to Cart - Non-JSON response:', response.status, text);
+                 throw new Error(`Server returned status ${response.status}. Check server logs or network response.`);
+            });
+        })
+        .then(data => {
+            if (data.success) {
+                showFlashMessage(data.message || 'Product added to cart!', 'success');
+                // Update cart count in header dynamically
+                const cartCountSpan = document.querySelector('.cart-count');
+                if (cartCountSpan) {
+                    cartCountSpan.textContent = data.cart_count || 0;
+                    cartCountSpan.style.display = (data.cart_count || 0) > 0 ? 'flex' : 'none'; // Use flex if it's display:flex initially
                 }
-                
-                // Update basic info
-                $this->userModel->updateBasicInfo($userId, $name, $email);
-                
-                // Update password if provided
-                if ($newPassword) {
-                    if (!$this->userModel->verifyPassword($userId, $currentPassword)) {
-                        throw new Exception('Current password is incorrect.');
+                // Optionally change button text briefly or add a checkmark icon
+                btn.textContent = 'Added!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    // Re-enable button unless out of stock
+                    if (data.stock_status !== 'out_of_stock') {
+                       btn.disabled = false;
+                    } else {
+                        // Keep disabled and update text if out of stock now
+                        btn.textContent = 'Out of Stock';
+                        btn.classList.add('btn-disabled'); // Add a class if needed
                     }
-                    
-                    // Validate password strength
-                    if (!$this->isPasswordStrong($newPassword)) {
-                        throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                    }
-                    
-                    $this->userModel->updatePassword($userId, $newPassword);
-                }
-                
-                $this->commit();
-                
-                // Update session
-                $_SESSION['user'] = array_merge(
-                    $_SESSION['user'], 
-                    ['name' => $name, 'email' => $email]
-                );
-                
-                $this->setFlashMessage('Profile updated successfully.', 'success');
-                
-                // Log the profile update
-                $this->logAuditTrail('profile_update', $userId);
-                
-                return $this->redirect('account/profile');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
+                }, 1500); // Reset after 1.5 seconds
+                 // Update mini cart if applicable
+                 if (typeof fetchMiniCart === 'function') {
+                     fetchMiniCart();
+                 }
+            } else {
+                // Handle specific errors from backend if available
+                showFlashMessage(data.message || 'Could not add product to cart.', 'error');
+                btn.innerHTML = originalText; // Reset button text immediately on failure
+                btn.disabled = false;
             }
-            
-        } catch (Exception $e) {
-            error_log("Profile update error: " . $e->getMessage());
-            $this->setFlashMessage($e->getMessage(), 'error');
-            return $this->redirect('account/profile');
-        }
-    }
-    
-    public function requestPasswordReset() {
-        try {
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        })
+        .catch((error) => {
+            console.error('Add to Cart Fetch Error:', error);
+            showFlashMessage(error.message || 'Error adding to cart. Please try again.', 'error');
+            btn.innerHTML = originalText; // Reset button text
+            btn.disabled = false;
+        });
+    });
+
+    // Newsletter AJAX handler (if present)
+    var newsletterForm = document.getElementById('newsletter-form'); // Main newsletter form
+    var newsletterFormFooter = document.getElementById('newsletter-form-footer'); // Footer newsletter form
+
+    function handleNewsletterSubmit(formElement) {
+        formElement.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const emailInput = formElement.querySelector('input[name="email"]');
+            const submitButton = formElement.querySelector('button[type="submit"]');
+            const csrfTokenInput = formElement.querySelector('input[name="csrf_token"]'); // Get token from specific form
+
+            if (!emailInput || !submitButton || !csrfTokenInput) {
+                 console.error("Newsletter form elements missing.");
+                 showFlashMessage('An error occurred. Please try again.', 'error');
+                 return;
+            }
+
+            const email = emailInput.value.trim();
+            const csrfToken = csrfTokenInput.value;
+
+            // Basic email validation
+            if (!email || !/\S+@\S+\.\S+/.test(email)) {
+                showFlashMessage('Please enter a valid email address.', 'error');
                 return;
             }
-            
-            $this->validateCSRF();
-            
-            // Rate limit password reset requests
-            $this->validateRateLimit('reset');
-            
-            $email = $this->validateInput($_POST['email'] ?? '', 'email');
-            if (!$email) {
-                throw new Exception('Please enter a valid email address.');
+            if (!csrfToken) {
+                 showFlashMessage('Security token missing. Please refresh the page.', 'error');
+                 return;
             }
-            
-            $this->beginTransaction();
-            
-            try {
-                // Generate a secure random token
-                $token = bin2hex(random_bytes(32));
-                $expiry = date('Y-m-d H:i:s', time() + $this->resetTokenExpiry);
-                
-                // Update user record with reset token
-                $updated = $this->userModel->setResetToken($email, $token, $expiry);
-                
-                if ($updated) {
-                    // Get user details for the email
-                    $user = $this->userModel->getByEmail($email);
-                    
-                    $resetLink = $this->getResetPasswordUrl($token);
-                    
-                    // Send password reset email
-                    $this->emailService->sendPasswordReset($user, $token, $resetLink);
-                    
-                    // Log the password reset request
-                    $this->logAuditTrail('password_reset_request', $user['id']);
+
+            // Disable button and show loading state
+            const originalButtonText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Subscribing...';
+
+            fetch('index.php?page=newsletter&action=subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `email=${encodeURIComponent(email)}&csrf_token=${encodeURIComponent(csrfToken)}`
+            })
+            .then(res => {
+                 const contentType = res.headers.get("content-type");
+                 if (res.ok && contentType && contentType.indexOf("application/json") !== -1) {
+                     return res.json();
+                 }
+                 return res.text().then(text => {
+                     console.error('Newsletter - Non-JSON response:', res.status, text);
+                     throw new Error(`Server returned status ${res.status}.`);
+                 });
+            })
+            .then(data => {
+                showFlashMessage(data.message || (data.success ? 'Subscription successful!' : 'Subscription failed.'), data.success ? 'success' : 'error');
+                if (data.success) {
+                    formElement.reset(); // Clear the form on success
                 }
-                
-                $this->commit();
-                
-                // Always show same message to prevent email enumeration
-                $this->setFlashMessage('If an account exists with that email, we have sent password reset instructions.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Password reset request error: " . $e->getMessage());
-            $this->setFlashMessage('An error occurred. Please try again later.', 'error');
-        }
-        
-        return $this->redirect('forgot_password');
+            })
+            .catch((error) => {
+                console.error('Newsletter Fetch Error:', error);
+                showFlashMessage(error.message || 'Error subscribing. Please try again later.', 'error');
+            })
+            .finally(() => {
+                 // Re-enable button and restore text
+                 submitButton.disabled = false;
+                 submitButton.textContent = originalButtonText;
+            });
+        });
     }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRF();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
+
+    if (newsletterForm) {
+        handleNewsletterSubmit(newsletterForm);
+    }
+    if (newsletterFormFooter) {
+        handleNewsletterSubmit(newsletterFormFooter);
+    }
+});
+
+
+// --- Page Specific Initializers ---
+// These functions are called based on the body class set in PHP
+
+function initHomePage() {
+    // console.log("Initializing Home Page");
+    // Potentially initialize sliders, specific home page elements, etc.
+    // AOS is initialized globally now, so no need to call AOS.init() here unless specific options are needed ONLY for home.
+}
+
+function initProductsPage() {
+    // console.log("Initializing Products Page");
+    // Sorting dropdown logic
+    const sortSelect = document.getElementById('sort');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', function() {
+            const url = new URL(window.location.href);
+            url.searchParams.set('sort', this.value);
+            // Reset page number when sorting changes
+            url.searchParams.delete('page_num');
+            window.location.href = url.toString();
+        });
+    }
+
+    // Price range filter logic
+    const applyPriceFilter = document.querySelector('.apply-price-filter');
+    const minPriceInput = document.getElementById('minPrice');
+    const maxPriceInput = document.getElementById('maxPrice');
+
+    if (applyPriceFilter && minPriceInput && maxPriceInput) {
+        applyPriceFilter.addEventListener('click', function() {
+            const minPrice = minPriceInput.value.trim();
+            const maxPrice = maxPriceInput.value.trim();
+            const url = new URL(window.location.href);
+
+            if (minPrice) url.searchParams.set('min_price', minPrice);
+            else url.searchParams.delete('min_price'); // Remove if empty
+
+            if (maxPrice) url.searchParams.set('max_price', maxPrice);
+            else url.searchParams.delete('max_price'); // Remove if empty
+
+             // Reset page number when filtering
+            url.searchParams.delete('page_num');
+            window.location.href = url.toString();
+        });
+    }
+     // Add logic for category filters if needed
+}
+
+function initProductDetailPage() {
+    // console.log("Initializing Product Detail Page");
+    // Image Gallery Logic
+    const mainImage = document.getElementById('mainImage');
+    const thumbnails = document.querySelectorAll('.thumbnail-grid img');
+
+    function updateMainImage(thumbnailElement) {
+        if (mainImage && thumbnailElement) {
+            // Update source and alt text
+            mainImage.src = thumbnailElement.dataset.largeImage || thumbnailElement.src; // Prefer data attribute for larger URL
+            mainImage.alt = thumbnailElement.alt.replace('Thumbnail', 'Main view');
+
+            // Update active state for thumbnails
+            thumbnails.forEach(img => img.classList.remove('border-primary', 'ring-2', 'ring-primary', 'ring-offset-2')); // More robust active state removal
+            thumbnailElement.classList.add('border-primary', 'ring-2', 'ring-primary', 'ring-offset-2'); // Example active state
+        }
+    }
+
+    // Make updateMainImage globally accessible if needed by inline onclick, but delegation is better
+    // window.updateMainImage = updateMainImage;
+
+    // Event delegation for thumbnails is more efficient
+    const thumbnailGrid = document.querySelector('.thumbnail-grid');
+    if (thumbnailGrid) {
+        thumbnailGrid.addEventListener('click', function(e) {
+            if (e.target.tagName === 'IMG') {
+                updateMainImage(e.target);
+            }
+        });
+         // Set initial active thumbnail if needed
+        const firstThumbnail = thumbnailGrid.querySelector('img');
+        if (firstThumbnail) {
+             // Ensure first one starts active if needed by design
+             // firstThumbnail.classList.add('border-primary', 'ring-2', 'ring-primary', 'ring-offset-2');
+        }
+    }
+
+
+    // Quantity Selector Logic
+    const quantityInput = document.querySelector('.quantity-selector input[name="quantity"]');
+    const quantityMax = quantityInput ? parseInt(quantityInput.getAttribute('max') || '99') : 99;
+    const quantityMin = quantityInput ? parseInt(quantityInput.getAttribute('min') || '1') : 1;
+
+    document.querySelectorAll('.quantity-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            if (!quantityInput) return;
+            let currentValue = parseInt(quantityInput.value);
+            if (isNaN(currentValue)) currentValue = quantityMin; // Default to min if invalid
+
+            if (this.classList.contains('plus')) {
+                if (currentValue < quantityMax) {
+                    quantityInput.value = currentValue + 1;
+                } else {
+                     quantityInput.value = quantityMax; // Don't exceed max
+                     // Optionally show a message or disable button further
                 }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
+            } else if (this.classList.contains('minus')) {
+                if (currentValue > quantityMin) {
+                    quantityInput.value = currentValue - 1;
+                } else {
+                     quantityInput.value = quantityMin; // Don't go below min
                 }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
+            }
+        });
+    });
+     // Ensure input value doesn't exceed max/min if user types manually
+     if (quantityInput) {
+         quantityInput.addEventListener('change', function() {
+             let value = parseInt(this.value);
+             if (isNaN(value) || value < quantityMin) this.value = quantityMin;
+             if (value > quantityMax) this.value = quantityMax;
+         });
+     }
+
+
+    // Tab Switching Logic
+    const tabContainer = document.querySelector('.tabs-container'); // Assuming a container for tabs
+    if (tabContainer) {
+         const tabBtns = tabContainer.querySelectorAll('.tab-btn');
+         const tabPanes = tabContainer.querySelectorAll('.tab-pane');
+
+         tabContainer.addEventListener('click', function(e) {
+             const clickedButton = e.target.closest('.tab-btn');
+             if (!clickedButton || clickedButton.classList.contains('active')) return; // Only act on inactive buttons
+
+             const tabId = clickedButton.dataset.tab; // e.g., 'description', 'reviews'
+
+             // Deactivate all buttons and hide all panes
+             tabBtns.forEach(b => b.classList.remove('active', 'text-primary', 'border-primary'));
+             tabBtns.forEach(b => b.classList.add('text-gray-500', 'border-transparent', 'hover:text-gray-700', 'hover:border-gray-300')); // Reset styles
+             tabPanes.forEach(pane => pane.classList.add('hidden'));
+
+             // Activate the clicked button
+             clickedButton.classList.add('active', 'text-primary', 'border-primary');
+             clickedButton.classList.remove('text-gray-500', 'border-transparent', 'hover:text-gray-700', 'hover:border-gray-300');
+
+             // Show the corresponding pane
+             const activePane = tabContainer.querySelector(`.tab-pane#${tabId}`);
+             if (activePane) {
+                 activePane.classList.remove('hidden');
+             }
+         });
+
+         // Ensure initial active tab's pane is visible on load (if needed)
+         const initialActiveTab = tabContainer.querySelector('.tab-btn.active');
+         if (initialActiveTab) {
+             const initialTabId = initialActiveTab.dataset.tab;
+             const initialActivePane = tabContainer.querySelector(`.tab-pane#${initialTabId}`);
+             if (initialActivePane) {
+                 initialActivePane.classList.remove('hidden');
+             }
+         } else {
+            // If no tab is active by default, maybe activate the first one?
+            const firstTab = tabContainer.querySelector('.tab-btn');
+            const firstPane = tabContainer.querySelector('.tab-pane');
+            if (firstTab && firstPane) {
+                 firstTab.classList.add('active', 'text-primary', 'border-primary');
+                 firstTab.classList.remove('text-gray-500', 'border-transparent', 'hover:text-gray-700', 'hover:border-gray-300');
+                 firstPane.classList.remove('hidden');
+            }
+         }
+    }
+     // Note: Add-to-cart on product page uses the global handler now.
+     // Ensure the main product form has necessary IDs/classes if submitting quantity etc.
+}
+
+
+function initCartPage() {
+    // console.log("Initializing Cart Page");
+    const cartForm = document.getElementById('cartForm'); // The main form wrapping the cart items
+    if (!cartForm) return;
+
+    // --- Helper Functions for Cart ---
+    function updateCartItem(cartItemElement) {
+        // Placeholder for potential future AJAX update without full form submission
+        // console.log('Updating item:', cartItemElement.dataset.productId);
+        // You might fetch new totals or validate quantity here via AJAX later
+        // For now, just update totals locally
+        updateCartTotalsDisplay();
+    }
+
+    function updateCartTotalsDisplay() {
+        let subtotal = 0;
+        let itemCount = 0;
+        document.querySelectorAll('.cart-item').forEach(item => {
+            const priceElement = item.querySelector('.item-price'); // Assumes an element shows item price *per unit*
+            const quantityInput = item.querySelector('.item-quantity input');
+            const subtotalElement = item.querySelector('.item-subtotal'); // Assumes an element shows line item total
+
+            if (priceElement && quantityInput) {
+                const price = parseFloat(priceElement.dataset.price || priceElement.textContent.replace(/[^0-9.]/g, '')); // Get price per unit
+                const quantity = parseInt(quantityInput.value);
+
+                if (!isNaN(price) && !isNaN(quantity)) {
+                    const lineTotal = price * quantity;
+                    subtotal += lineTotal;
+                    itemCount += quantity;
+                    if (subtotalElement) {
+                        subtotalElement.textContent = '$' + lineTotal.toFixed(2); // Update line item total display
                     }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
                 }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
             }
+        });
+
+        // Update overall subtotal display
+        const subtotalDisplay = document.getElementById('cart-subtotal'); // Needs an element with this ID
+        if (subtotalDisplay) {
+            subtotalDisplay.textContent = '$' + subtotal.toFixed(2);
         }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
+
+        // Update other totals like taxes, shipping, grand total if they exist
+        const grandTotalDisplay = document.getElementById('cart-grandtotal'); // Needs an element with this ID
+        if (grandTotalDisplay) {
+             // Add logic for taxes/shipping if needed, otherwise just show subtotal
+            grandTotalDisplay.textContent = '$' + subtotal.toFixed(2);
         }
-        
-        return $this->redirect('account/profile');
+
+        // Update cart count in header
+        updateCartCountHeader(itemCount);
+
+        // Handle empty cart state
+        const emptyCartMessage = document.getElementById('empty-cart-message');
+        const cartItemsContainer = document.getElementById('cart-items-container'); // Container holding items and summary
+        const checkoutButton = document.querySelector('.checkout-button'); // Checkout button
+
+        if (itemCount === 0 && emptyCartMessage && cartItemsContainer) {
+             cartItemsContainer.classList.add('hidden');
+             emptyCartMessage.classList.remove('hidden');
+        } else if (emptyCartMessage && cartItemsContainer) {
+             cartItemsContainer.classList.remove('hidden');
+             emptyCartMessage.classList.add('hidden');
+        }
+        if (checkoutButton) {
+            checkoutButton.disabled = itemCount === 0;
+            checkoutButton.classList.toggle('opacity-50', itemCount === 0);
+            checkoutButton.classList.toggle('cursor-not-allowed', itemCount === 0);
+        }
+
     }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
+
+    function updateCartCountHeader(count) {
+        const cartCountSpan = document.querySelector('.cart-count');
+        if (cartCountSpan) {
+            cartCountSpan.textContent = count;
+            // Use flex display properties consistent with your CSS for the count bubble
+            cartCountSpan.style.display = count > 0 ? 'flex' : 'none';
+            cartCountSpan.classList.toggle('animate-pulse', count > 0); // Optional: add a pulse effect
+             setTimeout(() => cartCountSpan.classList.remove('animate-pulse'), 1000);
         }
     }
 
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
+    // --- Event Listeners for Cart Actions ---
 
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
+    // Use event delegation on the form for quantity changes and removals
+    cartForm.addEventListener('click', function(e) {
+        // Quantity Buttons (+/-)
+        const quantityBtn = e.target.closest('.quantity-btn');
+        if (quantityBtn) {
+            const input = quantityBtn.parentElement.querySelector('input[name^="quantity["]'); // Target input by name pattern
+            if (!input) return;
 
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
+            const max = parseInt(input.getAttribute('max') || '99');
+            const min = parseInt(input.getAttribute('min') || '1');
+            let value = parseInt(input.value);
+            if (isNaN(value)) value = min;
 
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
+            if (quantityBtn.classList.contains('plus')) {
+                if (value < max) input.value = value + 1;
+                else input.value = max;
+            } else if (quantityBtn.classList.contains('minus')) {
+                if (value > min) input.value = value - 1;
+                else input.value = min;
             }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
+            // Trigger change event to update totals
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            return; // Stop further processing for this click
         }
-    }
 
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
+        // Remove Item Button
+        const removeItemBtn = e.target.closest('.remove-item');
+        if (removeItemBtn) {
+            e.preventDefault(); // Prevent default button behavior if it's not type="button"
+            const cartItemRow = removeItemBtn.closest('.cart-item'); // Find the parent item row
+            if (!cartItemRow) return;
 
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
+            const productId = removeItemBtn.dataset.productId;
+            const csrfToken = cartForm.querySelector('input[name="csrf_token"]')?.value;
+
+            if (!productId || !csrfToken) {
+                showFlashMessage('Error removing item: Missing data.', 'error');
+                return;
             }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
+
+            if (confirm('Are you sure you want to remove this item from your cart?')) {
+                 // Optimistic UI update: Remove visually first
+                cartItemRow.style.opacity = '0';
+                cartItemRow.style.transition = 'opacity 0.3s ease-out';
+                setTimeout(() => {
+                    cartItemRow.remove();
+                    updateCartTotalsDisplay(); // Update totals after removing element
+                }, 300);
+
+                // Send request to backend
+                fetch('index.php?page=cart&action=remove', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `product_id=${encodeURIComponent(productId)}&csrf_token=${encodeURIComponent(csrfToken)}`
+                })
+                .then(response => response.json().catch(() => ({ success: false, message: 'Invalid response from server.' }))) // Graceful JSON error handling
+                .then(data => {
+                    if (data.success) {
+                        showFlashMessage(data.message || 'Item removed from cart.', 'success');
+                        // UI already updated optimistically, totals updated. Header count updated by totals function.
+                         // Fetch mini cart to update dropdown
+                         if (typeof fetchMiniCart === 'function') {
+                             fetchMiniCart();
+                         }
+                    } else {
+                        showFlashMessage(data.message || 'Error removing item. Please try again.', 'error');
+                        // If removal failed, we might need to revert the UI change (more complex)
+                        // For simplicity, often a page reload is triggered or user manually refreshes
+                        // Or simply rely on the flash message and let totals be potentially wrong until refresh/update.
+                        // Re-fetch totals might be safer if optimistic update is reverted.
+                         updateCartTotalsDisplay(); // Re-run totals in case of failure to ensure consistency
                     }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private functionlockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-```php
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return```php
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" .```php
-$_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
-
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
-
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-        }
-        
-        return $this->render('register', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function resetPassword() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('reset');
-                
-                // Validate inputs
-                $token = $this->validateInput($_POST['token'] ?? '', 'string');
-                $password = $_POST['password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                
-                if (!$token) {
-                    throw new Exception('Invalid password reset token.');
-                }
-                
-                if ($password !== $confirmPassword) {
-                    throw new Exception('Passwords do not match.');
-                }
-                
-                if (!$this->isPasswordStrong($password)) {
-                    throw new Exception('Password must be at least 12 characters, contain uppercase, lowercase, number, special character, and no character repeated 3+ times.');
-                }
-                
-                $this->beginTransaction();
-                
-                try {
-                    // Verify token and get user
-                    $user = $this->userModel->getUserByValidResetToken($token);
-                    if (!$user) {
-                        throw new Exception('This password reset link has expired or is invalid.');
-                    }
-                    
-                    // Update password and clear reset token
-                    $this->userModel->resetPassword($user['id'], $password);
-                    
-                    // Log the password reset
-                    $this->logAuditTrail('password_reset_complete', $user['id']);
-                    
-                    $this->commit();
-                    
-                    $this->setFlashMessage('Your password has been successfully reset. Please log in with your new password.', 'success');
-                    return $this->redirect('login');
-                    
-                } catch (Exception $e) {
-                    $this->rollback();
-                    throw $e;
-                }
-                
-            } catch (Exception $e) {
-                error_log("Password reset error: " . $e->getMessage());
-                $this->setFlashMessage($e->getMessage(), 'error');
-                return $this->redirect("reset_password?token=" . urlencode($token));
-            }
-        }
-    }
-    
-    public function updateNewsletterPreferences() {
-        try {
-            $this->requireLogin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                return $this->redirect('account/profile');
-            }
-            
-            $userId = $this->getUserId();
-            $newsletter = filter_var($_POST['newsletter'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            
-            $this->beginTransaction();
-            
-            try {
-                $this->userModel->updateNewsletterPreference($userId, $newsletter);
-                
-                // Log the preference update
-                $this->logAuditTrail('newsletter_preference_update', $userId);
-                
-                $this->commit();
-                
-                $this->setFlashMessage('Newsletter preferences updated successfully.', 'success');
-                
-            } catch (Exception $e) {
-                $this->rollback();
-                throw $e;
-            }
-            
-        } catch (Exception $e) {
-            error_log("Newsletter preference update error: " . $e->getMessage());
-            $this->setFlashMessage('Failed to update newsletter preferences.', 'error');
-        }
-        
-        return $this->redirect('account/profile');
-    }
-    
-    private function isPasswordStrong($password) {
-        // Enhanced password requirements
-        return strlen($password) >= 12 &&           // Minimum length
-               preg_match('/[A-Z]/', $password) &&  // Uppercase
-               preg_match('/[a-z]/', $password) &&  // Lowercase
-               preg_match('/[0-9]/', $password) &&  // Number
-               preg_match('/[^A-Za-z0-9]/', $password) && // Special char
-               !preg_match('/(.)\1{2,}/', $password);    // No character repeated 3+ times
-    }
-    
-    private function getResetPasswordUrl($token) {
-        return "https://" . $_SERVER['HTTP_HOST'] . "/index.php?page=reset_password&token=" . urlencode($token);
-    }
-    
-    private function logAuditTrail($action, $userId) {
-        try {
-            $data = [
-                'user_id' => $userId,
-                'action' => $action,
-                'ip_address' => $_SERVER['REMOTE_ADDR'],
-                'user_agent' => $_SERVER['HTTP_USER_AGENT']
-            ];
-            
-            $this->db->insert('audit_trail', $data);
-        } catch (Exception $e) {
-            error_log("Audit trail error: " . $e->getMessage());
-        }
-    }
-
-    private function monitorSuspiciousActivity($userId, $activityType) {
-        $suspiciousPatterns = [
-            'multiple_failed_logins' => 3,    // 3 failed attempts
-            'password_resets' => 2,           // 2 resets in 24h
-            'profile_updates' => 5            // 5 updates in 24h
-        ];
-
-        try {
-            // Check activity count in last 24h
-            $activityCount = $this->userModel->getRecentActivityCount(
-                $userId, 
-                $activityType, 
-                'P1D'  // Last 24 hours
-            );
-
-            if ($activityCount >= $suspiciousPatterns[$activityType]) {
-                // Log suspicious activity
-                error_log("Suspicious activity detected: {$activityType} for user {$userId}");
-                
-                // Notify admin
-                $this->emailService->notifyAdminOfSuspiciousActivity(
-                    $userId, 
-                    $activityType, 
-                    $activityCount
-                );
-
-                // Optional: Take defensive action like temporary lockout
-                if ($activityType === 'multiple_failed_logins') {
-                    $this->lockAccount($userId, 'suspicious_activity');
-                }
+                })
+                .catch(error => {
+                    console.error('Error removing item:', error);
+                    showFlashMessage('Failed to remove item due to a network error.', 'error');
+                     updateCartTotalsDisplay(); // Re-run totals
+                });
+            }
+            return; // Stop further processing for this click
+        }
+    });
+
+    // Listener for direct quantity input changes
+    cartForm.addEventListener('change', function(e) {
+        if (e.target.matches('.item-quantity input')) {
+            const input = e.target;
+            const max = parseInt(input.getAttribute('max') || '99');
+            const min = parseInt(input.getAttribute('min') || '1');
+            let value = parseInt(input.value);
+
+            // Validate input value
+            if (isNaN(value) || value < min) {
+                 input.value = min;
+                 value = min;
+            }
+            if (value > max) {
+                input.value = max;
+                value = max;
+                showFlashMessage(`Quantity cannot exceed ${max}.`, 'warning');
+            }
+
+            updateCartItem(input.closest('.cart-item')); // Update totals based on validated input
+        }
+    });
+
+
+    // Optional: AJAX Update Cart Button (if you have one, otherwise form submits normally)
+    const updateCartButton = document.getElementById('update-cart-button');
+    if (updateCartButton) {
+        updateCartButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            const formData = new FormData(cartForm);
+            const submitButton = this; // Reference to the button
+            const originalButtonText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Updating...';
+
+
+            fetch('index.php?page=cart&action=update', { // Assuming this endpoint updates quantities
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json().catch(() => ({ success: false, message: 'Invalid response from server.' })))
+            .then(data => {
+                if (data.success) {
+                    showFlashMessage(data.message || 'Cart updated successfully!', 'success');
+                    // Optionally update totals based on response if backend sends them
+                    updateCartTotalsDisplay(); // Recalculate totals locally
+                     if (typeof fetchMiniCart === 'function') {
+                         fetchMiniCart(); // Update mini cart dropdown
+                     }
+                } else {
+                    showFlashMessage(data.message || 'Failed to update cart.', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error updating cart:', error);
+                showFlashMessage('Failed to update cart due to a network error.', 'error');
+            })
+            .finally(() => {
+                 submitButton.disabled = false;
+                 submitButton.textContent = originalButtonText;
+            });
+        });
+    }
+
+     // Initial calculation of totals when page loads
+     updateCartTotalsDisplay();
+}
+
+
+function initLoginPage() {
+    // console.log("Initializing Login Page");
+    const form = document.getElementById('loginForm');
+    if (!form) return;
+    const submitButton = form.querySelector('button[type="submit"]'); // More specific selector
+
+    // Password visibility toggle
+    form.querySelectorAll('.toggle-password').forEach(toggleBtn => {
+        toggleBtn.addEventListener('click', function() {
+            const passwordInput = this.previousElementSibling; // Assumes button is immediately after input
+            if (passwordInput && passwordInput.type) {
+                 const icon = this.querySelector('i');
+                 if (passwordInput.type === 'password') {
+                     passwordInput.type = 'text';
+                     icon?.classList.remove('fa-eye');
+                     icon?.classList.add('fa-eye-slash');
+                 } else {
+                     passwordInput.type = 'password';
+                     icon?.classList.remove('fa-eye-slash');
+                     icon?.classList.add('fa-eye');
+                 }
             }
-        } catch (Exception $e) {
-            // Log error but don't block the main flow
-            error_log("Error monitoring activity: " . $e->getMessage());
-        }
-    }
+        });
+    });
 
-    private function lockAccount($userId, $reason) {
-        try {
-            $this->beginTransaction();
-            
-            // Set account status to locked
-            $this->userModel->updateAccountStatus($userId, 'locked');
-            
-            // Log the lockout
-            $this->logAuditTrail('account_lockout', $userId, ['reason' => $reason]);
-            
-            // Notify user
-            $user = $this->userModel->getById($userId);
-            $this->emailService->sendAccountLockoutNotification($user, $reason);
-            
-            $this->commit();
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            throw $e;
-        }
-    }
+
+    // Add loading state on form submission
+    if (form && submitButton) {
+        form.addEventListener('submit', function(e) {
+            // Add basic validation if needed
+            const email = form.querySelector('#email')?.value.trim();
+            const password = form.querySelector('#password')?.value;
+            if (!email || !password) {
+                 showFlashMessage('Please enter both email and password.', 'error');
+                 e.preventDefault(); // Prevent submission if fields are empty
+                 return;
+            }
+
+            // Show loading state
+            const buttonText = submitButton.querySelector('.button-text');
+            const buttonLoader = submitButton.querySelector('.button-loader');
+            if(buttonText) buttonText.classList.add('hidden');
+            if(buttonLoader) buttonLoader.classList.remove('hidden');
+            submitButton.disabled = true;
+
+            // Note: The form will submit normally after this unless prevented.
+            // If using AJAX login, preventDefault() and add fetch logic here.
+        });
+    }
+}
+
+
+function initRegisterPage() {
+    // console.log("Initializing Register Page");
+    const form = document.getElementById('registerForm');
+    if (!form) return;
+
+    const passwordInput = form.querySelector('#password');
+    const confirmPasswordInput = form.querySelector('#confirm_password');
+    const submitButton = form.querySelector('button[type="submit"]');
+
+    // Password requirements elements (assuming they exist with these IDs)
+    const requirements = {
+        length: { regex: /.{12,}/, element: document.getElementById('req-length') }, // Example IDs, adjust as needed
+        uppercase: { regex: /[A-Z]/, element: document.getElementById('req-uppercase') },
+        lowercase: { regex: /[a-z]/, element: document.getElementById('req-lowercase') },
+        number: { regex: /[0-9]/, element: document.getElementById('req-number') },
+        special: { regex: /[@$!%*?&]/, element: document.getElementById('req-special') },
+        match: { element: document.getElementById('req-match') }
+    };
+
+    function validatePassword() {
+        if (!passwordInput || !confirmPasswordInput || !submitButton) return; // Exit if elements aren't found
+
+        let allMet = true;
+        const passwordValue = passwordInput.value;
+        const confirmPasswordValue = confirmPasswordInput.value;
+
+        for (const reqKey in requirements) {
+            const req = requirements[reqKey];
+            if (!req.element) continue; // Skip if requirement element doesn't exist
+
+            let isMet = false;
+            if (reqKey === 'match') {
+                isMet = passwordValue && passwordValue === confirmPasswordValue; // Ensure password is not empty
+            } else if (req.regex) {
+                isMet = req.regex.test(passwordValue);
+            }
+
+            // Update UI feedback (e.g., add/remove a 'met' class)
+            req.element.classList.toggle('met', isMet); // Assumes 'met' class styles the requirement
+            req.element.classList.toggle('not-met', !isMet); // Optional class for unmet state
+            const icon = req.element.querySelector('i'); // Find icon within requirement li/div
+            if (icon) {
+                icon.classList.toggle('fa-check-circle', isMet); // Example icons
+                icon.classList.toggle('fa-times-circle', !isMet);
+            }
+
+            if (!isMet) {
+                allMet = false;
+            }
+        }
+
+        // Enable/disable submit button based on validation
+        submitButton.disabled = !allMet;
+        submitButton.classList.toggle('opacity-50', !allMet);
+        submitButton.classList.toggle('cursor-not-allowed', !allMet);
+    }
+
+    // Add event listeners if password fields exist
+    if (passwordInput && confirmPasswordInput) {
+        passwordInput.addEventListener('input', validatePassword);
+        confirmPasswordInput.addEventListener('input', validatePassword);
+        // Initial validation check in case fields are pre-filled
+        validatePassword();
+    }
+
+    // Password visibility toggles
+     form.querySelectorAll('.toggle-password').forEach(toggleBtn => {
+        toggleBtn.addEventListener('click', function() {
+            const passwordInputEl = this.previousElementSibling;
+            if (passwordInputEl && passwordInputEl.type) {
+                 const icon = this.querySelector('i');
+                 if (passwordInputEl.type === 'password') {
+                     passwordInputEl.type = 'text';
+                     icon?.classList.remove('fa-eye');
+                     icon?.classList.add('fa-eye-slash');
+                 } else {
+                     passwordInputEl.type = 'password';
+                     icon?.classList.remove('fa-eye-slash');
+                     icon?.classList.add('fa-eye');
+                 }
+            }
+        });
+    });
+
+    // Loading state on submit
+    if (form && submitButton) {
+        form.addEventListener('submit', function(e) {
+            // Re-validate just before submit, although button state should be correct
+            validatePassword();
+            if (submitButton.disabled) {
+                e.preventDefault(); // Prevent submission if validation fails
+                showFlashMessage('Please ensure all password requirements are met.', 'error');
+                return;
+            }
+
+            // Show loading state
+            const buttonText = submitButton.querySelector('.button-text');
+            const buttonLoader = submitButton.querySelector('.button-loader');
+            if(buttonText) buttonText.classList.add('hidden');
+            if(buttonLoader) buttonLoader.classList.remove('hidden');
+            submitButton.disabled = true; // Keep disabled during submission
+        });
+    }
+}
+
+
+function initForgotPasswordPage() {
+    // console.log("Initializing Forgot Password Page");
+    const form = document.getElementById('forgotPasswordForm');
+    if (!form) return;
+    const submitButton = form.querySelector('button[type="submit"]');
+
+    if (form && submitButton) {
+        form.addEventListener('submit', function(e) {
+            const email = form.querySelector('#email')?.value.trim();
+             if (!email || !/\S+@\S+\.\S+/.test(email)) { // Basic validation
+                 showFlashMessage('Please enter a valid email address.', 'error');
+                 e.preventDefault();
+                 return;
+             }
+
+            const buttonText = submitButton.querySelector('.button-text');
+            const buttonLoader = submitButton.querySelector('.button-loader');
+            if(buttonText) buttonText.classList.add('hidden');
+            if(buttonLoader) buttonLoader.classList.remove('hidden');
+            submitButton.disabled = true;
+        });
+    }
+}
+
+
+function initResetPasswordPage() {
+     // console.log("Initializing Reset Password Page");
+     // This is very similar to Register page validation
+    const form = document.getElementById('resetPasswordForm');
+    if (!form) return;
+
+    const passwordInput = form.querySelector('#password');
+    const confirmPasswordInput = form.querySelector('#password_confirm'); // Corrected ID if needed
+    const submitButton = form.querySelector('button[type="submit"]');
+
+    // Adjust requirement IDs if they differ from register page
+    const requirements = {
+        length: { regex: /.{12,}/, element: document.getElementById('req-length') },
+        uppercase: { regex: /[A-Z]/, element: document.getElementById('req-uppercase') },
+        lowercase: { regex: /[a-z]/, element: document.getElementById('req-lowercase') },
+        number: { regex: /[0-9]/, element: document.getElementById('req-number') },
+        special: { regex: /[@$!%*?&]/, element: document.getElementById('req-special') },
+        match: { element: document.getElementById('req-match') }
+    };
+
+    // Re-use or adapt the validation logic from initRegisterPage
+    function validateResetPassword() {
+        if (!passwordInput || !confirmPasswordInput || !submitButton) return;
+        let allMet = true;
+        const passwordValue = passwordInput.value;
+        const confirmPasswordValue = confirmPasswordInput.value;
+
+        for (const reqKey in requirements) {
+            const req = requirements[reqKey];
+            if (!req.element) continue;
+            let isMet = false;
+            if (reqKey === 'match') {
+                isMet = passwordValue && passwordValue === confirmPasswordValue;
+            } else if (req.regex) {
+                isMet = req.regex.test(passwordValue);
+            }
+            req.element.classList.toggle('met', isMet);
+            req.element.classList.toggle('not-met', !isMet);
+            const icon = req.element.querySelector('i');
+            if (icon) {
+                icon.classList.toggle('fa-check-circle', isMet);
+                icon.classList.toggle('fa-times-circle', !isMet);
+            }
+            if (!isMet) allMet = false;
+        }
+        submitButton.disabled = !allMet;
+        submitButton.classList.toggle('opacity-50', !allMet);
+        submitButton.classList.toggle('cursor-not-allowed', !allMet);
+    }
+
+    if (passwordInput && confirmPasswordInput) {
+        passwordInput.addEventListener('input', validateResetPassword);
+        confirmPasswordInput.addEventListener('input', validateResetPassword);
+        validateResetPassword(); // Initial check
+    }
+
+    // Password visibility toggles
+    form.querySelectorAll('.toggle-password').forEach(toggleBtn => {
+         toggleBtn.addEventListener('click', function() {
+             const passwordInputEl = this.previousElementSibling;
+             if (passwordInputEl && passwordInputEl.type) {
+                  const icon = this.querySelector('i');
+                  if (passwordInputEl.type === 'password') {
+                      passwordInputEl.type = 'text';
+                      icon?.classList.remove('fa-eye');
+                      icon?.classList.add('fa-eye-slash');
+                  } else {
+                      passwordInputEl.type = 'password';
+                      icon?.classList.remove('fa-eye-slash');
+                      icon?.classList.add('fa-eye');
+                  }
+             }
+         });
+     });
+
+    // Loading state on submit
+    if (form && submitButton) {
+        form.addEventListener('submit', function(e) {
+            validateResetPassword(); // Final validation check
+            if (submitButton.disabled) {
+                e.preventDefault();
+                showFlashMessage('Please ensure all password requirements are met.', 'error');
+                return;
+            }
+            const buttonText = submitButton.querySelector('.button-text');
+            const buttonLoader = submitButton.querySelector('.button-loader');
+             if(buttonText) buttonText.classList.add('hidden');
+             if(buttonLoader) buttonLoader.classList.remove('hidden');
+            submitButton.disabled = true;
+        });
+    }
+}
+
+
+function initQuizPage() {
+    // console.log("Initializing Quiz Page");
+    // Initialize particles.js if the element exists and library is loaded
+    if (typeof particlesJS !== 'undefined' && document.getElementById('particles-js')) {
+        particlesJS.load('particles-js', '/particles.json', function() {
+            // console.log('particles.js loaded - callback');
+        });
+    } else if (document.getElementById('particles-js')) {
+         console.warn('particlesJS library not loaded, skipping initialization.');
+    }
+
+    // Handle quiz option selection using event delegation
+    const quizForm = document.getElementById('scent-quiz');
+    if (quizForm) {
+         const optionsContainer = quizForm.querySelector('.quiz-options-container'); // Need a container for options
+         if (optionsContainer) {
+             optionsContainer.addEventListener('click', (e) => {
+                 const selectedOption = e.target.closest('.quiz-option');
+                 if (!selectedOption) return; // Exit if click wasn't on an option
+
+                 // Remove active styles from all options first
+                 optionsContainer.querySelectorAll('.quiz-option').forEach(opt => {
+                     const innerDiv = opt.querySelector('div'); // Find the div to style
+                     innerDiv?.classList.remove('border-primary', 'bg-primary/10', 'ring-2', 'ring-primary'); // Example active styles
+                     innerDiv?.classList.add('border-gray-300'); // Reset to default border
+                 });
+
+                 // Apply active styles to the clicked option's inner div
+                 const selectedInnerDiv = selectedOption.querySelector('div');
+                 selectedInnerDiv?.classList.add('border-primary', 'bg-primary/10', 'ring-2', 'ring-primary');
+                 selectedInnerDiv?.classList.remove('border-gray-300');
+
+                 // Update the hidden input value (if using hidden input)
+                 const hiddenInput = quizForm.querySelector('input[name="mood"]'); // Or appropriate name
+                 if (hiddenInput) {
+                    hiddenInput.value = selectedOption.dataset.value; // Assuming value is stored in data-value
+                 }
+             });
+         }
+
+        // Handle form submission
+        quizForm.addEventListener('submit', (e) => {
+             // Validate if an option was selected (check hidden input or radio button)
+             const selectedValue = quizForm.querySelector('input[name="mood"]')?.value; // Check hidden input first
+             const selectedRadio = quizForm.querySelector('input[name="mood_radio"]:checked'); // Check radio if used instead
+
+             if (!selectedValue && !selectedRadio) {
+                 e.preventDefault(); // Prevent submission
+                 showFlashMessage('Please select an option to continue.', 'warning');
+                 // Optionally scroll to the options
+                 optionsContainer?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                 return;
+             }
+             // Allow form submission if valid
+             // Add loading state to submit button if needed
+              const submitButton = quizForm.querySelector('button[type="submit"]');
+              if (submitButton) {
+                  submitButton.disabled = true;
+                  submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Finding your scent...';
+              }
+        });
+    }
+}
+
+
+function initQuizResultsPage() {
+    // console.log("Initializing Quiz Results Page");
+    // Initialize particles if element exists
+    if (typeof particlesJS !== 'undefined' && document.getElementById('particles-js')) {
+        particlesJS.load('particles-js', '/particles.json');
+    }
+    // AOS is initialized globally, but ensure it's needed/configured for this page if specific settings apply
+    // e.g., if AOS wasn't initialized globally, you would call it here:
+    // if (typeof AOS !== 'undefined') {
+    //     AOS.init({ duration: 800, offset: 100, once: true });
+    // }
+}
+
+
+function initAdminQuizAnalyticsPage() {
+    // console.log("Initializing Admin Quiz Analytics");
+    // Ensure Chart.js is loaded before trying to use it
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js library is not loaded.');
+        return;
+    }
+
+    let charts = {}; // Store chart instances to destroy them before redraw
+
+    const timeRangeSelect = document.getElementById('timeRange');
+    const statsContainer = document.getElementById('statsContainer'); // Container for cards
+    const chartsContainer = document.getElementById('chartsContainer'); // Container for charts
+    const recommendationsTableBody = document.getElementById('recommendationsTableBody'); // Tbody for recommendations
+
+    // --- Chart Configuration Defaults ---
+    Chart.defaults.font.family = "'Montserrat', sans-serif";
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    Chart.defaults.plugins.tooltip.titleFont = { size: 14, weight: 'bold' };
+    Chart.defaults.plugins.tooltip.bodyFont = { size: 12 };
+    Chart.defaults.plugins.legend.position = 'bottom';
+
+    // --- Fetch and Update Function ---
+    async function updateAnalytics() {
+        const timeRange = timeRangeSelect ? timeRangeSelect.value : '7d'; // Default time range
+
+        // Show loading states (optional)
+        statsContainer?.classList.add('opacity-50');
+        chartsContainer?.classList.add('opacity-50');
+        recommendationsTableBody?.classList.add('opacity-50');
+
+        try {
+            const response = await fetch(`index.php?page=admin&action=quiz_analytics&range=${timeRange}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest', // Identify as AJAX request
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                 const errorText = await response.text();
+                 throw new Error(`Network response was not ok (${response.status}): ${errorText}`);
+            }
+
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to fetch analytics data from the server.');
+            }
+
+            // Update UI elements with fetched data
+            updateStatCards(data.data?.statistics);
+            updateCharts(data.data?.preferences);
+            updateRecommendationsTable(data.data?.recommendations);
+
+        } catch (error) {
+            console.error('Error fetching or processing analytics data:', error);
+            showFlashMessage(`Failed to load analytics: ${error.message}`, 'error');
+            // Optionally clear or show error messages in the UI sections
+             if (statsContainer) statsContainer.innerHTML = '<p class="text-red-500">Could not load stats.</p>';
+             if (chartsContainer) chartsContainer.innerHTML = '<p class="text-red-500">Could not load charts.</p>';
+             if (recommendationsTableBody) recommendationsTableBody.innerHTML = '<tr><td colspan="5" class="text-center text-red-500">Could not load recommendations.</td></tr>';
+
+        } finally {
+            // Remove loading states
+             statsContainer?.classList.remove('opacity-50');
+             chartsContainer?.classList.remove('opacity-50');
+             recommendationsTableBody?.classList.remove('opacity-50');
+        }
+    }
+
+    // --- UI Update Functions ---
+    function updateStatCards(stats) {
+        if (!stats || !statsContainer) return;
+        document.getElementById('totalParticipants').textContent = stats.total_quizzes ?? 'N/A';
+        document.getElementById('conversionRate').textContent = stats.conversion_rate != null ? `${stats.conversion_rate}%` : 'N/A'; // Check for null explicitly
+        document.getElementById('avgCompletionTime').textContent = stats.avg_completion_time != null ? `${stats.avg_completion_time}s` : 'N/A';
+    }
+
+    function updateCharts(preferences) {
+         if (!preferences || !chartsContainer) return;
+
+         // Destroy existing charts before creating new ones
+         Object.values(charts).forEach(chart => chart?.destroy());
+         charts = {}; // Reset chart store
+
+         // Example Chart Colors
+         const chartColors = ['#1A4D5A', '#A0C1B1', '#D4A76A', '#6B7280', '#F59E0B', '#10B981'];
+
+         // Scent Preference Chart (Doughnut)
+         const scentCtx = document.getElementById('scentChart')?.getContext('2d');
+         if (scentCtx && preferences.scent_types?.length > 0) {
+             charts.scent = new Chart(scentCtx, {
+                 type: 'doughnut',
+                 data: {
+                     labels: preferences.scent_types.map(p => p.type),
+                     datasets: [{
+                         label: 'Scent Preferences',
+                         data: preferences.scent_types.map(p => p.count),
+                         backgroundColor: chartColors,
+                         hoverOffset: 4
+                     }]
+                 },
+                 options: {
+                     responsive: true,
+                     plugins: { legend: { display: true }, title: { display: true, text: 'Scent Type Preferences' } }
+                 }
+             });
+         } else if (scentCtx) {
+            scentCtx.canvas.parentElement.innerHTML = '<p class="text-center text-gray-500">No scent preference data.</p>';
+         }
+
+
+         // Mood Effect Chart (Bar)
+         const moodCtx = document.getElementById('moodChart')?.getContext('2d');
+         if (moodCtx && preferences.mood_effects?.length > 0) {
+            charts.mood = new Chart(moodCtx, {
+                type: 'bar',
+                data: {
+                     labels: preferences.mood_effects.map(p => p.effect),
+                     datasets: [{
+                         label: 'Desired Mood Effects',
+                         data: preferences.mood_effects.map(p => p.count),
+                         backgroundColor: chartColors[1], // Use a color from palette
+                         borderColor: chartColors[1],
+                         borderWidth: 1
+                     }]
+                 },
+                 options: {
+                     indexAxis: 'y', // Horizontal bar chart might be better for long labels
+                     responsive: true,
+                     scales: { x: { beginAtZero: true } },
+                     plugins: { legend: { display: false }, title: { display: true, text: 'Desired Mood Effects' } }
+                 }
+             });
+         } else if (moodCtx) {
+             moodCtx.canvas.parentElement.innerHTML = '<p class="text-center text-gray-500">No mood effect data.</p>';
+         }
+
+         // Daily Completions Chart (Line)
+          const completionsCtx = document.getElementById('completionsChart')?.getContext('2d');
+          if (completionsCtx && preferences.daily_completions?.length > 0) {
+             charts.completions = new Chart(completionsCtx, {
+                 type: 'line',
+                 data: {
+                     labels: preferences.daily_completions.map(d => d.date), // Assuming date is formatted nicely
+                     datasets: [{
+                         label: 'Daily Quiz Completions',
+                         data: preferences.daily_completions.map(d => d.count),
+                         borderColor: chartColors[0],
+                         backgroundColor: 'rgba(26, 77, 90, 0.1)', // Optional fill
+                         fill: true,
+                         tension: 0.1 // Smooth curve
+                     }]
+                 },
+                 options: {
+                     responsive: true,
+                     scales: { y: { beginAtZero: true } },
+                     plugins: { legend: { display: false }, title: { display: true, text: 'Quiz Completions Over Time' } }
+                 }
+             });
+         } else if (completionsCtx) {
+              completionsCtx.canvas.parentElement.innerHTML = '<p class="text-center text-gray-500">No completion data for this period.</p>';
+         }
+    }
+
+    function updateRecommendationsTable(recommendations) {
+        if (!recommendations || !recommendationsTableBody) return;
+
+        if (recommendations.length === 0) {
+            recommendationsTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">No product recommendations data available for this period.</td></tr>';
+            return;
+        }
+
+        // Generate table rows
+        recommendationsTableBody.innerHTML = recommendations.map(product => `
+            <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${product.name || 'N/A'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${product.category || 'N/A'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${product.recommendation_count ?? 'N/A'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${product.conversion_rate != null ? `${product.conversion_rate}%` : 'N/A'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
+                    <a href="index.php?page=admin&action=products&view=${product.id}" class="text-indigo-600 hover:text-indigo-900" title="View Product Details">
+                        <i class="fas fa-eye"></i>
+                    </a>
+                    <!-- Add other actions like edit if needed -->
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    // --- Initial Load and Event Listener ---
+    if (timeRangeSelect) {
+        timeRangeSelect.addEventListener('change', updateAnalytics);
+         // Trigger initial load
+         updateAnalytics();
+    } else {
+         console.warn("Time range selector not found.");
+         // Load with default if selector missing? Or show error.
+         updateAnalytics(); // Attempt load with default range
+    }
+}
+
+
+function initAdminCouponsPage() {
+    // console.log("Initializing Admin Coupons Page");
+    const createButton = document.getElementById('createCouponBtn');
+    const couponFormContainer = document.getElementById('couponFormContainer'); // Container for the form
+    const couponForm = document.getElementById('couponForm'); // The form itself
+    const cancelFormButton = document.getElementById('cancelCouponForm');
+    const couponListTable = document.getElementById('couponListTable'); // The table body
+    const discountTypeSelect = document.getElementById('discount_type');
+    const valueHint = document.getElementById('valueHint');
+
+    // --- Helper Functions ---
+    function showCouponForm(couponData = null) {
+        if (!couponForm || !couponFormContainer) return;
+        couponForm.reset(); // Clear previous data
+        couponForm.querySelector('input[name="coupon_id"]').value = ''; // Clear ID field
+
+        if (couponData) {
+            // Populate form for editing
+            couponForm.querySelector('input[name="coupon_id"]').value = couponData.id;
+            couponForm.querySelector('input[name="code"]').value = couponData.code || '';
+            couponForm.querySelector('textarea[name="description"]').value = couponData.description || '';
+            couponForm.querySelector('select[name="discount_type"]').value = couponData.discount_type || 'fixed';
+            couponForm.querySelector('input[name="value"]').value = couponData.value || '';
+            couponForm.querySelector('input[name="min_spend"]').value = couponData.min_spend || '';
+            couponForm.querySelector('input[name="usage_limit"]').value = couponData.usage_limit || '';
+            // Format dates for datetime-local input (YYYY-MM-DDTHH:mm)
+            if (couponData.valid_from) {
+                 couponForm.querySelector('input[name="valid_from"]').value = couponData.valid_from.replace(' ', 'T').substring(0, 16);
+            }
+            if (couponData.valid_to) {
+                 couponForm.querySelector('input[name="valid_to"]').value = couponData.valid_to.replace(' ', 'T').substring(0, 16);
+            }
+             couponForm.querySelector('input[name="is_active"][value="1"]').checked = couponData.is_active == 1;
+             couponForm.querySelector('input[name="is_active"][value="0"]').checked = couponData.is_active == 0;
+
+             // Update form title/button text for editing
+             couponFormContainer.querySelector('h2').textContent = 'Edit Coupon';
+        } else {
+             // Update form title/button text for creating
+             couponFormContainer.querySelector('h2').textContent = 'Create New Coupon';
+        }
+
+        updateValueHint(); // Update hint based on potentially pre-filled type
+        couponFormContainer.classList.remove('hidden'); // Show the form section
+        couponForm.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function hideCouponForm() {
+        if (!couponForm || !couponFormContainer) return;
+        couponForm.reset();
+        couponFormContainer.classList.add('hidden'); // Hide the form section
+    }
+
+    function updateValueHint() {
+        if (!discountTypeSelect || !valueHint) return;
+        const selectedType = discountTypeSelect.value;
+        if (selectedType === 'percentage') {
+            valueHint.textContent = 'Enter value as a percentage (e.g., 10 for 10%). Max 100.';
+        } else if (selectedType === 'fixed') {
+            valueHint.textContent = 'Enter value as a fixed amount (e.g., 15.50 for $15.50).';
+        } else {
+            valueHint.textContent = ''; // Clear hint for other types if any
+        }
+    }
+
+     function handleCouponAction(url, successMessage, errorMessage) {
+         // Show loading state?
+         fetch(url, {
+             method: 'POST', // Or GET if appropriate (e.g., simple toggle)
+             headers: {
+                 'X-Requested-With': 'XMLHttpRequest',
+                 // Include CSRF token if needed for POST requests
+                 // 'X-CSRF-TOKEN': document.querySelector('input[name="csrf_token"]').value
+             }
+         })
+         .then(response => response.json().catch(() => ({ success: false, message: 'Invalid server response.' })))
+         .then(data => {
+             if (data.success) {
+                 showFlashMessage(successMessage, 'success');
+                 // Reload the page or update the list dynamically
+                 location.reload(); // Simple solution: reload the page
+             } else {
+                 showFlashMessage(data.message || errorMessage, 'error');
+             }
+         })
+         .catch(error => {
+             console.error('Coupon action error:', error);
+             showFlashMessage('An error occurred. Please try again.', 'error');
+         });
+     }
+
+    // --- Event Listeners ---
+    if (createButton) {
+        createButton.addEventListener('click', () => showCouponForm());
+    }
+
+    if (cancelFormButton) {
+        cancelFormButton.addEventListener('click', hideCouponForm);
+    }
+
+    if (discountTypeSelect) {
+        discountTypeSelect.addEventListener('change', updateValueHint);
+        // Initial call
+        updateValueHint();
+    }
+
+    // Event delegation for Edit, Toggle Status, Delete buttons in the table
+    if (couponListTable) {
+         couponListTable.addEventListener('click', function(e) {
+             const editButton = e.target.closest('.edit-coupon');
+             const toggleButton = e.target.closest('.toggle-status');
+             const deleteButton = e.target.closest('.delete-coupon');
+
+             if (editButton) {
+                 e.preventDefault();
+                 try {
+                     // Assumes coupon data is embedded in a data attribute on the button or row
+                     const couponData = JSON.parse(editButton.dataset.coupon || '{}');
+                     if (couponData.id) {
+                        showCouponForm(couponData);
+                     } else {
+                        console.error("Could not parse coupon data for editing.");
+                     }
+                 } catch (err) {
+                     console.error("Error parsing coupon data:", err);
+                     showFlashMessage('Could not load coupon data for editing.', 'error');
+                 }
+                 return;
+             }
+
+             if (toggleButton) {
+                  e.preventDefault();
+                 const couponId = toggleButton.dataset.couponId;
+                 if (couponId && confirm('Are you sure you want to toggle the status of this coupon?')) {
+                     handleCouponAction(
+                         `index.php?page=admin&action=coupons&task=toggle_status&id=${couponId}`,
+                         'Coupon status updated successfully.',
+                         'Failed to update coupon status.'
+                     );
+                 }
+                 return;
+             }
+
+             if (deleteButton) {
+                  e.preventDefault();
+                 const couponId = deleteButton.dataset.couponId;
+                 if (couponId && confirm('Are you sure you want to permanently delete this coupon? This cannot be undone.')) {
+                      handleCouponAction(
+                         `index.php?page=admin&action=coupons&task=delete&id=${couponId}`,
+                         'Coupon deleted successfully.',
+                         'Failed to delete coupon.'
+                     );
+                 }
+                 return;
+             }
+         });
+    }
+
+     // Handle form submission (assuming standard form post, not AJAX for simplicity here)
+     // Add loading state if desired
+     if (couponForm) {
+         couponForm.addEventListener('submit', function() {
+             const submitBtn = couponForm.querySelector('button[type="submit"]');
+             if (submitBtn) {
+                 submitBtn.disabled = true;
+                 submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Saving...';
+             }
+             // Form submits normally unless prevented
+         });
+     }
+}
+
+
+// --- Main DOMContentLoaded Listener ---
+// This is where page-specific initializers are called based on body class
+
+document.addEventListener('DOMContentLoaded', function() {
+    // !!! FIX: Initialize AOS globally here !!!
+    // Ensures animations work on all pages using data-aos attributes
+    if (typeof AOS !== 'undefined') {
+        AOS.init({
+            duration: 800, // Animation duration in milliseconds
+            offset: 120,   // Offset (in px) from the original trigger point
+            once: true,    // Whether animation should happen only once - while scrolling down
+            // easing: 'ease-in-out', // Example easing
+            // anchorPlacement: 'top-bottom', // Defines which position of the element regarding to window should trigger the animation
+        });
+        // console.log('AOS Initialized Globally'); // For debugging
+    } else {
+        console.warn('AOS library not loaded, skipping initialization.');
+    }
+
+    // Get the body element to check its class list
+    const body = document.body;
+
+    // --- Call Initializers Based on Body Class ---
+    // This routing determines which page-specific JS functions to run.
+    // Ensure your PHP backend adds the correct class (e.g., 'page-home', 'page-products') to the <body> tag.
+
+    if (body.classList.contains('page-home')) {
+        initHomePage();
+    } else if (body.classList.contains('page-products')) {
+        initProductsPage();
+    } else if (body.classList.contains('page-product-detail')) {
+        initProductDetailPage();
+    } else if (body.classList.contains('page-cart')) {
+        initCartPage();
+    } else if (body.classList.contains('page-login')) {
+        initLoginPage();
+    } else if (body.classList.contains('page-register')) {
+        initRegisterPage();
+    } else if (body.classList.contains('page-forgot-password')) {
+        initForgotPasswordPage();
+    } else if (body.classList.contains('page-reset-password')) {
+        initResetPasswordPage();
+    } else if (body.classList.contains('page-quiz')) {
+        initQuizPage();
+    } else if (body.classList.contains('page-quiz-results')) {
+        initQuizResultsPage(); // This one might also call AOS.init, which is okay.
+    } else if (body.classList.contains('page-admin-quiz-analytics')) {
+        initAdminQuizAnalyticsPage();
+    } else if (body.classList.contains('page-admin-coupons')) {
+        initAdminCouponsPage();
+    }
+    // Add more 'else if' blocks for other page types as needed
+
+    // Fallback/Debug: Log if no specific page class matched
+    // const pageClasses = ['page-home', 'page-products', 'page-product-detail', 'page-cart', 'page-login', 'page-register', 'page-forgot-password', 'page-reset-password', 'page-quiz', 'page-quiz-results', 'page-admin-quiz-analytics', 'page-admin-coupons'];
+    // let matched = false;
+    // pageClasses.forEach(cls => { if (body.classList.contains(cls)) matched = true; });
+    // if (!matched) {
+    //     console.log('No specific page initialization class found on body.');
+    // }
+
+});
+
+// --- Optional: Mini Cart AJAX Update Function ---
+// Define globally if it needs to be called from multiple places (e.g., after add-to-cart)
+function fetchMiniCart() {
+    const miniCartContent = document.getElementById('mini-cart-content');
+    if (!miniCartContent) return; // Exit if mini-cart element doesn't exist
+
+    // Show loading state (optional)
+    // miniCartContent.innerHTML = '<div class="text-center text-gray-500 py-6"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+
+    fetch('index.php?page=cart&action=mini', { // Assuming this endpoint returns JSON for the mini cart
+        method: 'GET', // Typically GET for fetching data
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+             throw new Error(`Network response was not ok (${response.status})`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success && data.html) {
+            // If backend sends pre-rendered HTML
+            miniCartContent.innerHTML = data.html;
+        } else if (data.success && data.items) {
+            // If backend sends item data to be rendered client-side
+            if (data.items.length === 0) {
+                miniCartContent.innerHTML = '<div class="text-center text-gray-500 py-6">Your cart is empty.</div>';
+            } else {
+                let html = '<ul class="divide-y divide-gray-200 max-h-60 overflow-y-auto">'; // Add scroll for many items
+                data.items.forEach(item => {
+                     // Use placeholder if image is missing
+                     const imageUrl = item.product?.image_url || '/images/placeholder.jpg';
+                     const productName = item.product?.name || 'Unknown Product';
+                     const productPrice = item.product?.price != null ? parseFloat(item.product.price) : 0;
+                     const quantity = item.quantity || 0;
+                     const lineTotal = productPrice * quantity;
+
+                     html += `
+                        <li class="flex items-center gap-3 py-3 px-1">
+                             <img src="${imageUrl}" alt="${productName}" class="w-12 h-12 object-cover rounded border flex-shrink-0">
+                             <div class="flex-1 min-w-0">
+                                 <a href="index.php?page=product&id=${item.product_id}" class="font-medium text-sm text-gray-800 hover:text-primary truncate block" title="${productName}">${productName}</a>
+                                 <div class="text-xs text-gray-500">Qty: ${quantity} &times; $${productPrice.toFixed(2)}</div>
+                             </div>
+                             <div class="text-sm font-semibold text-gray-700">$${lineTotal.toFixed(2)}</div>
+                         </li>`;
+                });
+                html += '</ul>';
+
+                // Add Subtotal and Buttons
+                 const subtotal = data.subtotal != null ? parseFloat(data.subtotal) : 0;
+                 html += `<div class="border-t border-gray-200 pt-4 mt-4">
+                     <div class="flex justify-between items-center mb-4">
+                         <span class="font-semibold text-gray-700">Subtotal:</span>
+                         <span class="font-bold text-primary text-lg">$${subtotal.toFixed(2)}</span>
+                     </div>
+                     <div class="flex flex-col gap-2">
+                         <a href="index.php?page=cart" class="btn btn-secondary w-full text-center">View Cart</a>
+                         <a href="index.php?page=checkout" class="btn btn-primary w-full text-center ${subtotal === 0 ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}">Checkout</a>
+                     </div>
+                 </div>`;
+
+                miniCartContent.innerHTML = html;
+            }
+        } else {
+             // Handle case where success is false or data structure is wrong
+             miniCartContent.innerHTML = '<div class="text-center text-red-500 py-6">Could not load cart items.</div>';
+             console.warn('Mini cart fetch succeeded but data was not as expected:', data);
+        }
+    })
+    .catch(error => {
+        console.error('Error fetching mini cart:', error);
+        miniCartContent.innerHTML = '<div class="text-center text-red-500 py-6">Could not load cart.</div>';
+    });
+}
+
+
+// --- END OF UPDATED main.js ---
 
-    public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                // Validate CSRF token
-                $this->validateCSRFToken();
-                
-                // Standardized rate limit check
-                $this->validateRateLimit('login');
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'string', ['min' => 8]);
-                
-                if (!$email || !$password) {
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Attempt login
-                $user = $this->userModel->findByEmail($email);
-                if (!$user || !password_verify($password, $user['password'])) {
-                    $this->logFailedLogin($email, $_SERVER['REMOTE_ADDR']);
-                    throw new Exception('Invalid credentials');
-                }
-                
-                // Success - create session
-                $this->createSecureSession($user);
-                // Merge session cart into DB cart
-                require_once __DIR__ . '/CartController.php';
-                CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
-                // Audit log
-                $this->logAuditEvent('login_success', $user['id']);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/dashboard']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 401);
-            }
-        }
-        
-        return $this->render('login', [
-            'csrfToken' => $this->generateCSRFToken()
-        ]);
-    }
-    
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->validateRateLimit('register');
-                $this->validateCSRFToken();
-                
-                // Validate input
-                $email = SecurityMiddleware::validateInput($_POST['email'] ?? '', 'email');
-                $password = SecurityMiddleware::validateInput($_POST['password'] ?? '', 'password');
-                $name = SecurityMiddleware::validateInput($_POST['name'] ?? '', 'string', ['min' => 2, 'max' => 100]);
-                
-                if (!$email || !$password || !$name) {
-                    throw new Exception('Invalid input');
-                }
-                
-                // Check if email exists
-                if ($this->userModel->findByEmail($email)) {
-                    throw new Exception('Email already registered');
-                }
-                
-                // Create user
-                $userId = $this->userModel->create([
-                    'email' => $email,
-                    'password' => password_hash($password, PASSWORD_DEFAULT),
-                    'name' => $name
-                ]);
-                
-                // Send welcome email
-                $this->sendWelcomeEmail($email, $name);
-                
-                // Audit log
-                $this->logAuditEvent('user_registered', $userId);
-                
-                return $this->jsonResponse(['success' => true, 'redirect' => '/login']);
-                
-            } catch (Exception $e) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'error' => $e->getMessage()
 ```
 
 # controllers/NewsletterController.php  
