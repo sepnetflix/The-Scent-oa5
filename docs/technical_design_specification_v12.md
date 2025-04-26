@@ -1,4 +1,4 @@
-# The Scent – Technical Design Specification (v10.0)
+# The Scent – Technical Design Specification (v9.0)
 
 ## Table of Contents
 
@@ -63,9 +63,9 @@
 
 ## 1. Introduction
 
-The Scent is a modular, secure, and extensible e-commerce platform focused on delivering premium aromatherapy products. It’s engineered with a custom PHP MVC-inspired architecture without reliance on heavy frameworks, maximizing transparency and developer control. This document (**v10.0**) serves as the updated technical design specification, reflecting the project's current state after incorporating the latest fixes and analysis.
+The Scent is a modular, secure, and extensible e-commerce platform focused on delivering premium aromatherapy products. It’s engineered with a custom PHP MVC-inspired architecture without reliance on heavy frameworks, maximizing transparency and developer control. This document (**v9.0**) serves as the updated technical design specification, reflecting the project's current state after addressing key functional issues and incorporating analysis from previous reviews.
 
-This version documents the **resolution of the fatal error in `AccountController`** (related to property visibility), which previously broke the login page and associated flows (like checkout redirection). It confirms that the **product list pagination is functional**. It acknowledges the **updated UI structure in `views/cart.php`** and confirms its general functionality. It clarifies the persistent **inconsistency in cart storage mechanisms** (Session vs. DB). Add-to-Cart AJAX functionality remains operational following strict CSRF token handling patterns. Recommendations for **standardizing rate limiting**, **tightening the Content Security Policy (CSP)**, and **fixing the "Headers Already Sent" error handling quirk** remain pertinent.
+This version documents the **resolution of the shopping cart page display error** (caused by an incorrect image key reference in the view, fix applied/required). It confirms that the **product list pagination is functional**, contradicting previous reports. It clarifies the inconsistent **cart storage mechanism**, and reiterates recommendations for **standardizing rate limiting** and **tightening the Content Security Policy (CSP)**. Add-to-Cart AJAX functionality remains operational following strict CSRF token handling patterns. A minor error handling quirk ("Headers Already Sent" warning) has also been identified and a fix recommended.
 
 This document aims to offer deep insight into the system’s structure, logic, and flow, serving as a comprehensive onboarding and reference guide for the current state of the application, including known issues and recommended next steps.
 
@@ -77,7 +77,7 @@ This document aims to offer deep insight into the system’s structure, logic, a
 *   **Simplicity & Maintainability:** Clear, modular code structure. Direct `require_once` usage in `index.php` provides transparency but lacks autoloading benefits. Consistent coding patterns are enforced, particularly for security features like CSRF handling.
 *   **Extensibility:** Architecture allows adding new features, pages, controllers, or views, requiring manual includes but offering straightforward extension points. New features involving POST must follow the established CSRF pattern.
 *   **Performance:** Direct routing is potentially fast. Relies on PDO prepared statements. CDN usage for frontend libraries impacts external dependencies. Caching mechanisms (e.g., APCu for rate limiting) are recommended where applicable.
-*   **Modern User Experience:** Responsive design, smooth animations (AOS.js, Particles.js), and AJAX interactions (cart updates/removal, newsletter, Add-to-Cart) provide a seamless interface. UI consistency across product displays is maintained. **Add-to-Cart functionality is operational.** **Shopping Cart display (with updated UI) is functional.** **Product list pagination is functional.** **Login/Registration flow is functional** (post `AccountController` fix).
+*   **Modern User Experience:** Responsive design, smooth animations (AOS.js, Particles.js), and AJAX interactions (cart updates/removal, newsletter, Add-to-Cart) provide a seamless interface. UI consistency across product displays is maintained. **Add-to-Cart functionality is operational.** **Shopping Cart display is functional.** **Product list pagination is functional.**
 *   **Transparency:** No magic – application flow and routing are explicit in `index.php`'s include and switch logic.
 *   **Accessibility & SEO:** Semantic HTML used. `aria-label` observed. Basic accessibility practices followed, further audit recommended.
 
@@ -103,7 +103,7 @@ This document aims to offer deep insight into the system’s structure, logic, a
    | (Determines $page, $action from $_GET, validates input)
    | (*** Validates CSRF token via SecurityMiddleware::validateCSRF() for ALL POST requests ***)
    v
-[Controller]  (e.g., ProductController, CartController, AccountController (Fixed))
+[Controller]  (e.g., ProductController, CartController)
    |           (Included via require_once *within* index.php's switch case)
    |           (Instantiated, passed $pdo connection)
    |           (Extends BaseController)
@@ -111,21 +111,22 @@ This document aims to offer deep insight into the system’s structure, logic, a
    |           (*** MUST pass $csrfToken to the View data ***)
    |
    | (Executes action method: business logic, DB access via Models/PDO, Rate Limiting Check)
-   | (e.g., CartController::showCart() handles the main cart view request)
+   | (e.g., CartController::showCart() now handles the main cart view request correctly)
    v
-[Model / DB Layer] (e.g., models/Product.php, models/Cart.php, models/User.php, direct PDO in includes/db.php)
+[Model / DB Layer] (e.g., models/Product.php, models/Cart.php, direct PDO in includes/db.php)
    |
    | (Prepare/execute SQL queries, fetch data using PDO Prepared Statements. Product pagination logic confirmed working.)
    v
 [View / Response]
-   |--> [View File] (e.g., views/cart.php (New UI), views/products.php)
-   |       (Included via require_once from controller action)
+   |--> [View File] (e.g., views/cart.php, views/products.php)
+   |       (Included via require_once from controller action, e.g., CartController::showCart includes views/cart.php)
    |       (Generates HTML using PHP variables passed from controller, includes layout partials)
    |       (*** MUST output $csrfToken into <input type="hidden" id="csrf-token-value" ...> IF subsequent CSRF protection needed ***)
    |       (Output MUST use htmlspecialchars())
+   |       (*** cart.php requires fix: use 'image' key instead of 'image_url' ***)
    |
    |--> [JSON Response] (via BaseController::jsonResponse for AJAX)
-   |       (e.g., for cart add/update/remove, newsletter subscribe, login/register)
+   |       (e.g., for cart add/update/remove, newsletter subscribe)
    |       (Clean JSON output)
    |
    |--> [Redirect] (via BaseController::redirect or header())
@@ -136,28 +137,30 @@ This document aims to offer deep insight into the system’s structure, logic, a
                      (*** JS MUST read CSRF token STRICTLY from #csrf-token-value for AJAX POSTs ***)
 ```
 
-### 3.2 Request-Response Life Cycle (Example: Cart Page)
+### 3.2 Request-Response Life Cycle
 
-1.  **Request Initiation:** User accesses `index.php?page=cart`.
-2.  **.htaccess Rewrite:** Standard rewrite to `/index.php`.
-3.  **Initialization (`/index.php`):** Core files loaded, `$pdo` connected, `ErrorHandler` initialized, `SecurityMiddleware::apply` sets headers/session.
-4.  **Routing (`/index.php`):** `$page` ('cart'), `$action` (null) extracted.
+*(Largely unchanged from v8.0, reflecting the now-correct routing and data flow for the cart page)*
+
+1.  **Request Initiation:** User accesses a URL (e.g., `index.php?page=cart`).
+2.  **.htaccess Rewrite:** Apache rewrites the request to `/index.php` if applicable.
+3.  **Initialization (`/index.php`):** Core files loaded, `$pdo` connection established, `ErrorHandler` initialized, `SecurityMiddleware::apply` sets security headers and secure session parameters.
+4.  **Routing (`/index.php`):** `$page` ('cart'), `$action` ('index') extracted and validated.
 5.  **CSRF Check (`/index.php`):** (Not applicable for GET).
 6.  **Controller/View Dispatch (`/index.php` `switch ($page)`):**
-    *   Case `cart`: `CartController.php` included, `$controller = new CartController($pdo)` instantiated.
-    *   `$controller->showCart();` executed.
+    *   Case `cart`: `CartController.php` is included, `$controller = new CartController($pdo)` is instantiated.
+    *   `$controller->showCart();` is executed.
 7.  **Controller Action (`CartController::showCart()`):**
-    *   Fetches cart items (using session/DB based on login status).
+    *   Fetches cart items using `$this->getCartItems()` (using session/DB).
     *   Calculates `$total`.
-    *   Gets `$csrfToken = $this->getCsrfToken();`.
+    *   Gets CSRF token via `$this->getCsrfToken();`.
     *   Includes `views/cart.php`, passing `$cartItems`, `$total`, `$csrfToken`.
 8.  **View Rendering (`views/cart.php`):**
     *   Includes `layout/header.php`.
-    *   Outputs CSRF token into `#csrf-token-value`.
-    *   Renders items using `$item['product']['image']` (correct key). **Renders using the updated two-column grid layout.** Uses `htmlspecialchars()`.
+    *   Outputs the CSRF token into `<input type="hidden" id="csrf-token-value" ...>`.
+    *   **Critical Point:** Renders items using `$item['product']`. **Must use `$item['product']['image']`** (not `image_url`) for the image source to avoid errors. Uses `htmlspecialchars()`.
     *   Includes `layout/footer.php`.
 9.  **Response Transmission:** Server sends the complete HTML page.
-10. **Client-Side Execution:** Browser renders the cart page with the new UI. JS attaches listeners for quantity changes, removal, etc.
+10. **Client-Side Execution:** Browser renders the cart page. JS attaches listeners.
 
 ---
 
@@ -165,7 +168,7 @@ This document aims to offer deep insight into the system’s structure, logic, a
 
 ### 4.1 Folder Map
 
-*(No changes)*
+*(No changes from v8.0)*
 
 ```
 / (project root: /cdrom/project/The-Scent-oa5) <-- Apache DocumentRoot
@@ -187,7 +190,7 @@ This document aims to offer deep insight into the system’s structure, logic, a
 |   |-- ProductController.php
 |   |-- CartController.php
 |   |-- CheckoutController.php
-|   |-- AccountController.php # Assumed fixed (visibility error resolved)
+|   |-- AccountController.php
 |   |-- QuizController.php
 |   |-- ... (Coupon, Inventory, Newsletter, Payment, Tax)
 |-- models/                # Data representation / DB interaction (using PDO Prepared Statements)
@@ -197,9 +200,9 @@ This document aims to offer deep insight into the system’s structure, logic, a
 |   |-- Quiz.php
 |-- views/                 # HTML templates (PHP files)
 |   |-- home.php           # Landing page - Requires CSRF token output for Add-to-Cart
-|   |-- products.php       # Product list - Requires CSRF token output for Add-to-Cart. Pagination functional.
+|   |-- products.php       # Product list - Requires CSRF token output for Add-to-Cart. *Pagination functional.*
 |   |-- product_detail.php # Product detail - Requires CSRF token output for Add-to-Cart
-|   |-- cart.php           # Cart view - Functional, uses updated grid UI. Requires CSRF token output for AJAX.
+|   |-- cart.php           # Cart view - Functional (requires view fix). Requires CSRF token output for AJAX.
 |   |-- checkout.php       # Checkout form - Requires CSRF token output
 |   |-- register.php, login.php, forgot_password.php, reset_password.php # Auth forms - Require CSRF token output
 |   |-- quiz.php, quiz_results.php
@@ -214,29 +217,27 @@ This document aims to offer deep insight into the system’s structure, logic, a
 |   |-- error.log
 |   |-- audit.log
 |-- README.md              # Project documentation
-|-- technical_design_specification.md # (This document v10)
-|-- suggested_improvements_and_fixes.md # (Analysis document v1.0 - May be outdated)
+|-- technical_design_specification.md # (This document v9)
+|-- suggested_improvements_and_fixes.md # (Analysis document v1.0)
 |-- the_scent_schema.sql.txt # Database schema
 |-- ... (other docs, HTML output files)
 ```
 
 ### 4.2 Key Files Explained
 
-*   **index.php**: Central orchestrator. **Auto POST CSRF validation**. Dispatches to controllers. Routing logic is sound.
-*   **config.php**: Configuration store. **CSP needs review**. Rate limit settings used inconsistently.
+*   **index.php**: Central orchestrator. Routing fixed for cart page. **Auto POST CSRF validation**. Dispatches to controllers.
+*   **config.php**: Configuration store. CSP needs review. Rate limit settings used by `BaseController`.
 *   **includes/SecurityMiddleware.php**: Security helpers. `validateCSRF()` enforces token check. `preventSQLInjection` **should be removed**.
 *   **controllers/BaseController.php**: Abstract base. Provides shared helpers. `getCsrfToken()` used by controllers. `validateRateLimit()` **needs consistent usage**.
-*   **controllers/AccountController.php**: Handles user auth/profile. **Fatal error fixed** (assuming visibility change applied). Login/Register flow relies on `jsonResponse`.
-*   **controllers/ProductController.php**: Handles product views. **Pagination logic confirmed working**. Requires CSRF token passing.
-*   **controllers/CartController.php**: Handles cart logic. `showCart()` renders main view. Handles AJAX. **Cart storage inconsistency remains**.
-*   **models/Product.php**: DB logic via **PDO Prepared Statements**. **Pagination logic confirmed working**.
+*   **controllers/ProductController.php**: Handles product views. **Pagination logic confirmed working**.
+*   **controllers/CartController.php**: Handles cart logic. **`showCart()` renders main view correctly.** Handles AJAX. Cart storage inconsistency remains.
+*   **models/Product.php**: DB logic via **PDO Prepared Statements**. **`getFiltered()` pagination logic confirmed working**.
 *   **views/layout/header.php**: Standard header.
 *   **views/layout/footer.php**: Standard footer. **Global AJAX handlers read CSRF from `#csrf-token-value`**.
 *   **views/*.php**: Templates. **Must output CSRF token correctly**. Use `htmlspecialchars()`.
 *   **views/products.php**: Product list page. **Pagination functional.** Requires CSRF token output.
-*   **views/cart.php**: Cart view. **Functional, uses updated grid layout**. Requires CSRF token output.
+*   **views/cart.php**: Cart view. **Functional**, but **requires code fix (`image` key)**. Requires CSRF token output.
 *   **views/product_detail.php**: Product detail. AJAX functional. Requires CSRF token output.
-*   **views/login.php, views/register.php**: Functional (post `AccountController` fix). Rely on AJAX handled by `main.js`. Require CSRF token output.
 
 ---
 
@@ -244,20 +245,20 @@ This document aims to offer deep insight into the system’s structure, logic, a
 
 ### 5.1 URL Routing via .htaccess
 
-*(No changes)*
+*(No changes from v8.0)*
 
 *   Mechanism: Apache `mod_rewrite` routes most non-file/directory requests to `/index.php`. Standard configuration.
 
 ### 5.2 index.php: The Application Entry Point
 
-*(No changes)*
+*(Updated based on cart fix)*
 
 *   Role: Front Controller/Router.
-*   Process: Initializes core components, extracts/validates `$page`/`$action`, reads `page_num` for pagination, **automatically performs CSRF check on ALL POST requests via `SecurityMiddleware::validateCSRF()`**, dispatches to controllers via `switch($page)`. Routing logic is verified and functional.
+*   Process: Initializes core components, extracts/validates `$page`/`$action`, reads `page_num` for pagination, **automatically performs CSRF check on ALL POST requests via `SecurityMiddleware::validateCSRF()`**, dispatches to controllers via `switch($page)`. **Routing logic for `case 'cart':` now correctly calls `CartController::showCart()` for the default view.**
 
 ### 5.3 Controller Dispatch & Action Flow
 
-*(Emphasizes CSRF pattern and rate limiting)*
+*(No significant changes from v8.0, emphasizes CSRF pattern)*
 
 *   Controllers included/instantiated by `index.php`. Extend `BaseController`.
 *   Execute business logic, use Models/PDO for data. Read parameters like `page_num`.
@@ -268,7 +269,7 @@ This document aims to offer deep insight into the system’s structure, logic, a
 
 ### 5.4 Views: Templating and Rendering
 
-*(Acknowledges updated cart UI)*
+*(Updated based on cart fix and CSRF pattern emphasis)*
 
 *   PHP files in `views/` mixing HTML and PHP.
 *   Include layout partials (`header.php`, `footer.php`).
@@ -277,13 +278,13 @@ This document aims to offer deep insight into the system’s structure, logic, a
 *   Styling via `/css/style.css` and Tailwind CDN.
 *   JS initialized/handled primarily in `footer.php`, **strictly relying on `#csrf-token-value` for CSRF tokens in AJAX.**
 *   Pagination UI rendered in `views/products.php` based on data passed from the controller (**Functional**).
-*   `views/cart.php` renders using the **updated two-column grid layout** and is functional.
+*   `views/cart.php` **requires fix** to use `$item['product']['image']` instead of `image_url`.
 
 ---
 
 ## 6. Frontend Architecture
 
-*(No changes)*
+*(No significant changes from v8.0, emphasizes CSRF JS handling)*
 
 ### 6.1 CSS (css/style.css), Tailwind (CDN), and Other Libraries
 
@@ -301,16 +302,14 @@ This document aims to offer deep insight into the system’s structure, logic, a
 *   **Custom Handlers (Primarily `js/main.js` included in `footer.php`):**
     *   **Add-to-Cart:** Global handler for `.add-to-cart`. **Reads CSRF token *strictly* from `#csrf-token-value`**. Sends AJAX POST. Handles JSON response. **Functional.**
     *   **Newsletter:** Handlers for `#newsletter-form` / `#newsletter-form-footer`. **Reads CSRF token strictly from `#csrf-token-value`**. Sends AJAX POST. Handles response.
-    *   **Login/Register:** Handled by `initLoginPage`/`initRegisterPage`. Read CSRF token, send AJAX POST, handle JSON response (success/error/redirect). **Functional** (post `AccountController` fix).
-    *   **Cart Updates/Removal:** Handled by `initCartPage`. Read CSRF token, send AJAX POST, handle JSON response, update UI. **Functional**.
-*   **Page-Specific JS:** Mobile menu, Product Detail UI (quantity, tabs, image gallery), Products page filter/sort triggers. **All POST actions depend on `#csrf-token-value`.**
+*   **Page-Specific JS:** Mobile menu, Cart page AJAX, Product Detail AJAX/UI, Products page filter/sort triggers. **All POST actions depend on `#csrf-token-value`.**
 *   **Standardization:** `showFlashMessage` helper used. Global handlers in `footer.php`. **Critical Dependency:** AJAX POST functionality relies on `#csrf-token-value` being present and correctly populated.
 
 ---
 
 ## 7. Key Pages & Components
 
-*(Acknowledges fixed auth flow and updated cart UI)*
+*(Updated status for Cart and Products pages)*
 
 ### 7.1 Home/Landing Page (views/home.php)
 
@@ -330,7 +329,7 @@ This document aims to offer deep insight into the system’s structure, logic, a
 
 ### 7.5 Shopping Cart (views/cart.php)
 
-*   **Functional.** Displays items/totals using the **updated two-column grid layout**. JS handles updates/removal via AJAX. **Requires CSRF token output (`#csrf-token-value`)**. Uses inconsistent storage (Session/DB).
+*   **Functional (Requires View Fix).** Displays items/totals. JS handles updates/removal via AJAX. **Requires CSRF token output (`#csrf-token-value`)**. Uses inconsistent storage (Session/DB).
 
 ### 7.6 Product Detail Page (views/product_detail.php)
 
@@ -348,7 +347,7 @@ This document aims to offer deep insight into the system’s structure, logic, a
 
 ## 8. Backend Logic & Core PHP Components
 
-*(Notes updated based on fixes and confirmations)*
+*(Updated status/notes for Product/Cart Controller and Product Model)*
 
 ### 8.1 Includes: Shared Logic (includes/)
 
@@ -357,15 +356,14 @@ This document aims to offer deep insight into the system’s structure, logic, a
 ### 8.2 Controllers: Business Logic Layer (controllers/ & BaseController.php)
 
 *   `BaseController.php`: Shared methods. **`getCsrfToken()` is crucial.** **`validateRateLimit()` needs consistent usage.**
-*   `AccountController.php`: Handles user auth/profile. **Fatal error fixed**. Login/Register flow functional via `jsonResponse`.
 *   `ProductController.php`: Handles product views. **Pagination logic confirmed working.** Must pass CSRF token.
-*   `CartController.php`: Handles cart logic. Renders cart view correctly. Handles AJAX. **Cart storage inconsistency remains**.
+*   `CartController.php`: **`showCart()` renders main view correctly.** Handles AJAX. Cart storage inconsistency remains.
 *   Specific Controllers: Extend `BaseController`. **Must follow CSRF token pattern.** Use `validateRateLimit()` (**standardization needed**).
 
 ### 8.3 Database Abstraction (includes/db.php & models/)
 
-*   Connection via `$pdo` in `db.php`.
-*   Interaction via Models/PDO using **Prepared Statements**. `Product::getFiltered` **pagination logic confirmed working**.
+*   Connection via `$pdo`.
+*   Interaction via Models/PDO using **Prepared Statements**. `Product::getAllCategories` uses `DISTINCT`. `Product::getFiltered` **pagination logic confirmed working**.
 
 ### 8.4 Security Middleware & Error Handling
 
@@ -374,77 +372,76 @@ This document aims to offer deep insight into the system’s structure, logic, a
 
 ### 8.5 Session, Auth, and User Flow
 
-*   Secure session settings applied. Session integrity checks implemented.
-*   Auth flow via `AccountController` functional (post-fix). Rate limiting inconsistent.
+*   Secure session settings applied. Session integrity checks in place.
+*   Auth flow via `AccountController`. Rate limiting inconsistent.
 *   **Cart data storage inconsistency** (Session vs. DB) needs addressing.
 
 ---
 
 ## 9. Database Design
 
-*(No changes)*
+*(No changes from v8.0, recommendations remain)*
 
 ### 9.1 Entity-Relationship Model (Conceptual)
 
-Standard e-commerce relationships: Users -> Orders -> OrderItems <- Products; Users -> CartItems <- Products; Products -> Categories.
+Standard e-commerce relationships.
 
 ### 9.2 Core Tables (from schema.sql)
 
-Core tables as defined in `the_scent_schema.sql.txt`: `users`, `products`, `categories`, `orders`, `order_items`, `cart_items`, `quiz_results`, `newsletter_subscribers`, `audit_log`, etc.
+Core tables as defined in `the_scent_schema.sql.txt`.
 
 ### 9.3 Schema Considerations & Recommendations
 
-*   `products` table uses `image` field for primary image. JSON fields (`gallery_images`, `benefits`) used.
+*   `products` table uses `image` field for primary image, not `image_url`.
 *   **Cart Table Usage:** `cart_items` table exists but `$_SESSION['cart']` is primary for guests. **Recommendation:** Standardize on DB cart for logged-in users.
-*   **Category Data:** Potential duplicate names. Relies on `DISTINCT` query or data cleanup.
+*   **Category Data:** Potential duplicate names. Rely on `DISTINCT` query or clean data.
 
 ### 9.4 Data Flow Examples
 
 *(Updated based on current findings)*
 
 *   **Add to Cart:** Functional AJAX flow using CSRF token from `#csrf-token-value`.
-*   **View Cart Page:** Functional flow, renders `views/cart.php` with updated UI.
-*   **View Product List (Page 2):** **Functional**. `ProductController` calls `ProductModel::getFiltered` with correct offset/limit. View renders correct product set and pagination UI.
-*   **Login:** Functional AJAX flow using CSRF token from `#csrf-token-value`. Returns JSON with redirect URL.
+*   **View Cart Page:** Functional flow, renders `views/cart.php`. **Requires view fix (`image` key).**
+*   **View Product List (Page 2):** **Functional**. `ProductController` calls `ProductModel::getFiltered` with correct offset/limit using explicit PDO binding. View renders correct product set and pagination UI.
 
 ---
 
 ## 10. Security Considerations & Best Practices
 
-*(Recommendations reiterated)*
+*(Updated based on findings and previous review)*
 
 ### 10.1 Input Sanitization & Validation
 
-*   Handled via `SecurityMiddleware::validateInput()` and `BaseController`. Consistent usage observed.
+*   Handled via `SecurityMiddleware::validateInput()` and `BaseController`.
 
 ### 10.2 Session Management
 
-*   Secure settings applied via `config.php`. Integrity checks implemented. Periodic regeneration observed.
+*   Secure settings applied via `config.php`. Integrity checks implemented.
 
 ### 10.3 CSRF Protection (Implemented - Strict Pattern Required)
 
-*   **Mechanism:** Synchronizer Token Pattern fully implemented and enforced for POST requests via `index.php` and `SecurityMiddleware::validateCSRF()`.
-*   **Status:** Functional and mandatory. Pattern: Controller (`getCsrfToken`) -> View (`#csrf-token-value` output) -> JS (read from hidden input) -> Server (`validateCSRF`).
+*   **Mechanism:** Synchronizer Token Pattern fully implemented and enforced for POST requests.
+*   **Status:** Functional and mandatory for security. Pattern: Controller (`getCsrfToken`) -> View (`#csrf-token-value` output) -> JS (read from hidden input) -> Server (`validateCSRF` in `index.php`).
 
 ### 10.4 Security Headers & CSP Standardization
 
 *   Standard headers applied globally.
-*   **Current CSP:** Needs review and potential tightening based on actual third-party requirements (Stripe, etc.). Example in `config.php`.
+*   **Current CSP:** `default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; frame-src https://js.stripe.com; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com` (Includes Stripe example, may need adjustment).
 *   **Recommendation:** Review and tighten CSP further (remove `'unsafe-inline'`, `'unsafe-eval'` if possible by refactoring JS/CSS).
 
 ### 10.5 Rate Limiting (Standardization Recommended)
 
 *   Mechanism exists (`BaseController::validateRateLimit`) using APCu.
-*   **Status:** Usage inconsistent across controllers/actions. Reliability depends on APCu availability.
-*   **Recommendation:** Standardize usage across sensitive controller actions (login, register, password reset, checkout submission, potentially cart updates). Ensure cache backend reliability or implement robust fallback. Add specific keys for different actions.
+*   **Status:** Usage inconsistent. Reliability depends on APCu availability.
+*   **Recommendation:** Standardize usage across controllers. Ensure cache backend reliability or implement robust fallback.
 
 ### 10.6 File Uploads & Permissions
 
-*   Validation logic exists (`BaseController`, `SecurityMiddleware`). Secure handling (storage outside web root, proper validation) required if used.
+*   Validation logic exists (`BaseController`, `SecurityMiddleware`). Secure handling required if used.
 
 ### 10.7 Audit Logging & Error Handling
 
-*   `ErrorHandler.php` provides global handling. `BaseController` provides logging methods (`logAuditTrail`, `logSecurityEvent`). Usage observed.
+*   `ErrorHandler.php` provides global handling. `BaseController` provides logging methods.
 *   **"Headers Already Sent" Issue:** Identified when errors occur during view rendering. **Recommendation:** Fix by making `views/error.php` self-contained (no header/footer includes) or use output buffering in `ErrorHandler`.
 *   **Recommendation:** Consistent use of logging methods. Remove debug `error_log` calls.
 
@@ -457,11 +454,11 @@ Core tables as defined in `the_scent_schema.sql.txt`: `users`, `products`, `cate
 
 ## 11. Extensibility & Onboarding
 
-*(Checklist updated)*
+*(Updated testing checklist)*
 
 ### 11.1 Adding Features, Pages, or Controllers
 
-*   Follow pattern: Controller -> View -> `index.php` route. **Implement strict CSRF token pattern** for POST actions. Extend `BaseController`.
+*   Follow pattern: Controller -> View -> `index.php` route. **Implement strict CSRF token pattern** for POST actions.
 
 ### 11.2 Adding Products, Categories, and Quiz Questions
 
@@ -473,18 +470,17 @@ Core tables as defined in `the_scent_schema.sql.txt`: `users`, `products`, `cate
 2.  Clone repo.
 3.  Setup DB, import schema.
 4.  Configure `config.php`.
-5.  **Apply `AccountController` fix** (remove `private $emailService;` line).
-6.  Set file permissions (`logs/` writable, `config.php` restricted).
-7.  Configure Apache VirtualHost.
-8.  Browse site, check server logs for errors.
-9.  **Verify CSRF implementation:** Inspect views for `#csrf-token-value`, test POST actions (Add-to-Cart, Login, Register, Cart Update/Remove, Newsletter).
-10. **Verify Core Functionality:** Test Add-to-Cart. Test Cart Page UI and functionality. **Test Product List Pagination (page 1 & 2 links)**. Test Category Filters. Test cart updates/removal. Test newsletter signup. Test login/registration. Test password reset flow.
+5.  Set file permissions (`logs/`, `config.php`).
+6.  Configure Apache VirtualHost.
+7.  Browse site, check server logs.
+8.  **Verify CSRF implementation:** Inspect views for `#csrf-token-value`, test POST actions.
+9.  **Verify Core Functionality:** Test Add-to-Cart. **Test Cart Page (apply view fix if needed).** **Test Product List Pagination (confirm working).** Test Category Filters. Test cart updates/removal. Test newsletter signup. Test login/registration.
 
 ### 11.4 Testing & Debugging Notes
 
-*   Use browser dev tools (network, console), application logs (`logs/`), server logs (`apache_logs/`).
-*   **Verify `AccountController` Fix:** Ensure login/registration pages load and function correctly.
-*   **Key Areas to Verify:** Rate limiting implementation (if standardized), Cart storage consistency (logged-in vs guest), CSRF token flow, AJAX responses, Error handling flow ("Headers Already Sent" fix verification). Test pagination links on product list. Verify cart UI elements (grid, sticky summary).
+*   Use browser dev tools, application logs, server logs.
+*   **Debug Cart View:** Ensure `views/cart.php` uses `$item['product']['image']`.
+*   **Key Areas to Verify:** Rate limiting implementation, Cart storage consistency, CSRF token flow, AJAX responses, Error handling flow.
 
 ---
 
@@ -504,22 +500,21 @@ Core tables as defined in `the_scent_schema.sql.txt`: `users`, `products`, `cate
 
 ### A. Key File Summaries
 
-| File/Folder                 | Purpose                                                                                                     | Status Notes                                                                                                     |
-| :-------------------------- | :---------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------- |
-| `index.php`                 | Entry point, routing, core includes, **auto POST CSRF validation**, dispatch.                               | OK                                                                                                               |
-| `config.php`                | DB credentials, App/Security settings (**CSP needs review**, **Rate Limits need usage review**), API keys         | OK. CSP tightening recommended. Rate limit config needs consistent usage. Move secrets recommended.            |
-| `includes/SecurityMiddleware.php` | Static helpers: `apply()`, `validateInput()`, `validateCSRF()`, `generateCSRFToken()`                     | OK. `preventSQLInjection` removal recommended.                                                                 |
-| `controllers/BaseController.php` | Abstract base: `$db`, helpers, validation, auth checks, `getCsrfToken()`, `validateRateLimit`          | OK. Rate limiting usage needs standardization.                                                                 |
-| `controllers/AccountController.php` | User auth/profile logic. AJAX login/register.                                                           | **FIXED** (Fatal Error resolved). Functional.                                                                  |
-| `controllers/CartController.php`| Handles cart logic. Renders view. Handles AJAX.                                                             | Functional. **Cart storage consistency recommended.**                                                          |
-| `controllers/ProductController.php` | Product listing/detail.                                                                               | **Pagination functional.** Requires consistent CSRF token passing.                                             |
-| `models/Product.php`              | Entity DB logic (**PDO Prepared Statements**).                                                              | **Pagination logic functional.** OK.                                                                           |
-| `views/layout/header.php`   | Header, navigation, assets                                                                                  | OK.                                                                                                            |
-| `views/*.php`               | HTML/PHP templates, **must output CSRF token into `#csrf-token-value`**.                                    | Requires consistent token output.                                                                              |
-| `views/layout/footer.php`   | Footer, JS init, **global AJAX handlers strictly reading CSRF token from `#csrf-token-value`**               | OK. JS handler works correctly.                                                                                |
-| `views/products.php`        | Product list, filters, sorting, pagination UI. Requires CSRF token output.                                | **Pagination functional.** OK.                                                                                 |
-| `views/cart.php`            | Cart view. **Functional**. Uses updated **grid UI**. Requires CSRF token output.                                | **Updated UI acknowledged.** Cart storage consistency recommended.                                             |
-| `includes/ErrorHandler.php` | Global error handling.                                                                                      | **"Headers Already Sent" issue identified**, fix recommended.                                                  |
+| File/Folder                 | Purpose                                                                                                     | Status Notes                                                                                               |
+| :-------------------------- | :---------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------- |
+| `index.php`                 | Entry point, routing (**cart fixed**), core includes, **auto POST CSRF validation**, dispatch.             | OK                                                                                                         |
+| `config.php`                | DB credentials, App/Security settings (**CSP needs review**, **Rate Limits need usage review**), API keys         | OK. CSP tightening recommended. Rate limit config needs consistent usage. Move secrets recommended.      |
+| `includes/SecurityMiddleware.php` | Static helpers: `apply()`, `validateInput()`, `validateCSRF()`, `generateCSRFToken()`                     | OK. `preventSQLInjection` removal recommended.                                                           |
+| `controllers/BaseController.php` | Abstract base: `$db`, helpers, validation, auth checks, `getCsrfToken()`, `validateRateLimit`          | OK. Rate limiting usage needs standardization.                                                           |
+| `controllers/CartController.php`| Handles cart logic. **`showCart()` renders main view correctly.** Handles AJAX.                         | Functional. Cart storage consistency recommended.                                                        |
+| `controllers/ProductController.php` | Product listing/detail. **Pagination confirmed working.**                                               | OK. Requires consistent CSRF token passing.                                                              |
+| `models/Product.php`              | Entity DB logic (**PDO Prepared Statements**). **Pagination logic confirmed working.**                      | OK.                                                                                                      |
+| `views/layout/header.php`   | Header, navigation, assets                                                                                  | OK.                                                                                                      |
+| `views/*.php`               | HTML/PHP templates, **must output CSRF token into `#csrf-token-value`**.                                    | Requires consistent token output. `cart.php` needs `image` key fix.                                      |
+| `views/layout/footer.php`   | Footer, JS init, **global AJAX handlers strictly reading CSRF token from `#csrf-token-value`**               | OK. JS handler works correctly.                                                                            |
+| `views/products.php`        | Product list, filters, sorting, pagination UI. **Pagination functional.** Requires CSRF token output.     | OK.                                                                                                      |
+| `views/cart.php`            | Cart view. **Functional**, **Requires view fix (`image` key)**. Requires CSRF token output.                  | Needs View Fix. Cart storage consistency recommended.                                                    |
+| `includes/ErrorHandler.php` | Global error handling.                                                                                      | **"Headers Already Sent" issue identified**, fix recommended.                                            |
 
 ### B. Glossary
 
@@ -529,7 +524,7 @@ Core tables as defined in `the_scent_schema.sql.txt`: `users`, `products`, `cate
 
 #### Correct & Required CSRF Token Implementation Pattern
 
-*(Remains the same - Ensure pattern is followed)*
+*(Remains the same as v8.0 - Ensure pattern is followed)*
 
 1.  **Controller (Rendering View):** `$csrfToken = $this->getCsrfToken();` -> Pass `$csrfToken` to view data.
 2.  **View:** Output `<input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">`. Also include `<input type="hidden" name="csrf_token" value="...">` in standard forms.
@@ -539,51 +534,24 @@ Core tables as defined in `the_scent_schema.sql.txt`: `users`, `products`, `cate
 #### Recommended Error Handling Fix ("Headers Already Sent")
 
 *   **File:** `ErrorHandler.php` (or modify `views/error.php`)
-*   **Recommendation:** Make `views/error.php` self-contained (no header/footer includes) **OR** use output buffering in `ErrorHandler::handleException` and `ErrorHandler::handleError` (where appropriate).
+*   **Recommendation:** Make `views/error.php` self-contained (no header/footer includes) **OR** use output buffering in `ErrorHandler::handleException`.
 
-    **Option B (Output Buffering in `handleException`):**
+    **Option B (Output Buffering):**
     ```php
     // Inside ErrorHandler::handleException (Conceptual)
-    public static function handleException($exception): void { // Use Throwable type hint if PHP 7+
-        error_log("Exception caught by handler: " . $exception->getMessage() . " in " . $exception->getFile() . ":" . $exception->getLine()); // Enhanced logging
-        // ... other logging/context gathering ...
-
-        if (!headers_sent()) { // Check before setting code/headers
-            http_response_code(500);
-            // Ensure content type is set if not already, especially for HTML error page
-            if (php_sapi_name() !== 'cli') { // Avoid setting header for CLI
-                 header('Content-Type: text/html; charset=UTF-8');
-            }
+    public static function handleException(Throwable $exception): void {
+        // ... logging ...
+        if (!headers_sent()) { // Check before setting code
+             http_response_code(500);
+             header('Content-Type: text/html; charset=UTF-8'); // Set content type early
         }
-
-        // Determine if development or production environment
-        $isDevelopment = defined('ENVIRONMENT') && ENVIRONMENT === 'development';
 
         ob_start(); // Start buffering AFTER potentially setting headers
-
-        if ($isDevelopment) {
-            // Development: Show detailed error view
-            $error = [ // Prepare error data for the view
-                'type' => get_class($exception),
-                'message' => $exception->getMessage(),
-                'file' => $exception->getFile(),
-                'line' => $exception->getLine(),
-                'trace' => $exception->getTraceAsString(), // Include trace for dev
-                'context' => self::getSecureContext()
-            ];
-            extract(['error' => $error]); // Make $error available in the view
-            require_once ROOT_PATH . '/views/error.php'; // Load the standard error view
-        } else {
-            // Production: Show generic error view
-             require_once ROOT_PATH . '/views/error.php'; // Load the standard error view (ensure it hides details in prod)
-            // OR load a dedicated production error view: require_once ROOT_PATH . '/views/error_production.php';
-        }
-
+        require_once ROOT_PATH . '/views/error.php'; // Include view (can include header/footer now)
         echo ob_get_clean(); // Output buffered content
-        exit(); // Terminate script execution
+        exit();
     }
     ```
-    *(Similar logic with `ob_start`/`ob_get_clean` should be applied to `handleError` and `handleFatalError` if they render HTML views)*
 
 ---
-https://drive.google.com/file/d/1-h5nliZ76EPyVsvYKV4Fw90NCNxq9tkb/view?usp=sharing, https://drive.google.com/file/d/10Yq40a14_9vmT3uzAfgsS2kilylfTvPt/view?usp=sharing, https://drive.google.com/file/d/1329FY5UpOX2eK0v8vAQxgs2MXcGgkydc/view?usp=sharing, https://drive.google.com/file/d/163yCHucufj5U6umje23O6VxB2MpcZL0W/view?usp=sharing, https://drive.google.com/file/d/16fv1Baz-qG-GEvIufdTZcCRdKAPkWMya/view?usp=sharing, https://drive.google.com/file/d/18txrhiYojPLwVe_qKdMqACEnzvpEaZw6/view?usp=sharing, https://drive.google.com/file/d/1Ddzu5eg2qB1PJRT6gWOJmWh0zz_-1Dqd/view?usp=sharing, https://drive.google.com/file/d/1H5LRCr_cDAJJ48vbLiNq3nLVDc6IeErG/view?usp=sharing, https://drive.google.com/file/d/1LlSJ5rTSF8j-8JcEi1QZzzRStvAgJvXq/view?usp=sharing, https://drive.google.com/file/d/1ZnFG7nGTwXSJwIuvTE2f0Uoc8mezpEs3/view?usp=sharing, https://drive.google.com/file/d/1_TgHMWMICaYCOHO3eRSV2T7HZtHDyOeC/view?usp=sharing, https://drive.google.com/file/d/1bDx9NdU6EUp-0fsD_4ZUUoNVBwcdPRda/view?usp=sharing, https://drive.google.com/file/d/1g8OdwA0wb8f2GU9ogmh5iOPkttme-wH9/view?usp=sharing, https://drive.google.com/file/d/1iIGSc05_s3Bu5yd1IbxYxIqnVduYCNd0/view?usp=sharing, https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221j7C8jOnj2cbRo6Q1UjArTDYCXk6mLXgo%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1qU2RTMZI-h0-DLQ7Q7azHFmgiNsIPBH6/view?usp=sharing
+https://drive.google.com/file/d/1ASIDYu7u9yJmZBkfpI4kiDo4xWfN5VfN/view?usp=sharing, https://drive.google.com/file/d/1MGczMz59axRzd1s1gYuEN0-WT-v34HGD/view?usp=sharing, https://drive.google.com/file/d/1Mjm2LJH6nEPGOYAD5W8fLTEL4IrLERJQ/view?usp=sharing, https://drive.google.com/file/d/1Ncq8ecY9bbLOJg9GIGCseBurMkVGWGJG/view?usp=sharing, https://drive.google.com/file/d/1TYJ43llThkbZyPJ6cuBc0jkw9mf4omYh/view?usp=sharing, https://drive.google.com/file/d/1VvoNkgfOl0ZnWbEoVs_HeblgCG0tNWEV/view?usp=sharing, https://drive.google.com/file/d/1WN6or43vKYFYOng7ek78qr0Hllo30i2D/view?usp=sharing, https://drive.google.com/file/d/1XpBYJDtRvcJ9YOtTKDXTmvbvM3EG-AZX/view?usp=sharing, https://drive.google.com/file/d/1ZY517G8nAnwggDNPhlJrO5FdHubTvFw9/view?usp=sharing, https://drive.google.com/file/d/1ZeYUobe9OCV0MDAgz05dQwqQN54Xvrw5/view?usp=sharing, https://drive.google.com/file/d/1_3DB9P_baKm1u1fe-dcaUrXHGNMR7Jvz/view?usp=sharing, https://drive.google.com/file/d/1d09iR34p8zqWXY6u8A74UY1DehPuhiM7/view?usp=sharing, https://drive.google.com/file/d/1esRbj9gfhAfxLxobN_S56xs5rc7EMVog/view?usp=sharing, https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221g-dyxEQuJubUlN99tHeJwJaAItsZRSlC%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1gLb6YB6CBoIhBA2NlwdBIS3uk_yogmsC/view?usp=sharing, https://drive.google.com/file/d/1rmEfmhukIUkEvb-PArYMhsaGKSbBOr41/view?usp=sharing, https://drive.google.com/file/d/1s0Y1vUXPHTnYzBOxmf_Y6pP3GLdHMJt0/view?usp=sharing, https://drive.google.com/file/d/1zL9RaqOGNusURuCmrKovSZ7rv48aJeCR/view?usp=sharing

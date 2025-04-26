@@ -12,7 +12,7 @@ require_once __DIR__ . '/../config.php'; // Needed for BASE_URL
 
 class AccountController extends BaseController {
     // Properties remain the same...
-    private EmailService $emailService;
+    // private EmailService $emailService;
     private User $userModel;
     private Order $orderModel;
     private Quiz $quizModel;
