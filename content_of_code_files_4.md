@@ -1397,3 +1397,432 @@ class CheckoutController extends BaseController {
 
 ```
 
+# views/register.php  
+```php
+<?php
+// views/register.php (Corrected)
+$pageTitle = 'Create Account - The Scent';
+// Apply consistent gradient background and page identifier class
+$bodyClass = 'page-register bg-gradient-to-br from-light to-secondary/20';
+
+require_once __DIR__ . '/layout/header.php'; // Includes CSRF token output globally
+?>
+
+<section class="auth-section flex items-center justify-center min-h-[calc(100vh-80px)] py-12 px-4">
+    <div class="container max-w-md mx-auto">
+        <div class="auth-container bg-white p-8 md:p-12 rounded-xl shadow-2xl" data-aos="fade-up" data-aos-delay="100">
+            <div class="text-center mb-10">
+                <h1 class="text-3xl lg:text-4xl font-bold font-heading text-primary mb-3">Create Account</h1>
+                <p class="text-gray-600 font-body">Join The Scent community to discover your perfect fragrance.</p>
+            </div>
+
+            <?php // Standard Flash Message Display (from header or dynamic)
+                // This relies on the flash message container in the header/footer layout
+            ?>
+            <?php if (isset($_SESSION['flash_message'])): ?>
+                <script>
+                    // Use the JS function immediately if available, or queue it
+                    document.addEventListener('DOMContentLoaded', function() {
+                        if (typeof window.showFlashMessage === 'function') {
+                            window.showFlashMessage(<?= json_encode($_SESSION['flash_message']) ?>, <?= json_encode($_SESSION['flash_type'] ?? 'info') ?>);
+                        }
+                    });
+                </script>
+                <?php unset($_SESSION['flash_message'], $_SESSION['flash_type']); ?>
+            <?php endif; ?>
+
+            <form action="index.php?page=register" method="POST" class="auth-form space-y-6" id="registerForm">
+                 <!-- CSRF Token is handled globally by JS reading #csrf-token-value -->
+                <div class="form-group">
+                    <label for="name" class="block text-sm font-medium text-gray-700 mb-1 font-body">Full Name</label>
+                    <input type="text" id="name" name="name" required
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary transition duration-150 ease-in-out font-body"
+                           value="<?= htmlspecialchars($_POST['name'] ?? '') ?>"
+                           placeholder="Enter your full name">
+                </div>
+
+                <div class="form-group">
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1 font-body">Email Address</label>
+                    <input type="email" id="email" name="email" required
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary transition duration-150 ease-in-out font-body"
+                           value="<?= htmlspecialchars($_POST['email'] ?? '') ?>"
+                           placeholder="Enter your email address"
+                           pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
+                           title="Please enter a valid email address">
+                </div>
+
+                <div class="form-group">
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1 font-body">Password</label>
+                    <div class="password-input relative">
+                        <input type="password" id="password" name="password" required
+                               class="w-full px-4 py-2.5 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary transition duration-150 ease-in-out font-body"
+                               minlength="12"
+                               pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&amp;_~`#^()=+[\]{}|\\:;&quot;'&lt;&gt;,.?/])[A-Za-z\d@$!%*?&amp;_~`#^()=+[\]{}|\\:;&quot;'&lt;&gt;,.?/]{12,}$"
+                               title="Password must meet all requirements below"
+                               placeholder="Create a strong password">
+                        <button type="button" class="toggle-password absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-primary transition duration-150 ease-in-out" aria-label="Toggle password visibility">
+                            <i class="fas fa-eye text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="confirm_password" class="block text-sm font-medium text-gray-700 mb-1 font-body">Confirm Password</label>
+                    <div class="password-input relative">
+                        <input type="password" id="confirm_password" name="confirm_password" required
+                               class="w-full px-4 py-2.5 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary transition duration-150 ease-in-out font-body"
+                               placeholder="Confirm your password">
+                        <button type="button" class="toggle-password absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-primary transition duration-150 ease-in-out" aria-label="Toggle password visibility">
+                            <i class="fas fa-eye text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Password Requirements Section - Styled -->
+                <div class="password-requirements mt-4 p-4 border border-gray-200 rounded-md bg-gray-50/50" id="passwordRequirements">
+                    <h4 class="text-sm font-medium text-gray-700 mb-2 font-body">Password must contain:</h4>
+                    <ul class="space-y-1 text-xs text-gray-600 font-body">
+                        <li id="req-length" class="requirement flex items-center not-met"> <!-- ID matches JS -->
+                            <i class="fas fa-times-circle text-red-500 mr-2 w-4 text-center"></i> At least 12 characters
+                        </li>
+                        <li id="req-uppercase" class="requirement flex items-center not-met"> <!-- ID matches JS -->
+                            <i class="fas fa-times-circle text-red-500 mr-2 w-4 text-center"></i> One uppercase letter (A-Z)
+                        </li>
+                        <li id="req-lowercase" class="requirement flex items-center not-met"> <!-- ID matches JS -->
+                            <i class="fas fa-times-circle text-red-500 mr-2 w-4 text-center"></i> One lowercase letter (a-z)
+                        </li>
+                        <li id="req-number" class="requirement flex items-center not-met"> <!-- ID matches JS -->
+                            <i class="fas fa-times-circle text-red-500 mr-2 w-4 text-center"></i> One number (0-9)
+                        </li>
+                        <li id="req-special" class="requirement flex items-center not-met"> <!-- ID matches JS -->
+                            <i class="fas fa-times-circle text-red-500 mr-2 w-4 text-center"></i> One special character (e.g., !@#$)
+                        </li>
+                        <li id="req-match" class="requirement flex items-center not-met"> <!-- ID matches JS -->
+                            <i class="fas fa-times-circle text-red-500 mr-2 w-4 text-center"></i> Passwords match
+                        </li>
+                    </ul>
+                </div>
+
+
+                <div class="form-group pt-2">
+                    <label class="checkbox-label flex items-center text-sm text-gray-700 cursor-pointer font-body">
+                        <input type="checkbox" name="newsletter_signup" value="1"
+                               class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary mr-2"
+                               checked>
+                        <span>Sign up for newsletter & exclusive offers</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-full py-3 text-lg font-semibold rounded-md shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-dark transition duration-150 ease-in-out flex items-center justify-center font-body" id="submitButton" disabled>
+                    <span class="button-text">Create Account</span>
+                    <span class="button-loader hidden ml-2">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </span>
+                </button>
+            </form>
+
+            <div class="auth-links mt-8 pt-6 border-t border-gray-200 text-center">
+                <p class="text-sm text-gray-600 font-body">Already have an account?
+                    <a href="index.php?page=login" class="font-medium text-primary hover:text-primary-dark transition duration-150 ease-in-out">Login here</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<?php require_once __DIR__ . '/layout/footer.php'; ?>
+
+```
+
+# views/quiz.php  
+```php
+<?php require_once __DIR__ . '/layout/header.php'; ?>
+<body class="page-quiz">
+
+<div class="quiz-container min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5 py-20">
+    <!-- Particles Background -->
+    <div id="particles-js" class="absolute inset-0 z-0"></div>
+
+    <div class="container mx-auto px-4 relative z-10">
+        <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8" data-aos="fade-up">
+            <h1 class="text-4xl font-heading font-semibold text-center mb-8">Find Your Perfect Scent</h1>
+            <p class="text-center text-gray-600 mb-12">Let us guide you to the perfect aromatherapy products for your needs.</p>
+
+            <form id="scent-quiz" method="POST" action="quiz" class="space-y-8">
+                <div class="quiz-step" data-step="1">
+                    <h3 class="text-2xl font-heading mb-6">What are you looking for today?</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <label class="quiz-option group">
+                            <input type="radio" name="mood" value="relaxation" class="hidden" required>
+                            <div class="p-6 border-2 border-gray-200 rounded-xl cursor-pointer transition-all duration-300 group-hover:border-primary group-hover:bg-primary/5">
+                                <i class="fas fa-spa text-3xl mb-4 text-primary"></i>
+                                <h4 class="font-heading text-xl mb-2">Relaxation</h4>
+                                <p class="text-sm text-gray-600">Find calm and peace in your daily routine</p>
+                            </div>
+                        </label>
+
+                        <label class="quiz-option group">
+                            <input type="radio" name="mood" value="energy" class="hidden">
+                            <div class="p-6 border-2 border-gray-200 rounded-xl cursor-pointer transition-all duration-300 group-hover:border-primary group-hover:bg-primary/5">
+                                <i class="fas fa-bolt text-3xl mb-4 text-primary"></i>
+                                <h4 class="font-heading text-xl mb-2">Energy</h4>
+                                <p class="text-sm text-gray-600">Boost your vitality and motivation</p>
+                            </div>
+                        </label>
+
+                        <label class="quiz-option group">
+                            <input type="radio" name="mood" value="focus" class="hidden">
+                            <div class="p-6 border-2 border-gray-200 rounded-xl cursor-pointer transition-all duration-300 group-hover:border-primary group-hover:bg-primary/5">
+                                <i class="fas fa-brain text-3xl mb-4 text-primary"></i>
+                                <h4 class="font-heading text-xl mb-2">Focus</h4>
+                                <p class="text-sm text-gray-600">Enhance concentration and clarity</p>
+                            </div>
+                        </label>
+
+                        <label class="quiz-option group">
+                            <input type="radio" name="mood" value="balance" class="hidden">
+                            <div class="p-6 border-2 border-gray-200 rounded-xl cursor-pointer transition-all duration-300 group-hover:border-primary group-hover:bg-primary/5">
+                                <i class="fas fa-yin-yang text-3xl mb-4 text-primary"></i>
+                                <h4 class="font-heading text-xl mb-2">Balance</h4>
+                                <p class="text-sm text-gray-600">Find harmony in body and mind</p>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div class="mt-8 text-center">
+                        <button type="submit" class="btn-primary inline-flex items-center space-x-2">
+                            <span>Find My Perfect Scent</span>
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<?php require_once __DIR__ . '/layout/footer.php'; ?>
+```
+
+# views/quiz_results.php  
+```php
+<?php require_once __DIR__ . '/layout/header.php'; ?>
+<body class="page-quiz-results">
+<div class="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5 py-20">
+    <!-- Particles Background -->
+    <div id="particles-js" class="absolute inset-0 z-0"></div>
+
+    <div class="container mx-auto px-4 relative z-10">
+        <div class="max-w-4xl mx-auto">
+            <!-- Results Header -->
+            <div class="text-center mb-12" data-aos="fade-down">
+                <h1 class="text-4xl font-heading font-semibold mb-4">Your Perfect Scent Match</h1>
+                <p class="text-xl text-gray-600">Based on your preferences, we've curated these perfect matches for you.</p>
+            </div>
+
+            <!-- Product Recommendations -->
+            <div class="grid md:grid-cols-3 gap-8 mb-12">
+                <?php if (!isset($products) || !is_array($products)): $products = []; endif; ?>
+                <?php foreach ($products as $product): ?>
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden" data-aos="fade-up">
+                        <div class="aspect-w-1 aspect-h-1">
+                            <img 
+                                src="<?= htmlspecialchars($product['image']) ?>" 
+                                alt="<?= htmlspecialchars($product['name']) ?>"
+                                class="w-full h-full object-cover"
+                                loading="lazy"
+                            >
+                        </div>
+                        <div class="p-6">
+                            <h3 class="font-heading text-xl mb-2"><?= htmlspecialchars($product['name']) ?></h3>
+                            <p class="text-gray-600 text-sm mb-4"><?= htmlspecialchars($product['description']) ?></p>
+                            <div class="flex justify-between items-center">
+                                <span class="text-primary font-semibold">$<?= number_format($product['price'], 2) ?></span>
+                                <a 
+                                    href="index.php?page=product&id=<?= $product['id'] ?>" 
+                                    class="btn-primary text-sm"
+                                >
+                                    View Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="text-center space-x-4" data-aos="fade-up">
+                <a href="index.php?page=quiz" class="btn-secondary">
+                    Retake Quiz
+                </a>
+                <a href="index.php?page=products" class="btn-primary">
+                    Shop All Products
+                </a>
+            </div>
+
+            <!-- Newsletter Signup -->
+            <div class="mt-16 bg-white rounded-xl shadow-lg p-8 text-center" data-aos="fade-up">
+                <h3 class="font-heading text-2xl mb-4">Stay Updated</h3>
+                <p class="text-gray-600 mb-6">Sign up for our newsletter to receive personalized aromatherapy tips and exclusive offers.</p>
+                
+                <form action="index.php?page=newsletter&action=subscribe" method="POST" class="flex flex-col md:flex-row gap-4 justify-center">
+                    <input 
+                        type="email" 
+                        name="email" 
+                        placeholder="Enter your email address"
+                        class="flex-1 max-w-md px-4 py-2 rounded-lg border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+                        required
+                    >
+                    <button type="submit" class="btn-primary whitespace-nowrap">
+                        Subscribe Now
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php require_once __DIR__ . '/layout/footer.php'; ?>
+```
+
+# views/order_confirmation.php  
+```php
+<?php require_once __DIR__ . '/layout/header.php'; ?>
+
+<section class="confirmation-section">
+    <div class="container">
+        <div class="confirmation-container" data-aos="fade-up">
+            <div class="confirmation-header">
+                <i class="fas fa-check-circle"></i>
+                <h1>Order Confirmed!</h1>
+                <p>Thank you for your purchase. Your order has been successfully placed.</p>
+            </div>
+            
+            <div class="order-details">
+                <div class="order-info">
+                    <h2>Order Information</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="label">Order Number:</span>
+                            <span class="value">#<?= str_pad($order['id'], 6, '0', STR_PAD_LEFT) ?></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Order Date:</span>
+                            <span class="value"><?= date('F j, Y', strtotime($order['created_at'])) ?></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Order Status:</span>
+                            <span class="value status-pending">Processing</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Estimated Delivery:</span>
+                            <span class="value"><?= date('F j, Y', strtotime('+5 days')) ?></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="shipping-info">
+                    <h2>Shipping Address</h2>
+                    <p><?= htmlspecialchars($order['shipping_name']) ?></p>
+                    <p><?= htmlspecialchars($order['shipping_address']) ?></p>
+                    <p><?= htmlspecialchars($order['shipping_city']) . ', ' . 
+                         htmlspecialchars($order['shipping_state']) . ' ' . 
+                         htmlspecialchars($order['shipping_zip']) ?></p>
+                    <p><?= htmlspecialchars($order['shipping_country']) ?></p>
+                </div>
+            </div>
+            
+            <div class="order-summary">
+                <h2>Order Summary</h2>
+                <div class="summary-items">
+                    <?php foreach ($order['items'] as $item): ?>
+                        <div class="summary-item">
+                            <div class="item-info">
+                                <span class="item-quantity"><?= $item['quantity'] ?>×</span>
+                                <span class="item-name"><?= htmlspecialchars($item['product_name']) ?></span>
+                            </div>
+                            <span class="item-price">$<?= number_format($item['price'] * $item['quantity'], 2) ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                
+                <div class="summary-totals">
+                    <div class="summary-row">
+                        <span>Subtotal:</span>
+                        <span>$<?= number_format($order['subtotal'], 2) ?></span>
+                    </div>
+                    <?php if ($order['discount_amount'] > 0): ?>
+                        <div class="summary-row discount">
+                            <span>Discount (<?= htmlspecialchars($order['coupon_code']) ?>):</span>
+                            <span>-$<?= number_format($order['discount_amount'], 2) ?></span>
+                        </div>
+                    <?php endif; ?>
+                    <div class="summary-row">
+                        <span>Shipping:</span>
+                        <span><?= $order['shipping_cost'] > 0 ? '$' . number_format($order['shipping_cost'], 2) : 'FREE' ?></span>
+                    </div>
+                    <div class="summary-row">
+                        <span>Tax:</span>
+                        <span>$<?= number_format($order['tax_amount'], 2) ?></span>
+                    </div>
+                    <div class="summary-row total">
+                        <span>Total:</span>
+                        <span>$<?= number_format($order['total_amount'], 2) ?></span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="next-steps" data-aos="fade-up">
+                <h2>What's Next?</h2>
+                <div class="steps-grid">
+                    <div class="step">
+                        <i class="fas fa-envelope"></i>
+                        <h3>Order Confirmation Email</h3>
+                        <p>We've sent a confirmation email to <?= htmlspecialchars($order['shipping_email']) ?></p>
+                    </div>
+                    <div class="step">
+                        <i class="fas fa-truck"></i>
+                        <h3>Shipping Updates</h3>
+                        <p>You'll receive shipping updates and tracking information once your order ships.</p>
+                    </div>
+                    <div class="step">
+                        <i class="fas fa-user"></i>
+                        <h3>Track Your Order</h3>
+                        <p>Visit your account dashboard to track your order and view order history.</p>
+                    </div>
+                </div>
+                
+                <div class="confirmation-actions">
+                    <a href="index.php?page=account" class="btn-secondary">View Order Status</a>
+                    <a href="index.php?page=products" class="btn-primary">Continue Shopping</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<?php require_once __DIR__ . '/layout/footer.php'; ?>
+```
+
+# views/order-tracking.php  
+```php
+<?php require_once __DIR__ . '/layout/header.php'; ?>
+<main class="container py-12">
+    <h1 class="text-3xl font-heading mb-6">Track Your Order</h1>
+    <form method="post" class="max-w-lg bg-white p-6 rounded shadow" action="#">
+        <input type="hidden" name="csrf_token" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <div class="mb-4">
+            <label for="order_id" class="block font-medium mb-1">Order ID</label>
+            <input type="text" id="order_id" name="order_id" class="w-full border rounded px-3 py-2" required>
+        </div>
+        <div class="mb-4">
+            <label for="email" class="block font-medium mb-1">Email</label>
+            <input type="email" id="email" name="email" class="w-full border rounded px-3 py-2" required>
+        </div>
+        <button type="submit" class="btn-primary">Track Order</button>
+    </form>
+</main>
+<?php require_once __DIR__ . '/layout/footer.php'; ?>
+```
+

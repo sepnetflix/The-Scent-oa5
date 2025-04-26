@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>About Us - The Scent</title>
+    <title>Create Account - The Scent</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -36,10 +36,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/css/style.css">
 </head>
-<body class="page-about bg-light">
+<body class="page-register bg-gradient-to-br from-light to-secondary/20">
 
     <!-- Global CSRF Token Input for JavaScript AJAX Requests -->
-    <input type="hidden" id="csrf-token-value" value="89fd7154cc4c8441c1aa010ef305357f10203e6cc81b19db76327c52f420df99">
+    <input type="hidden" id="csrf-token-value" value="df27f1d623781e4b9595ce4b166f6a2e3b0123f7fc8f0ddeee035b9798e0d86f">
 
     <header>
         <nav class="main-nav sample-header">
@@ -85,92 +85,113 @@
         <div class="flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full space-y-2"></div>
 
 
-<section class="py-16 md:py-24 text-center bg-secondary/10 border-b border-gray-200" data-aos="fade-in">
-    <div class="container mx-auto px-4">
-        <h1 class="text-4xl md:text-5xl font-bold font-heading text-primary mb-4">Our Story</h1>
-        <p class="text-lg md:text-xl text-gray-700 max-w-3xl mx-auto">Discover the passion and principles behind The Scent.</p>
-    </div>
-</section>
-
-<section class="py-16 md:py-20 bg-white">
-    <div class="container mx-auto px-4">
-        <div class="grid md:grid-cols-2 gap-12 items-center mb-16 md:mb-24">
-            <div data-aos="fade-right">
-                <h2 class="text-3xl font-bold font-heading text-primary-dark mb-6">Rooted in Nature, Crafted with Care</h2>
-                <p class="text-gray-700 mb-4 leading-relaxed">
-                    At The Scent, we believe in the profound power of nature to restore balance and enhance well-being. Our journey began with a simple desire: to harness the purest botanical essences and share their therapeutic benefits with the world.
-                </p>
-                <p class="text-gray-700 mb-4 leading-relaxed">
-                    We meticulously source high-quality, sustainable ingredients from ethical growers globally. Each essential oil, herb, and natural component is selected for its purity, potency, and aromatic profile.
-                </p>
-                <p class="text-gray-700 leading-relaxed">
-                    Our unique and creative formulations are developed by expert aromatherapists, resulting in harmonious, well-rounded products designed to nurture both mind and body.
-                </p>
+<section class="auth-section flex items-center justify-center min-h-[calc(100vh-80px)] py-12 px-4">
+    <div class="container max-w-md mx-auto">
+        <div class="auth-container bg-white p-8 md:p-12 rounded-xl shadow-2xl" data-aos="fade-up" data-aos-delay="100">
+            <div class="text-center mb-10">
+                <h1 class="text-3xl lg:text-4xl font-bold font-heading text-primary mb-3">Create Account</h1>
+                <p class="text-gray-600 font-body">Join The Scent community to discover your perfect fragrance.</p>
             </div>
-            <div class="about-image" data-aos="fade-left">
-                <img src="/images/about_hero.jpg" alt="Natural ingredients and essential oils" class="rounded-lg shadow-xl w-full h-auto object-cover aspect-[4/3]">
-                <!-- Replace with an actual relevant image if available -->
+
+                        
+            <form action="index.php?page=register" method="POST" class="auth-form space-y-6" id="registerForm">
+                 <!-- CSRF Token is handled globally by JS reading #csrf-token-value -->
+                <div class="form-group">
+                    <label for="name" class="block text-sm font-medium text-gray-700 mb-1 font-body">Full Name</label>
+                    <input type="text" id="name" name="name" required
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary transition duration-150 ease-in-out font-body"
+                           value=""
+                           placeholder="Enter your full name">
+                </div>
+
+                <div class="form-group">
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1 font-body">Email Address</label>
+                    <input type="email" id="email" name="email" required
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary transition duration-150 ease-in-out font-body"
+                           value=""
+                           placeholder="Enter your email address"
+                           pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
+                           title="Please enter a valid email address">
+                </div>
+
+                <div class="form-group">
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1 font-body">Password</label>
+                    <div class="password-input relative">
+                        <input type="password" id="password" name="password" required
+                               class="w-full px-4 py-2.5 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary transition duration-150 ease-in-out font-body"
+                               minlength="12"
+                               pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&amp;_~`#^()=+[\]{}|\\:;&quot;'&lt;&gt;,.?/])[A-Za-z\d@$!%*?&amp;_~`#^()=+[\]{}|\\:;&quot;'&lt;&gt;,.?/]{12,}$"
+                               title="Password must meet all requirements below"
+                               placeholder="Create a strong password">
+                        <button type="button" class="toggle-password absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-primary transition duration-150 ease-in-out" aria-label="Toggle password visibility">
+                            <i class="fas fa-eye text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="confirm_password" class="block text-sm font-medium text-gray-700 mb-1 font-body">Confirm Password</label>
+                    <div class="password-input relative">
+                        <input type="password" id="confirm_password" name="confirm_password" required
+                               class="w-full px-4 py-2.5 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary transition duration-150 ease-in-out font-body"
+                               placeholder="Confirm your password">
+                        <button type="button" class="toggle-password absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-primary transition duration-150 ease-in-out" aria-label="Toggle password visibility">
+                            <i class="fas fa-eye text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Password Requirements Section - Styled -->
+                <div class="password-requirements mt-4 p-4 border border-gray-200 rounded-md bg-gray-50/50" id="passwordRequirements">
+                    <h4 class="text-sm font-medium text-gray-700 mb-2 font-body">Password must contain:</h4>
+                    <ul class="space-y-1 text-xs text-gray-600 font-body">
+                        <li id="req-length" class="requirement flex items-center not-met"> <!-- ID matches JS -->
+                            <i class="fas fa-times-circle text-red-500 mr-2 w-4 text-center"></i> At least 12 characters
+                        </li>
+                        <li id="req-uppercase" class="requirement flex items-center not-met"> <!-- ID matches JS -->
+                            <i class="fas fa-times-circle text-red-500 mr-2 w-4 text-center"></i> One uppercase letter (A-Z)
+                        </li>
+                        <li id="req-lowercase" class="requirement flex items-center not-met"> <!-- ID matches JS -->
+                            <i class="fas fa-times-circle text-red-500 mr-2 w-4 text-center"></i> One lowercase letter (a-z)
+                        </li>
+                        <li id="req-number" class="requirement flex items-center not-met"> <!-- ID matches JS -->
+                            <i class="fas fa-times-circle text-red-500 mr-2 w-4 text-center"></i> One number (0-9)
+                        </li>
+                        <li id="req-special" class="requirement flex items-center not-met"> <!-- ID matches JS -->
+                            <i class="fas fa-times-circle text-red-500 mr-2 w-4 text-center"></i> One special character (e.g., !@#$)
+                        </li>
+                        <li id="req-match" class="requirement flex items-center not-met"> <!-- ID matches JS -->
+                            <i class="fas fa-times-circle text-red-500 mr-2 w-4 text-center"></i> Passwords match
+                        </li>
+                    </ul>
+                </div>
+
+
+                <div class="form-group pt-2">
+                    <label class="checkbox-label flex items-center text-sm text-gray-700 cursor-pointer font-body">
+                        <input type="checkbox" name="newsletter_signup" value="1"
+                               class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary mr-2"
+                               checked>
+                        <span>Sign up for newsletter & exclusive offers</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-full py-3 text-lg font-semibold rounded-md shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-dark transition duration-150 ease-in-out flex items-center justify-center font-body" id="submitButton" disabled>
+                    <span class="button-text">Create Account</span>
+                    <span class="button-loader hidden ml-2">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </span>
+                </button>
+            </form>
+
+            <div class="auth-links mt-8 pt-6 border-t border-gray-200 text-center">
+                <p class="text-sm text-gray-600 font-body">Already have an account?
+                    <a href="index.php?page=login" class="font-medium text-primary hover:text-primary-dark transition duration-150 ease-in-out">Login here</a>
+                </p>
             </div>
         </div>
-
-        <div class="grid md:grid-cols-2 gap-12 items-center">
-             <div class="about-image order-last md:order-first" data-aos="fade-right">
-                 <img src="/images/about_team.jpg" alt="The Scent Team crafting products" class="rounded-lg shadow-xl w-full h-auto object-cover aspect-[4/3]">
-                 <!-- Replace with an actual relevant image if available -->
-            </div>
-            <div data-aos="fade-left" class="order-first md:order-last">
-                <h2 class="text-3xl font-bold font-heading text-primary-dark mb-6">Our Mission & Values</h2>
-                <ul class="space-y-4 text-gray-700 leading-relaxed">
-                    <li class="flex items-start">
-                        <i class="fas fa-check-circle text-secondary mr-3 mt-1 text-xl"></i>
-                        <span><strong>Purity & Quality:</strong> To offer only the finest, 100% natural aromatherapy products without compromise.</span>
-                    </li>
-                    <li class="flex items-start">
-                        <i class="fas fa-leaf text-secondary mr-3 mt-1 text-xl"></i>
-                        <span><strong>Sustainability:</strong> To operate responsibly, respecting the environment and supporting ethical sourcing practices.</span>
-                    </li>
-                    <li class="flex items-start">
-                        <i class="fas fa-heart text-secondary mr-3 mt-1 text-xl"></i>
-                        <span><strong>Well-being:</strong> To empower our customers to find moments of calm, energy, and balance through the power of scent.</span>
-                    </li>
-                    <li class="flex items-start">
-                        <i class="fas fa-lightbulb text-secondary mr-3 mt-1 text-xl"></i>
-                        <span><strong>Expertise & Innovation:</strong> To continually explore and craft unique, effective aromatherapy solutions based on traditional wisdom and modern science.</span>
-                    </li>
-                </ul>
-            </div>
-        </div>
     </div>
 </section>
-
-<section class="py-16 md:py-20 bg-light">
-    <div class="container mx-auto px-4 text-center">
-        <h2 class="text-3xl font-bold font-heading text-primary-dark mb-12" data-aos="fade-up">Meet the Team (Optional)</h2>
-        <p class="text-gray-700 max-w-2xl mx-auto mb-12" data-aos="fade-up" data-aos-delay="100">
-            Behind every blend is a team passionate about natural wellness. (Add team member profiles here if desired).
-        </p>
-        <!-- Placeholder for team members -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            <!-- Example Team Member Card -->
-            <div class="bg-white p-6 rounded-lg shadow text-center" data-aos="fade-up" data-aos-delay="200">
-                <img src="/images/team_placeholder.png" alt="Team Member" class="w-24 h-24 rounded-full mx-auto mb-4 border-2 border-secondary object-cover">
-                <h3 class="text-xl font-semibold text-primary mb-1">Jane Doe</h3>
-                <p class="text-sm text-accent font-medium mb-2">Lead Aromatherapist</p>
-                <p class="text-sm text-gray-600">Passionate about blending traditional knowledge with modern techniques to create effective wellness solutions.</p>
-            </div>
-            <!-- Add more team members -->
-        </div>
-    </div>
-</section>
-
-<section class="py-16 md:py-20 bg-secondary text-center text-primary-dark" data-aos="fade-in">
-    <div class="container mx-auto px-4">
-        <h2 class="text-3xl font-bold font-heading mb-6">Ready to Find Your Scent?</h2>
-        <p class="text-lg mb-8 max-w-xl mx-auto">Take our quick quiz to discover personalized recommendations.</p>
-        <a href="index.php?page=quiz" class="btn btn-primary text-lg px-8 py-3 transition duration-300 ease-in-out transform hover:scale-105">Take the Quiz</a>
-    </div>
-</section>
-
 
 </main>
     <footer>
@@ -212,7 +233,7 @@
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="89fd7154cc4c8441c1aa010ef305357f10203e6cc81b19db76327c52f420df99">
+                        <input type="hidden" name="csrf_token" value="df27f1d623781e4b9595ce4b166f6a2e3b0123f7fc8f0ddeee035b9798e0d86f">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>
