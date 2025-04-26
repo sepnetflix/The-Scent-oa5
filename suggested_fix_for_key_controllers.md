@@ -1,55 +1,3 @@
-You will meticulously review the remaining PHP files systematically to ensure they are compatible with the refactored `AccountController.php`, the updated `main.js`, and the confirmed `index.php`.
-
-You will review the following recommendation, then think deeply and systematically to explore thoroughly for the best implementation option to make the necessary code changes.  
-Remember to think deeply and thoroughly to explore the best implementation option to fix this issue before choosing the best implementation option to carefully merge the fix to the existing code files, taking care not to loose other features and functions while making changes. Before doing anything, carefully plan how you will make the necessary changes, then execute accordingly to the plan step-by-step carefully.
-
-Note that views/layout/header.php has already been updated to be compliance with the following recommendation.
-
-**Findings based on initial review:**
-
-The vast majority of the reviewed PHP files are compatible with the refactored `AccountController` and the updated `main.js`/`index.php`. The core logic (routing, base controller methods, other controller actions, models) is sound.
-
-The **only required change** identified is the **missing CSRF token input** (`#csrf-token-value`) in the views rendered for the login and registration pages (`views/login.php` and `views/register.php`). The updated `main.js` relies on this input for its AJAX submissions for these specific forms.
-
-**Recommendation:**
-
-Instead of adding the input individually to `login.php`, `register.php`, `home.php`, `cart.php`, etc., the most robust and maintainable solution is to **add the global CSRF token input ONCE in the main layout header.**
-
-1.  **Modify `views/layout/header.php`:**
-    *   Ensure that *every* controller action that renders a full page view (using `renderView` or requiring a layout file) generates a CSRF token using `$csrfToken = $this->generateCSRFToken();` (or `SecurityMiddleware::generateCSRFToken()`) and passes it to the view data.
-    *   Add the hidden input *immediately after* the opening `<body>` tag in `header.php`:
-
-    ```php
-    // ... inside header.php ...
-    </head>
-    <body class="<?= $bodyClass ?? '' ?>"> <!-- Assuming controllers pass a $bodyClass -->
-        <!-- Global CSRF Token for JavaScript -->
-        <input type="hidden" id="csrf-token-value" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
-    
-        <header>
-            <nav class="main-nav sample-header">
-    // ... rest of header ...
-    ```
-
-2.  **Modify Controllers (If Necessary):**
-    *   Double-check that controllers like `AccountController` (for `login` GET, `register` GET, `requestPasswordReset` GET, `resetPassword` GET), `ProductController` (for `showHomePage`, `showProductList`, `showProduct`), `CartController` (for `showCart`), etc., consistently generate `$csrfToken = $this->generateCSRFToken();` and include it in the data passed to `renderView` or `require_once`. Example for login GET in `AccountController`:
-        ```php
-        // Inside AccountController::login() for GET request
-        echo $this->renderView('login', [
-            'pageTitle' => 'Login - The Scent',
-            'csrfToken' => $this->generateCSRFToken(), // Ensure token is passed
-            'bodyClass' => 'page-login' // Also pass body class
-        ]);
-        return;
-        ```
-    *   Ensure the `renderView` method (or direct `require`) correctly extracts the `$csrfToken` variable so it's available in the header's scope.
-    *   Ensure controllers also pass a `$bodyClass` variable (e.g., `'page-login'`) to `renderView` so the correct class is added to the `<body>` tag for `main.js` initialization.
-
-3.  **Remove Individual CSRF Inputs:** Once the global token is in the header, you can *remove* the individual `<input type="hidden" id="csrf-token-value" ...>` lines from `views/home.php`, `views/cart.php`, `views/products.php`, `views/product_detail.php`, etc., as they become redundant. *Keep* the form-specific CSRF inputs (like `<input type="hidden" name="csrf_token" ...>`) inside forms handled by *standard POST* submissions (e.g., password reset, profile update, admin forms, cart update if not fully AJAX).
-
-By adding the global `#csrf-token-value` to the layout header and ensuring controllers pass the token value, `main.js` will always find the necessary token for its AJAX requests (login, register, add-to-cart, newsletter), resolving the identified incompatibility. No changes are needed to the already updated `main.js` or `index.php`.
-
----
 Okay, let's review the specified controllers (`AccountController`, `BaseController`, `CartController`, `CheckoutController`) and update them as needed to comply with the requirement of passing `$csrfToken` and `$bodyClass` to views rendered via the layout header.
 
 **1. Review `controllers/BaseController.php`**
@@ -1715,3 +1663,6 @@ class CheckoutController extends BaseController {
 *   **`CheckoutController.php`:** Updated `showCheckout()` and `showOrderConfirmation()` to define `$bodyClass` and `$csrfToken`, then use `extract()` before their respective `require_once` calls. Added missing `requireLogin()` calls and improved cart fetching/validation logic.
 
 With these controller updates and the previously updated `header.php` and `main.js`, the application should now consistently provide the necessary `<body>` class and global CSRF token for the JavaScript to function correctly across all relevant pages.
+
+---
+https://drive.google.com/file/d/1HVad7-8rwU0AacGM-PMYK_c_V_a6eGYB/view?usp=sharing, https://drive.google.com/file/d/1YjvZGblcwJb2EIaqHJydGmUXCVIp3ow4/view?usp=sharing, https://drive.google.com/file/d/1_C5HBcnaDxRivHYJ42FMvB_b5FyjmIEu/view?usp=sharing, https://drive.google.com/file/d/1bPcCKsmAlc1CICzTqqngTu0CepMWh-op/view?usp=sharing, https://drive.google.com/file/d/1cwyZwgxZ_5d_t9P6sQXd1SiyqqbwYUSm/view?usp=sharing, https://drive.google.com/file/d/1iZyN7YY9riw57HgNF1wMJIgNkFLHnqSZ/view?usp=sharing, https://drive.google.com/file/d/1jNg0Q0MiwSLApAPYx80UbMZ9FxvhGK8l/view?usp=sharing, https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221mFzjasFfhKrbcisV1dsp20GTgPpI6Xj0%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1nlD2v3wJI8nUCZ0M6M6aR0ai2lS-iPkN/view?usp=sharing, https://drive.google.com/file/d/1npGh4rDzeTjWkDfpXpUC9KlbWe5BrxNE/view?usp=sharing, https://drive.google.com/file/d/1sU1nSqxrTF70Fjp7soFRUAK0x4sii4jK/view?usp=sharing

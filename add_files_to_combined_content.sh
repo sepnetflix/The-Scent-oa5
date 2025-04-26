@@ -19,3 +19,5 @@ for i in controllers/CartController.php controllers/ProductController.php views/
 for i in includes/SecurityMiddleware.php controllers/ProductController.php models/Cart.php includes/ErrorHandler.php includes/db.php ; do (echo -e "# $i  \n\`\`\`php" ; cat $i ; echo -e "\n\`\`\`\n" ) ; done | tee content_of_code_files_3.md
 for i in controllers/AccountController.php controllers/NewsletterController.php controllers/CheckoutController.php  ; do (echo -e "# $i  \n\`\`\`php" ; cat $i ; echo -e "\n\`\`\`\n" ) ; done | tee content_of_code_files_4.md
 
+#### for i in controllers/AccountController.php controllers/BaseController.php controllers/CartController.php controllers/CheckoutController.php ; do (echo -e "# $i  \n\`\`\`php" ; cat $i ; echo -e "\n\`\`\`\n" ) ; done | tee content_of_code_files_5.md
+
