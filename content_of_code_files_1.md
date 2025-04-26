@@ -299,9 +299,12 @@ try {
             require_once __DIR__ . '/views/privacy.php';
             break;
         case 'about': // Add route for about page if needed
-             $pageTitle = 'About Us - The Scent';
-             $csrfToken = SecurityMiddleware::generateCSRFToken();
-             require_once __DIR__ . '/views/about.php'; // Assuming views/about.php exists
+             $pageTitle = 'About Us - The Scent'; // Set here for consistency
+             $csrfToken = SecurityMiddleware::generateCSRFToken(); // Generate token
+             $bodyClass = 'page-about'; // Set body class
+             // Make variables available to the view scope before including it
+             extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
+             require_once __DIR__ . '/views/about.php'; // Require the *new* view file
              break;
         case 'error': // Explicit error page route
             $pageTitle = 'Error';
@@ -394,7 +397,7 @@ define('SECURITY_SETTINGS', [
         'X-Content-Type-Options' => 'nosniff',
         'Referrer-Policy' => 'strict-origin-when-cross-origin',
         // CSP tightened: removed 'unsafe-inline' from script-src and style-src
-        // 'Content-Security-Policy' => "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; frame-src https://js.stripe.com; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com",
+        'Content-Security-Policy' => "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; frame-src https://js.stripe.com; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com",
         'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains'
     ],
     'file_upload' => [

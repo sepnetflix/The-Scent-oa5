@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contact Us</title>
+    <title>Login - The Scent</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -36,10 +36,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/css/style.css">
 </head>
-<body class="">
+<body class="page-login bg-gradient-to-br from-light to-secondary/20">
 
     <!-- Global CSRF Token Input for JavaScript AJAX Requests -->
-    <input type="hidden" id="csrf-token-value" value="b974b5a72e0637fe69bfeba37ef053117c29017401d22a2792ad6077e69e15bc">
+    <input type="hidden" id="csrf-token-value" value="fb40f792b113d6417de16ec8f3310a905b85f53635e7bbefcf6e902183378a97">
 
     <header>
         <nav class="main-nav sample-header">
@@ -84,26 +84,67 @@
         <!-- Container for dynamically added flash messages by JS -->
         <div class="flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full space-y-2"></div>
 
-<main class="container py-12">
-    <h1 class="text-3xl font-heading mb-6">Contact Us</h1>
-    <p class="mb-4">Have a question or need help? Fill out the form below and our team will get back to you as soon as possible.</p>
-    <form method="post" class="max-w-lg bg-white p-6 rounded shadow" action="#">
-        <input type="hidden" name="csrf_token" id="csrf-token-value" value="b974b5a72e0637fe69bfeba37ef053117c29017401d22a2792ad6077e69e15bc">
-        <div class="mb-4">
-            <label for="name" class="block font-medium mb-1">Name</label>
-            <input type="text" id="name" name="name" class="w-full border rounded px-3 py-2" required>
+
+<section class="auth-section flex items-center justify-center min-h-[calc(100vh-80px)] py-12 px-4">
+    <div class="container max-w-md mx-auto">
+        <div class="auth-container bg-white p-8 md:p-10 rounded-xl shadow-2xl" data-aos="fade-up">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold font-heading text-primary mb-2">Welcome Back</h1>
+                <p class="text-gray-600">Log in to continue your journey with The Scent.</p>
+            </div>
+
+            
+            <form action="index.php?page=login" method="POST" class="auth-form space-y-6" id="loginForm">
+                 <!-- CSRF Token is output globally in header, read by JS -->
+                <div class="form-group">
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                    <input type="email" id="email" name="email" required
+                           class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary transition duration-150 ease-in-out"
+                           value=""
+                           placeholder="you@example.com">
+                </div>
+
+                <div class="form-group">
+                    <div class="flex justify-between items-baseline mb-1">
+                         <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                         <a href="index.php?page=forgot_password" class="text-sm text-primary hover:text-primary-dark font-medium transition duration-150 ease-in-out">Forgot Password?</a>
+                    </div>
+                    <div class="password-input relative">
+                        <input type="password" id="password" name="password" required
+                               class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary transition duration-150 ease-in-out"
+                               placeholder="Enter your password">
+                        <button type="button" class="toggle-password absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-primary transition duration-150 ease-in-out" aria-label="Toggle password visibility">
+                            <i class="fas fa-eye text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group flex items-center justify-between">
+                    <label class="checkbox-label flex items-center text-sm text-gray-700 cursor-pointer">
+                        <input type="checkbox" name="remember_me" value="1"
+                               class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary mr-2"
+                               >
+                        <span>Keep me logged in</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="btn-primary w-full py-3 text-lg font-semibold rounded-md shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-dark transition duration-150 ease-in-out flex items-center justify-center" id="submitButton">
+                    <span class="button-text">Log In</span>
+                    <span class="button-loader hidden ml-2">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </span>
+                </button>
+            </form>
+
+            <div class="auth-links mt-8 pt-6 border-t border-gray-200 text-center">
+                <p class="text-sm text-gray-600">Don't have an account?
+                     <a href="index.php?page=register" class="font-medium text-primary hover:text-primary-dark transition duration-150 ease-in-out">Create one now</a>
+                </p>
+            </div>
         </div>
-        <div class="mb-4">
-            <label for="email" class="block font-medium mb-1">Email</label>
-            <input type="email" id="email" name="email" class="w-full border rounded px-3 py-2" required>
-        </div>
-        <div class="mb-4">
-            <label for="message" class="block font-medium mb-1">Message</label>
-            <textarea id="message" name="message" class="w-full border rounded px-3 py-2" rows="5" required></textarea>
-        </div>
-        <button type="submit" class="btn-primary">Send Message</button>
-    </form>
-</main>
+    </div>
+</section>
+
 </main>
     <footer>
         <div class="container">
@@ -144,7 +185,7 @@
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="b974b5a72e0637fe69bfeba37ef053117c29017401d22a2792ad6077e69e15bc">
+                        <input type="hidden" name="csrf_token" value="fb40f792b113d6417de16ec8f3310a905b85f53635e7bbefcf6e902183378a97">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>

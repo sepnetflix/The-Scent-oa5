@@ -297,9 +297,12 @@ try {
             require_once __DIR__ . '/views/privacy.php';
             break;
         case 'about': // Add route for about page if needed
-             $pageTitle = 'About Us - The Scent';
-             $csrfToken = SecurityMiddleware::generateCSRFToken();
-             require_once __DIR__ . '/views/about.php'; // Assuming views/about.php exists
+             $pageTitle = 'About Us - The Scent'; // Set here for consistency
+             $csrfToken = SecurityMiddleware::generateCSRFToken(); // Generate token
+             $bodyClass = 'page-about'; // Set body class
+             // Make variables available to the view scope before including it
+             extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
+             require_once __DIR__ . '/views/about.php'; // Require the *new* view file
              break;
         case 'error': // Explicit error page route
             $pageTitle = 'Error';

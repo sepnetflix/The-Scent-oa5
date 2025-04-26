@@ -498,8 +498,10 @@ class AccountController extends BaseController {
              $data = [
                  'pageTitle' => 'Login - The Scent',
                  'csrfToken' => $this->generateCSRFToken(),
-                 'bodyClass' => 'page-login' // Added body class
+                 // *** APPLY FIX HERE ***
+                 'bodyClass' => 'page-login bg-gradient-to-br from-light to-secondary/20'
              ];
+             // Use renderView to pass data correctly
              echo $this->renderView('login', $data);
              return;
         }

@@ -387,389 +387,6 @@ class SecurityMiddleware {
 
 ```
 
-# controllers/ProductController.php  
-```php
-<?php
-require_once __DIR__ . '/BaseController.php';
-require_once __DIR__ . '/../models/Product.php';
-
-class ProductController extends BaseController {
-    private $productModel;
-    private $itemsPerPage = 12;
-    private $cache = [];
-    
-    public function __construct($pdo) {
-        parent::__construct($pdo);
-        $this->productModel = new Product($pdo);
-    }
-    
-    public function showHomePage() {
-        try {
-            $featuredProducts = $this->productModel->getFeatured();
-            if (empty($featuredProducts)) {
-                $this->logSecurityEvent('no_featured_products', null, ['ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
-            }
-            $csrfToken = $this->getCsrfToken();
-            extract([
-                'featuredProducts' => $featuredProducts,
-                'csrfToken' => $csrfToken
-            ]);
-            require_once __DIR__ . '/../views/home.php';
-        } catch (Exception $e) {
-            $this->logSecurityEvent('error_show_home', null, ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
-            $this->setFlashMessage('An error occurred while loading the page', 'error');
-            $this->redirect('error');
-        }
-    }
-    
-    public function showProductList() {
-        try {
-            $page = 1;
-            if (isset($_GET['page_num']) && is_numeric($_GET['page_num']) && (int)$_GET['page_num'] > 0) {
-                $page = (int)$_GET['page_num'];
-            }
-            $categoryId = isset($_GET['category']) ? $this->validateInput($_GET['category'], 'int') : null;
-            $sortBy = $this->validateInput($_GET['sort'] ?? 'name_asc', 'string');
-            $minPrice = $this->validateInput($_GET['min_price'] ?? null, 'float');
-            $maxPrice = $this->validateInput($_GET['max_price'] ?? null, 'float');
-            // Calculate pagination
-            $offset = ($page - 1) * $this->itemsPerPage;
-            
-            // Get products based on filters
-            $conditions = [];
-            $params = [];
-            
-            // Only add search condition if 'search' is present in GET and is not empty
-            if (isset($_GET['search']) && trim($_GET['search']) !== '') {
-                $searchQuery = $this->validateInput($_GET['search'], 'string');
-                if (!empty($searchQuery)) {
-                    $conditions[] = "(name LIKE ? OR description LIKE ?)";
-                    $params[] = "%{$searchQuery}%";
-                    $params[] = "%{$searchQuery}%";
-                }
-            } else {
-                $searchQuery = '';
-            }
-            
-            // Only add category filter if $categoryId is a valid, non-zero integer
-            if ($categoryId !== null && $categoryId !== false && is_numeric($categoryId) && (int)$categoryId > 0) {
-                $conditions[] = "category_id = ?";
-                $params[] = (int)$categoryId;
-            }
-            
-            // Only add min price filter if $minPrice is not null and is numeric
-            if ($minPrice !== null && is_numeric($minPrice)) {
-                $conditions[] = "price >= ?";
-                $params[] = $minPrice;
-            }
-            
-            // Only add max price filter if $maxPrice is not null and is numeric
-            if ($maxPrice !== null && is_numeric($maxPrice)) {
-                $conditions[] = "price <= ?";
-                $params[] = $maxPrice;
-            }
-            
-            // Get total count for pagination
-            $totalProducts = $this->productModel->getCount($conditions, $params);
-            $totalPages = ceil($totalProducts / $this->itemsPerPage);
-            
-            // Get paginated products
-            $products = $this->productModel->getFiltered(
-                $conditions,
-                $params,
-                $sortBy,
-                $this->itemsPerPage,
-                $offset
-            );
-            
-            // Get categories for filter menu
-            $categories = $this->productModel->getAllCategories();
-            
-            // Set page title
-            $categoryName = null;
-            if ($categoryId) {
-                foreach ($categories as $cat) {
-                    if ($cat['id'] == $categoryId) {
-                        $categoryName = $cat['name'];
-                        break;
-                    }
-                }
-            }
-            $pageTitle = $searchQuery ?
-                "Search Results for \"" . htmlspecialchars($searchQuery) . "\"" :
-                ($categoryId ? ($categoryName ? htmlspecialchars($categoryName) . " Products" : "Category Products") : "All Products");
-            
-            $csrfToken = $this->getCsrfToken();
-            // Prepare pagination data
-            $paginationData = [
-                'currentPage' => $page,
-                'totalPages' => $totalPages,
-                'baseUrl' => 'index.php?page=products'
-            ];
-            $queryParams = $_GET;
-            unset($queryParams['page'], $queryParams['page_num']);
-            if (!empty($queryParams)) {
-                $paginationData['baseUrl'] .= '&' . http_build_query($queryParams);
-            }
-            extract([
-                'products' => $products,
-                'categories' => $categories,
-                'csrfToken' => $csrfToken,
-                'pageTitle' => $pageTitle,
-                'searchQuery' => $searchQuery,
-                'sortBy' => $sortBy,
-                'paginationData' => $paginationData,
-                'categoryId' => $categoryId ?? null
-            ]);
-            require_once __DIR__ . '/../views/products.php';
-        } catch (Exception $e) {
-            $this->logSecurityEvent('error_show_product_list', null, ['error' => $e->getMessage(), 'ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
-            $this->setFlashMessage('Error loading products', 'error');
-            $this->redirect('error');
-        }
-    }
-    
-    public function showProduct($id) {
-        try {
-            $id = $this->validateInput($id, 'int');
-            if (!$id) {
-                throw new Exception('Invalid product ID');
-            }
-            
-            // Check cache
-            $cacheKey = "product_{$id}";
-            if (!isset($this->cache[$cacheKey])) {
-                $this->cache[$cacheKey] = $this->productModel->getById($id);
-            }
-            
-            $product = $this->cache[$cacheKey];
-            
-            if (!$product) {
-                require_once __DIR__ . '/../views/404.php';
-                return;
-            }
-            
-            // Use category_id for related products
-            $categoryId = isset($product['category_id']) ? $product['category_id'] : null;
-            $relatedProducts = [];
-            if ($categoryId) {
-                $relatedProducts = $this->productModel->getRelated($categoryId, $id, 4);
-            }
-            
-            $csrfToken = $this->getCsrfToken();
-            require_once __DIR__ . '/../views/product_detail.php';
-        } catch (Exception $e) {
-            error_log("Error loading product details: " . $e->getMessage());
-            $this->setFlashMessage('Error loading product details', 'error');
-            $this->redirect('products');
-        }
-    }
-    
-    public function createProduct() {
-        try {
-            $this->requireAdmin();
-            $this->validateCSRF();
-            
-            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-                $data = [
-                    'name' => $this->validateInput($_POST['name'], 'string'),
-                    'description' => $this->validateInput($_POST['description'], 'string'),
-                    'price' => $this->validateInput($_POST['price'], 'float'),
-                    'category' => $this->validateInput($_POST['category'], 'string'),
-                    'image_url' => $this->validateInput($_POST['image_url'], 'url'),
-                    'stock_quantity' => $this->validateInput($_POST['stock_quantity'] ?? 0, 'int'),
-                    'low_stock_threshold' => $this->validateInput($_POST['low_stock_threshold'] ?? 5, 'int'),
-                    'featured' => isset($_POST['featured']) ? 1 : 0,
-                    'created_by' => $this->getUserId()
-                ];
-                
-                // Validate required fields
-                foreach (['name', 'price', 'category'] as $field) {
-                    if (empty($data[$field])) {
-                        throw new Exception("Missing required field: {$field}");
-                    }
-                }
-                
-                $this->beginTransaction();
-                
-                $productId = $this->productModel->create($data);
-                
-                if ($productId) {
-                    // Clear cache
-                    $this->clearProductCache();
-                    
-                    // Audit log for product creation
-                    $userId = $this->getUserId();
-                    $this->logAuditTrail('product_create', $userId, [
-                        'product_id' => $productId,
-                        'name' => $data['name'],
-                        'ip' => $_SERVER['REMOTE_ADDR'] ?? null
-                    ]);
-                    
-                    $this->commit();
-                    $this->setFlashMessage('Product created successfully', 'success');
-                    $this->redirect('admin/products');
-                }
-            }
-            
-            $categories = $this->productModel->getAllCategories();
-            require_once __DIR__ . '/../views/admin/product_form.php';
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            error_log("Error creating product: " . $e->getMessage());
-            $this->setFlashMessage($e->getMessage(), 'error');
-            $this->redirect('admin/products/create');
-        }
-    }
-    
-    public function updateProduct($id) {
-        try {
-            $this->requireAdmin();
-            $this->validateCSRF();
-            
-            $id = $this->validateInput($id, 'int');
-            if (!$id) {
-                throw new Exception('Invalid product ID');
-            }
-            
-            $product = $this->productModel->getById($id);
-            if (!$product) {
-                throw new Exception('Product not found');
-            }
-            
-            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-                $data = [
-                    'name' => $this->validateInput($_POST['name'], 'string'),
-                    'description' => $this->validateInput($_POST['description'], 'string'),
-                    'price' => $this->validateInput($_POST['price'], 'float'),
-                    'category' => $this->validateInput($_POST['category'], 'string'),
-                    'image_url' => $this->validateInput($_POST['image_url'], 'url'),
-                    'stock_quantity' => $this->validateInput($_POST['stock_quantity'] ?? 0, 'int'),
-                    'low_stock_threshold' => $this->validateInput($_POST['low_stock_threshold'] ?? 5, 'int'),
-                    'featured' => isset($_POST['featured']) ? 1 : 0,
-                    'updated_by' => $this->getUserId()
-                ];
-                
-                $this->beginTransaction();
-                
-                if ($this->productModel->update($id, $data)) {
-                    // Clear cache
-                    $this->clearProductCache();
-                    
-                    // Audit log for product update
-                    $userId = $this->getUserId();
-                    $this->logAuditTrail('product_update', $userId, [
-                        'product_id' => $id,
-                        'name' => $data['name'],
-                        'ip' => $_SERVER['REMOTE_ADDR'] ?? null
-                    ]);
-                    
-                    $this->commit();
-                    $this->setFlashMessage('Product updated successfully', 'success');
-                    $this->redirect('admin/products');
-                }
-            }
-            
-            $categories = $this->productModel->getAllCategories();
-            require_once __DIR__ . '/../views/admin/product_form.php';
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            error_log("Error updating product: " . $e->getMessage());
-            $this->setFlashMessage($e->getMessage(), 'error');
-            $this->redirect("admin/products/edit/{$id}");
-        }
-    }
-    
-    public function deleteProduct($id) {
-        try {
-            $this->requireAdmin();
-            $this->validateCSRF();
-            
-            $id = $this->validateInput($id, 'int');
-            if (!$id) {
-                throw new Exception('Invalid product ID');
-            }
-            
-            $this->beginTransaction();
-            
-            if ($this->productModel->delete($id)) {
-                // Clear cache
-                $this->clearProductCache();
-                
-                // Audit log for product deletion
-                $userId = $this->getUserId();
-                $this->logAuditTrail('product_delete', $userId, [
-                    'product_id' => $id,
-                    'ip' => $_SERVER['REMOTE_ADDR'] ?? null
-                ]);
-                
-                $this->commit();
-                $this->setFlashMessage('Product deleted successfully', 'success');
-            }
-            
-            $this->redirect('admin/products');
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            error_log("Error deleting product: " . $e->getMessage());
-            $this->setFlashMessage($e->getMessage(), 'error');
-            $this->redirect('admin/products');
-        }
-    }
-    
-    private function clearProductCache() {
-        $this->cache = [];
-    }
-    
-    public function searchProducts() {
-        try {
-            $query = $this->validateInput($_GET['q'] ?? '', 'string');
-            if (strlen($query) < 2) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'message' => 'Search query too short'
-                ], 400);
-            }
-            
-            $results = $this->productModel->search($query, 10);
-            
-            return $this->jsonResponse([
-                'success' => true,
-                'results' => $results
-            ]);
-            
-        } catch (Exception $e) {
-            error_log("Search error: " . $e->getMessage());
-            return $this->jsonResponse([
-                'success' => false,
-                'message' => 'Error performing search'
-            ], 500);
-        }
-    }
-    
-    public function getProduct($id) {
-        try {
-            return $this->productModel->getById($id);
-        } catch (Exception $e) {
-            error_log("Error getting product: " . $e->getMessage());
-            throw $e;
-        }
-    }
-    
-    public function getAllProducts() {
-        try {
-            return $this->productModel->getAll();
-        } catch (Exception $e) {
-            error_log("Error getting all products: " . $e->getMessage());
-            throw $e;
-        }
-    }
-}
-
-```
-
 # models/Cart.php  
 ```php
 <?php
@@ -2626,5 +2243,1115 @@ function fetchMiniCart() {
 
 // --- END OF UPDATED main.js ---
 
+```
+
+# controllers/PaymentController.php  
+```php
+<?php
+require_once __DIR__ . '/BaseController.php';
+require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../config.php';
+
+class PaymentController extends BaseController {
+    private $stripe;
+    private $webhookSecret;
+    
+    public function __construct($pdo = null) {
+        parent::__construct($pdo);
+        $this->stripe = new \Stripe\StripeClient(STRIPE_SECRET_KEY);
+        $this->webhookSecret = STRIPE_WEBHOOK_SECRET;
+    }
+    
+    public function createPaymentIntent($amount, $currency = 'usd') {
+        try {
+            // Validate input
+            $amount = $this->validateInput($amount, 'float');
+            $currency = $this->validateInput($currency, 'string');
+            
+            if ($amount <= 0) {
+                throw new Exception('Invalid payment amount');
+            }
+            
+            $paymentIntent = $this->stripe->paymentIntents->create([
+                'amount' => (int)($amount * 100), // Convert to cents
+                'currency' => strtolower($currency),
+                'automatic_payment_methods' => ['enabled' => true],
+                'metadata' => [
+                    'user_id' => $this->getUserId() ?? 'guest',
+                    'ip_address' => $_SERVER['REMOTE_ADDR']
+                ]
+            ]);
+            
+            return [
+                'success' => true,
+                'clientSecret' => $paymentIntent->client_secret
+            ];
+            
+        } catch (\Stripe\Exception\ApiErrorException $e) {
+            error_log("Stripe API Error: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Payment processing failed'
+            ];
+        } catch (Exception $e) {
+            error_log("Payment Intent Error: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Invalid payment request'
+            ];
+        }
+    }
+    
+    public function processPayment($orderId) {
+        try {
+            $this->validateCSRF();
+            $orderId = $this->validateInput($orderId, 'int');
+            
+            if (!$orderId) {
+                throw new Exception('Invalid order ID');
+            }
+            
+            $this->beginTransaction();
+            
+            // Get order details
+            $stmt = $this->pdo->prepare("SELECT * FROM orders WHERE id = ?");
+            $stmt->execute([$orderId]);
+            $order = $stmt->fetch();
+            
+            if (!$order) {
+                throw new Exception('Order not found');
+            }
+            
+            // Verify order belongs to current user
+            if ($order['user_id'] !== $this->getUserId()) {
+                throw new Exception('Unauthorized access to order');
+            }
+            
+            // Create payment intent
+            $result = $this->createPaymentIntent($order['total_amount']);
+            if (!$result['success']) {
+                throw new Exception($result['error']);
+            }
+            
+            // Update order with payment intent
+            $stmt = $this->pdo->prepare("
+                UPDATE orders 
+                SET payment_intent_id = ?,
+                    updated_at = NOW()
+                WHERE id = ?
+            ");
+            $stmt->execute([$result['clientSecret'], $orderId]);
+            
+            $this->commit();
+            return $result;
+            
+        } catch (Exception $e) {
+            $this->rollback();
+            error_log("Payment Processing Error: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Payment processing failed'
+            ];
+        }
+    }
+    
+    public function handleWebhook() {
+        try {
+            $payload = @file_get_contents('php://input');
+            $sigHeader = $_SERVER['HTTP_STRIPE_SIGNATURE'];
+            
+            // Verify webhook signature
+            try {
+                $event = \Stripe\Webhook::constructEvent(
+                    $payload,
+                    $sigHeader,
+                    $this->webhookSecret
+                );
+            } catch (\UnexpectedValueException $e) {
+                throw new Exception('Invalid payload');
+            } catch (\Stripe\Exception\SignatureVerificationException $e) {
+                throw new Exception('Invalid signature');
+            }
+            
+            $this->beginTransaction();
+            
+            switch ($event->type) {
+                case 'payment_intent.succeeded':
+                    $this->handleSuccessfulPayment($event->data->object);
+                    break;
+                    
+                case 'payment_intent.payment_failed':
+                    $this->handleFailedPayment($event->data->object);
+                    break;
+                    
+                case 'charge.dispute.created':
+                    $this->handleDisputeCreated($event->data->object);
+                    break;
+                    
+                case 'charge.refunded':
+                    $this->handleRefund($event->data->object);
+                    break;
+            }
+            
+            $this->commit();
+            return $this->jsonResponse(['success' => true]);
+            
+        } catch (Exception $e) {
+            $this->rollback();
+            error_log("Webhook Error: " . $e->getMessage());
+            return $this->jsonResponse(
+                ['success' => false, 'error' => $e->getMessage()],
+                400
+            );
+        }
+    }
+    
+    private function handleSuccessfulPayment($paymentIntent) {
+        $stmt = $this->pdo->prepare("
+            UPDATE orders 
+            SET status = 'paid', 
+                payment_status = 'completed',
+                paid_at = NOW(),
+                updated_at = NOW()
+            WHERE payment_intent_id = ?
+        ");
+        
+        if (!$stmt->execute([$paymentIntent->client_secret])) {
+            throw new Exception('Failed to update order payment status');
+        }
+        
+        // Get order details for notification
+        $stmt = $this->pdo->prepare("
+            SELECT o.*, u.email 
+            FROM orders o
+            JOIN users u ON o.user_id = u.id
+            WHERE o.payment_intent_id = ?
+        ");
+        $stmt->execute([$paymentIntent->client_secret]);
+        $order = $stmt->fetch();
+        
+        if ($order) {
+            // Send payment confirmation email
+            $this->emailService->sendPaymentConfirmation($order);
+        }
+    }
+    
+    private function handleFailedPayment($paymentIntent) {
+        $stmt = $this->pdo->prepare("
+            UPDATE orders 
+            SET status = 'payment_failed',
+                payment_status = 'failed',
+                updated_at = NOW()
+            WHERE payment_intent_id = ?
+        ");
+        
+        if (!$stmt->execute([$paymentIntent->client_secret])) {
+            throw new Exception('Failed to update order payment status');
+        }
+        
+        // Get order details for notification
+        $stmt = $this->pdo->prepare("
+            SELECT o.*, u.email 
+            FROM orders o
+            JOIN users u ON o.user_id = u.id
+            WHERE o.payment_intent_id = ?
+        ");
+        $stmt->execute([$paymentIntent->client_secret]);
+        $order = $stmt->fetch();
+        
+        if ($order) {
+            // Send payment failed notification
+            $this->emailService->sendPaymentFailedNotification($order);
+        }
+    }
+    
+    private function handleDisputeCreated($dispute) {
+        $stmt = $this->pdo->prepare("
+            UPDATE orders 
+            SET status = 'disputed',
+                dispute_id = ?,
+                disputed_at = NOW(),
+                updated_at = NOW()
+            WHERE payment_intent_id = ?
+        ");
+        
+        if (!$stmt->execute([$dispute->id, $dispute->payment_intent])) {
+            throw new Exception('Failed to update order dispute status');
+        }
+        
+        // Log dispute details for review
+        error_log("Dispute created for payment: " . $dispute->payment_intent);
+    }
+    
+    private function handleRefund($charge) {
+        $stmt = $this->pdo->prepare("
+            UPDATE orders 
+            SET status = 'refunded',
+                refund_id = ?,
+                refunded_at = NOW(),
+                updated_at = NOW()
+            WHERE payment_intent_id = ?
+        ");
+        
+        if (!$stmt->execute([$charge->refunds->data[0]->id, $charge->payment_intent])) {
+            throw new Exception('Failed to update order refund status');
+        }
+        
+        // Get order details for notification
+        $stmt = $this->pdo->prepare("
+            SELECT o.*, u.email 
+            FROM orders o
+            JOIN users u ON o.user_id = u.id
+            WHERE o.payment_intent_id = ?
+        ");
+        $stmt->execute([$charge->payment_intent]);
+        $order = $stmt->fetch();
+        
+        if ($order) {
+            // Send refund confirmation email
+            $this->emailService->sendRefundConfirmation($order);
+        }
+    }
+}
+```
+
+# controllers/TaxController.php  
+```php
+<?php
+require_once __DIR__ . '/BaseController.php';
+
+class TaxController extends BaseController {
+    private $cache = [];
+    
+    public function calculateTax($subtotal, $country, $state = null) {
+        try {
+            $subtotal = $this->validateInput($subtotal, 'float');
+            $country = $this->validateInput($country, 'string');
+            $state = $this->validateInput($state, 'string');
+            
+            if (!$subtotal || !$country) {
+                throw new Exception('Invalid tax calculation parameters');
+            }
+            
+            // Check cache first
+            $cacheKey = "{$country}_{$state}";
+            if (isset($this->cache[$cacheKey])) {
+                return round($subtotal * $this->cache[$cacheKey], 2);
+            }
+            
+            // Get tax rate from database
+            $stmt = $this->pdo->prepare("
+                SELECT rate 
+                FROM tax_rates 
+                WHERE country_code = ? 
+                AND (state_code = ? OR state_code IS NULL)
+                AND is_active = TRUE
+                AND start_date <= NOW()
+                AND (end_date IS NULL OR end_date > NOW())
+                ORDER BY state_code IS NULL
+                LIMIT 1
+            ");
+            $stmt->execute([$country, $state]);
+            $result = $stmt->fetch();
+            
+            $rate = $result ? $result['rate'] : 0;
+            $this->cache[$cacheKey] = $rate;
+            
+            return round($subtotal * $rate, 2);
+            
+        } catch (Exception $e) {
+            error_log("Tax calculation error: " . $e->getMessage());
+            return 0;
+        }
+    }
+    
+    public function getTaxRate($country, $state = null) {
+        try {
+            $country = $this->validateInput($country, 'string');
+            $state = $this->validateInput($state, 'string');
+            
+            if (!$country) return 0;
+            
+            // Check cache first
+            $cacheKey = "{$country}_{$state}";
+            if (isset($this->cache[$cacheKey])) {
+                return $this->cache[$cacheKey];
+            }
+            
+            $stmt = $this->pdo->prepare("
+                SELECT rate 
+                FROM tax_rates 
+                WHERE country_code = ? 
+                AND (state_code = ? OR state_code IS NULL)
+                AND is_active = TRUE
+                AND start_date <= NOW()
+                AND (end_date IS NULL OR end_date > NOW())
+                ORDER BY state_code IS NULL
+                LIMIT 1
+            ");
+            $stmt->execute([$country, $state]);
+            $result = $stmt->fetch();
+            
+            $rate = $result ? $result['rate'] : 0;
+            $this->cache[$cacheKey] = $rate;
+            
+            return $rate;
+            
+        } catch (Exception $e) {
+            error_log("Tax rate lookup error: " . $e->getMessage());
+            return 0;
+        }
+    }
+    
+    public function formatTaxRate($rate) {
+        return number_format($rate * 100, 2) . '%';
+    }
+    
+    public function getAllTaxRates() {
+        try {
+            $this->requireAdmin();
+            
+            $stmt = $this->pdo->query("
+                SELECT 
+                    tr.*,
+                    COUNT(th.id) as change_count,
+                    MAX(th.created_at) as last_modified
+                FROM tax_rates tr
+                LEFT JOIN tax_rate_history th ON tr.id = th.tax_rate_id
+                GROUP BY tr.id
+                ORDER BY tr.country_code, tr.state_code
+            ");
+            
+            return $this->jsonResponse([
+                'success' => true,
+                'rates' => $stmt->fetchAll()
+            ]);
+            
+        } catch (Exception $e) {
+            error_log("Error fetching tax rates: " . $e->getMessage());
+            return $this->jsonResponse([
+                'success' => false,
+                'message' => 'Failed to retrieve tax rates'
+            ], 500);
+        }
+    }
+    
+    public function updateTaxRate() {
+        try {
+            $this->requireAdmin();
+            $this->validateCSRF();
+            
+            $data = [
+                'country_code' => $this->validateInput($_POST['country_code'], 'string'),
+                'state_code' => $this->validateInput($_POST['state_code'] ?? null, 'string'),
+                'rate' => $this->validateInput($_POST['rate'], 'float'),
+                'start_date' => $this->validateInput($_POST['start_date'] ?? date('Y-m-d'), 'string'),
+                'end_date' => $this->validateInput($_POST['end_date'] ?? null, 'string'),
+                'is_active' => isset($_POST['is_active']) ? true : false
+            ];
+            
+            if (!$data['country_code'] || $data['rate'] < 0) {
+                return $this->jsonResponse([
+                    'success' => false,
+                    'message' => 'Invalid tax rate data'
+                ], 400);
+            }
+            
+            $this->beginTransaction();
+            
+            // Get existing rate if any
+            $stmt = $this->pdo->prepare("
+                SELECT id, rate 
+                FROM tax_rates 
+                WHERE country_code = ? 
+                AND (state_code = ? OR (state_code IS NULL AND ? IS NULL))
+            ");
+            $stmt->execute([
+                $data['country_code'],
+                $data['state_code'],
+                $data['state_code']
+            ]);
+            $existing = $stmt->fetch();
+            
+            if ($existing) {
+                // Update existing rate
+                $stmt = $this->pdo->prepare("
+                    UPDATE tax_rates 
+                    SET rate = ?,
+                        start_date = ?,
+                        end_date = ?,
+                        is_active = ?,
+                        updated_at = NOW()
+                    WHERE id = ?
+                ");
+                $stmt->execute([
+                    $data['rate'],
+                    $data['start_date'],
+                    $data['end_date'],
+                    $data['is_active'],
+                    $existing['id']
+                ]);
+                
+                // Log the change
+                if ($existing['rate'] != $data['rate']) {
+                    $this->logRateChange(
+                        $existing['id'],
+                        $existing['rate'],
+                        $data['rate']
+                    );
+                }
+            } else {
+                // Insert new rate
+                $stmt = $this->pdo->prepare("
+                    INSERT INTO tax_rates (
+                        country_code,
+                        state_code,
+                        rate,
+                        start_date,
+                        end_date,
+                        is_active,
+                        created_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $data['country_code'],
+                    $data['state_code'],
+                    $data['rate'],
+                    $data['start_date'],
+                    $data['end_date'],
+                    $data['is_active'],
+                    $this->getUserId()
+                ]);
+                
+                $rateId = $this->pdo->lastInsertId();
+                $this->logRateChange($rateId, 0, $data['rate']);
+            }
+            
+            // Clear cache for this region
+            $cacheKey = "{$data['country_code']}_{$data['state_code']}";
+            unset($this->cache[$cacheKey]);
+            
+            $this->commit();
+            
+            return $this->jsonResponse([
+                'success' => true,
+                'message' => 'Tax rate updated successfully'
+            ]);
+            
+        } catch (Exception $e) {
+            $this->rollback();
+            error_log("Tax rate update error: " . $e->getMessage());
+            
+            return $this->jsonResponse([
+                'success' => false,
+                'message' => 'Failed to update tax rate'
+            ], 500);
+        }
+    }
+    
+    private function logRateChange($rateId, $oldRate, $newRate) {
+        $stmt = $this->pdo->prepare("
+            INSERT INTO tax_rate_history (
+                tax_rate_id,
+                old_rate,
+                new_rate,
+                changed_by
+            ) VALUES (?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $rateId,
+            $oldRate,
+            $newRate,
+            $this->getUserId()
+        ]);
+    }
+    
+    public function getTaxRateHistory($rateId) {
+        try {
+            $this->requireAdmin();
+            
+            $rateId = $this->validateInput($rateId, 'int');
+            if (!$rateId) {
+                throw new Exception('Invalid tax rate ID');
+            }
+            
+            $stmt = $this->pdo->prepare("
+                SELECT 
+                    th.*,
+                    u.name as changed_by_name
+                FROM tax_rate_history th
+                LEFT JOIN users u ON th.changed_by = u.id
+                WHERE th.tax_rate_id = ?
+                ORDER BY th.created_at DESC
+            ");
+            $stmt->execute([$rateId]);
+            
+            return $this->jsonResponse([
+                'success' => true,
+                'history' => $stmt->fetchAll()
+            ]);
+            
+        } catch (Exception $e) {
+            error_log("Error fetching tax rate history: " . $e->getMessage());
+            return $this->jsonResponse([
+                'success' => false,
+                'message' => 'Failed to retrieve tax rate history'
+            ], 500);
+        }
+    }
+}
+```
+
+# controllers/InventoryController.php  
+```php
+<?php
+require_once __DIR__ . '/BaseController.php';
+require_once __DIR__ . '/../models/Product.php';
+require_once __DIR__ . '/../includes/EmailService.php';
+
+class InventoryController extends BaseController {
+    private $emailService;
+    private $alertThreshold = 5; // Alert when stock drops below this percentage of initial stock
+    
+    public function __construct($pdo) {
+        parent::__construct($pdo);
+        $this->emailService = new EmailService();
+    }
+    
+    public function updateStock($productId, $quantity, $type = 'adjustment', $referenceId = null, $notes = null) {
+        try {
+            $this->requireAdmin();
+            $this->validateCSRF();
+            
+            // Validate inputs
+            $productId = $this->validateInput($productId, 'int');
+            $quantity = $this->validateInput($quantity, 'float');
+            $type = $this->validateInput($type, 'string');
+            $referenceId = $this->validateInput($referenceId, 'int');
+            $notes = $this->validateInput($notes, 'string');
+            
+            if (!$productId || !$quantity) {
+                throw new Exception('Invalid product or quantity');
+            }
+            
+            $this->beginTransaction();
+            
+            // Get current stock with locking
+            $stmt = $this->pdo->prepare("
+                SELECT id, name, stock_quantity, initial_stock, 
+                       backorder_allowed, low_stock_threshold
+                FROM products 
+                WHERE id = ? 
+                FOR UPDATE
+            ");
+            $stmt->execute([$productId]);
+            $product = $stmt->fetch();
+            
+            if (!$product) {
+                throw new Exception('Product not found');
+            }
+            
+            // Check if we have enough stock for reduction
+            if ($quantity < 0 && !$product['backorder_allowed'] && 
+                ($product['stock_quantity'] + $quantity) < 0) {
+                throw new Exception('Insufficient stock');
+            }
+            
+            // Update product stock
+            $stmt = $this->pdo->prepare("
+                UPDATE products 
+                SET stock_quantity = stock_quantity + ?,
+                    updated_at = NOW()
+                WHERE id = ?
+            ");
+            $stmt->execute([$quantity, $productId]);
+            
+            // Record movement with audit trail
+            $stmt = $this->pdo->prepare("
+                INSERT INTO inventory_movements (
+                    product_id, 
+                    quantity_change, 
+                    previous_quantity,
+                    new_quantity,
+                    type, 
+                    reference_id, 
+                    notes, 
+                    created_by,
+                    ip_address
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $productId,
+                $quantity,
+                $product['stock_quantity'],
+                $product['stock_quantity'] + $quantity,
+                $type,
+                $referenceId,
+                $notes,
+                $this->getUserId(),
+                $_SERVER['REMOTE_ADDR']
+            ]);
+            
+            // Check stock levels and send alerts if needed
+            $newQuantity = $product['stock_quantity'] + $quantity;
+            $this->checkStockLevels($product, $newQuantity);
+            
+            $this->commit();
+            
+            return $this->jsonResponse([
+                'success' => true,
+                'message' => 'Stock updated successfully',
+                'new_quantity' => $newQuantity
+            ]);
+            
+        } catch (Exception $e) {
+            $this->rollback();
+            error_log("Stock update error: " . $e->getMessage());
+            
+            return $this->jsonResponse([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    private function checkStockLevels($product, $newQuantity) {
+        // Check if stock is below threshold
+        if ($newQuantity <= $product['low_stock_threshold']) {
+            // Log low stock alert
+            error_log("Low stock alert: {$product['name']} has only {$newQuantity} units left");
+            
+            // Calculate stock percentage
+            $stockPercentage = $product['initial_stock'] > 0 
+                ? ($newQuantity / $product['initial_stock']) * 100 
+                : 0;
+            
+            // Send alert if stock is critically low
+            if ($stockPercentage <= $this->alertThreshold) {
+                $this->emailService->sendLowStockAlert(
+                    $product['name'],
+                    $newQuantity,
+                    $product['initial_stock'],
+                    $stockPercentage
+                );
+            }
+        }
+    }
+    
+    public function getInventoryMovements($productId, $startDate = null, $endDate = null, $type = null) {
+        try {
+            $this->requireAdmin();
+            
+            $productId = $this->validateInput($productId, 'int');
+            $startDate = $this->validateInput($startDate, 'string');
+            $endDate = $this->validateInput($endDate, 'string');
+            $type = $this->validateInput($type, 'string');
+            
+            if (!$productId) {
+                throw new Exception('Invalid product ID');
+            }
+            
+            $params = [$productId];
+            $sql = "
+                SELECT 
+                    m.*,
+                    u.name as user_name,
+                    p.name as product_name
+                FROM inventory_movements m
+                LEFT JOIN users u ON m.created_by = u.id
+                JOIN products p ON m.product_id = p.id
+                WHERE m.product_id = ?
+            ";
+            
+            if ($startDate) {
+                $sql .= " AND m.created_at >= ?";
+                $params[] = $startDate;
+            }
+            
+            if ($endDate) {
+                $sql .= " AND m.created_at <= ?";
+                $params[] = $endDate;
+            }
+            
+            if ($type) {
+                $sql .= " AND m.type = ?";
+                $params[] = $type;
+            }
+            
+            $sql .= " ORDER BY m.created_at DESC";
+            
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            
+            return $this->jsonResponse([
+                'success' => true,
+                'movements' => $stmt->fetchAll()
+            ]);
+            
+        } catch (Exception $e) {
+            error_log("Error fetching inventory movements: " . $e->getMessage());
+            return $this->jsonResponse([
+                'success' => false,
+                'message' => 'Failed to retrieve inventory movements'
+            ], 500);
+        }
+    }
+    
+    public function getStockReport($categoryId = null) {
+        try {
+            $this->requireAdmin();
+            
+            $params = [];
+            $sql = "
+                SELECT 
+                    p.id,
+                    p.name,
+                    p.stock_quantity,
+                    p.initial_stock,
+                    p.low_stock_threshold,
+                    p.backorder_allowed,
+                    COALESCE(SUM(CASE WHEN m.type = 'sale' THEN ABS(m.quantity_change) ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN m.type = 'return' THEN m.quantity_change ELSE 0 END), 0) as total_returns,
+                    CASE 
+                        WHEN p.initial_stock > 0 THEN (p.stock_quantity / p.initial_stock) * 100 
+                        ELSE 0 
+                    END as stock_percentage
+                FROM products p
+                LEFT JOIN inventory_movements m ON p.id = m.product_id
+            ";
+            
+            if ($categoryId) {
+                $sql .= " WHERE p.category_id = ?";
+                $params[] = $this->validateInput($categoryId, 'int');
+            }
+            
+            $sql .= " GROUP BY p.id ORDER BY stock_percentage ASC";
+            
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            
+            return $this->jsonResponse([
+                'success' => true,
+                'report' => $stmt->fetchAll()
+            ]);
+            
+        } catch (Exception $e) {
+            error_log("Error generating stock report: " . $e->getMessage());
+            return $this->jsonResponse([
+                'success' => false,
+                'message' => 'Failed to generate stock report'
+            ], 500);
+        }
+    }
+    
+    public function adjustStockThreshold($productId, $threshold) {
+        try {
+            $this->requireAdmin();
+            $this->validateCSRF();
+            
+            $productId = $this->validateInput($productId, 'int');
+            $threshold = $this->validateInput($threshold, 'int');
+            
+            if (!$productId || $threshold < 0) {
+                throw new Exception('Invalid product ID or threshold');
+            }
+            
+            $stmt = $this->pdo->prepare("
+                UPDATE products 
+                SET low_stock_threshold = ?,
+                    updated_at = NOW()
+                WHERE id = ?
+            ");
+            $stmt->execute([$threshold, $productId]);
+            
+            return $this->jsonResponse([
+                'success' => true,
+                'message' => 'Stock threshold updated successfully'
+            ]);
+            
+        } catch (Exception $e) {
+            error_log("Error updating stock threshold: " . $e->getMessage());
+            return $this->jsonResponse([
+                'success' => false,
+                'message' => 'Failed to update stock threshold'
+            ], 500);
+        }
+    }
+}
+```
+
+# controllers/CouponController.php  
+```php
+<?php
+require_once __DIR__ . '/BaseController.php';
+
+class CouponController extends BaseController {
+    private $pdo;
+    
+    public function __construct($pdo) {
+        $this->pdo = $pdo;
+    }
+    
+    public function validateCoupon($code, $subtotal) {
+        try {
+            $this->validateRateLimit('coupon_validate');
+            $this->validateCSRF();
+            
+            $code = $this->validateInput($code, 'string');
+            $subtotal = $this->validateInput($subtotal, 'float');
+            $userId = $this->getUserId();
+            
+            if (!$code || $subtotal <= 0) {
+                return $this->jsonResponse([
+                    'valid' => false,
+                    'message' => 'Invalid coupon or order amount'
+                ], 400);
+            }
+            
+            $stmt = $this->pdo->prepare("
+                SELECT * FROM coupons 
+                WHERE code = ? 
+                AND is_active = TRUE
+                AND (start_date IS NULL OR start_date <= NOW())
+                AND (end_date IS NULL OR end_date >= NOW())
+                AND (usage_limit IS NULL OR usage_count < usage_limit)
+                AND min_purchase_amount <= ?
+            ");
+            $stmt->execute([$code, $subtotal]);
+            $coupon = $stmt->fetch();
+            
+            if (!$coupon) {
+                return $this->jsonResponse([
+                    'valid' => false,
+                    'message' => 'Invalid or expired coupon code'
+                ]);
+            }
+            
+            // Check if user has already used this coupon
+            if ($userId) {
+                $stmt = $this->pdo->prepare("
+                    SELECT COUNT(*) FROM coupon_usage 
+                    WHERE coupon_id = ? AND user_id = ?
+                ");
+                $stmt->execute([$coupon['id'], $userId]);
+                $usageCount = $stmt->fetchColumn();
+                if ($usageCount > 0) {
+                    return $this->jsonResponse([
+                        'valid' => false,
+                        'message' => 'You have already used this coupon'
+                    ]);
+                }
+            }
+            
+            // Calculate discount
+            $discountAmount = $this->calculateDiscount($coupon, $subtotal);
+            
+            return $this->jsonResponse([
+                'valid' => true,
+                'coupon' => $coupon,
+                'discount_amount' => $discountAmount,
+                'message' => 'Coupon applied successfully'
+            ]);
+            
+        } catch (Exception $e) {
+            error_log("Coupon validation error: " . $e->getMessage());
+            return $this->jsonResponse([
+                'valid' => false,
+                'message' => 'An error occurred while validating the coupon'
+            ], 500);
+        }
+    }
+    
+    private function calculateDiscount($coupon, $subtotal) {
+        $discountAmount = 0;
+        
+        if ($coupon['discount_type'] === 'percentage') {
+            $discountAmount = $subtotal * ($coupon['discount_value'] / 100);
+        } else { // fixed amount
+            $discountAmount = $coupon['discount_value'];
+        }
+        
+        // Apply maximum discount limit if set
+        if ($coupon['max_discount_amount'] !== null) {
+            $discountAmount = min($discountAmount, $coupon['max_discount_amount']);
+        }
+        
+        return round($discountAmount, 2);
+    }
+    
+    public function applyCoupon($couponId, $orderId, $discountAmount) {
+        try {
+            $this->validateCSRF();
+            $userId = $this->getUserId();
+            
+            $couponId = $this->validateInput($couponId, 'int');
+            $orderId = $this->validateInput($orderId, 'int');
+            $discountAmount = $this->validateInput($discountAmount, 'float');
+            
+            if (!$couponId || !$orderId || $discountAmount <= 0) {
+                throw new Exception('Invalid coupon application data');
+            }
+            
+            $this->beginTransaction();
+            
+            // Verify coupon is still valid
+            $stmt = $this->pdo->prepare("
+                SELECT * FROM coupons 
+                WHERE id = ? 
+                AND is_active = TRUE
+                AND (usage_limit IS NULL OR usage_count < usage_limit)
+            ");
+            $stmt->execute([$couponId]);
+            if (!$stmt->fetch()) {
+                throw new Exception('Coupon is no longer valid');
+            }
+            
+            // Record coupon usage
+            $stmt = $this->pdo->prepare("
+                INSERT INTO coupon_usage (coupon_id, order_id, user_id, discount_amount)
+                VALUES (?, ?, ?, ?)
+            ");
+            $stmt->execute([$couponId, $orderId, $userId, $discountAmount]);
+            
+            // Update coupon usage count
+            $stmt = $this->pdo->prepare("
+                UPDATE coupons 
+                SET usage_count = usage_count + 1,
+                    updated_at = NOW()
+                WHERE id = ?
+            ");
+            $stmt->execute([$couponId]);
+            
+            $this->commit();
+            
+            return $this->jsonResponse([
+                'success' => true,
+                'message' => 'Coupon applied successfully'
+            ]);
+            
+        } catch (Exception $e) {
+            $this->rollback();
+            error_log("Coupon application error: " . $e->getMessage());
+            
+            return $this->jsonResponse([
+                'success' => false,
+                'message' => 'Failed to apply coupon'
+            ], 500);
+        }
+    }
+    
+    public function getAllCoupons() {
+        try {
+            $this->requireAdmin();
+            
+            $stmt = $this->pdo->query("
+                SELECT 
+                    c.*,
+                    COUNT(cu.id) as total_uses,
+                    SUM(cu.discount_amount) as total_discount_given
+                FROM coupons c
+                LEFT JOIN coupon_usage cu ON c.id = cu.coupon_id
+                GROUP BY c.id
+                ORDER BY c.created_at DESC
+            ");
+            
+            return $this->jsonResponse([
+                'success' => true,
+                'coupons' => $stmt->fetchAll()
+            ]);
+            
+        } catch (Exception $e) {
+            error_log("Error fetching coupons: " . $e->getMessage());
+            return $this->jsonResponse([
+                'success' => false,
+                'message' => 'Failed to retrieve coupons'
+            ], 500);
+        }
+    }
+    
+    public function createCoupon() {
+        try {
+            $this->requireAdmin();
+            $this->validateCSRF();
+            
+            $data = [
+                'code' => $this->validateInput($_POST['code'], 'string'),
+                'description' => $this->validateInput($_POST['description'], 'string'),
+                'discount_type' => $this->validateInput($_POST['discount_type'], 'string'),
+                'discount_value' => $this->validateInput($_POST['discount_value'], 'float'),
+                'min_purchase_amount' => $this->validateInput($_POST['min_purchase_amount'] ?? 0, 'float'),
+                'max_discount_amount' => $this->validateInput($_POST['max_discount_amount'] ?? null, 'float'),
+                'start_date' => $this->validateInput($_POST['start_date'] ?? null, 'string'),
+                'end_date' => $this->validateInput($_POST['end_date'] ?? null, 'string'),
+                'usage_limit' => $this->validateInput($_POST['usage_limit'] ?? null, 'int'),
+                'is_active' => isset($_POST['is_active']) ? true : false
+            ];
+            
+            // Validate required fields
+            if (!$data['code'] || !$data['discount_type'] || $data['discount_value'] <= 0) {
+                return $this->jsonResponse([
+                    'success' => false,
+                    'message' => 'Missing required fields'
+                ], 400);
+            }
+            
+            // Validate discount type
+            if (!in_array($data['discount_type'], ['percentage', 'fixed'])) {
+                return $this->jsonResponse([
+                    'success' => false,
+                    'message' => 'Invalid discount type'
+                ], 400);
+            }
+            
+            $this->beginTransaction();
+            
+            // Check if code already exists
+            $stmt = $this->pdo->prepare("SELECT id FROM coupons WHERE code = ?");
+            $stmt->execute([$data['code']]);
+            if ($stmt->fetch()) {
+                throw new Exception('Coupon code already exists');
+            }
+            
+            $stmt = $this->pdo->prepare("
+                INSERT INTO coupons (
+                    code, description, discount_type, discount_value,
+                    min_purchase_amount, max_discount_amount,
+                    start_date, end_date, usage_limit, is_active,
+                    created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            
+            $stmt->execute([
+                $data['code'],
+                $data['description'],
+                $data['discount_type'],
+                $data['discount_value'],
+                $data['min_purchase_amount'],
+                $data['max_discount_amount'],
+                $data['start_date'],
+                $data['end_date'],
+                $data['usage_limit'],
+                $data['is_active'],
+                $this->getUserId()
+            ]);
+            
+            $this->commit();
+            
+            return $this->jsonResponse([
+                'success' => true,
+                'message' => 'Coupon created successfully'
+            ]);
+            
+        } catch (Exception $e) {
+            $this->rollback();
+            error_log("Coupon creation error: " . $e->getMessage());
+            
+            return $this->jsonResponse([
+                'success' => false,
+                'message' => 'Failed to create coupon'
+            ], 500);
+        }
+    }
+}
 ```
 

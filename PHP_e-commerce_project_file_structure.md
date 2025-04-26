@@ -5,8 +5,8 @@ $ cd /cdrom/project/The-Scent-oa5
 $ ls -l index.php css/style.css js/main.js particles.json .htaccess config.php includes/*php views/*php views/layout/*php controllers/*php models/*php views/admin/* | egrep -v 'test_|phpinfo'
 ```
 -rw-rw-r-- 1 pete pete       508 Apr 18 04:44 .htaccess
--rwxr-xr-x 1 pete www-data  3703 Apr 24 20:56 config.php
--rw-rw-r-- 1 pete pete     33990 Apr 26 09:31 controllers/AccountController.php
+-rwxr-xr-x 1 pete www-data  3703 Apr 26 19:28 config.php
+-rw-rw-r-- 1 pete pete     34115 Apr 26 19:22 controllers/AccountController.php
 -rw-rw-r-- 1 pete pete     18987 Apr 25 11:29 controllers/BaseController.php
 -rw-rw-r-- 1 pete pete     18837 Apr 26 09:32 controllers/CartController.php
 -rw-rw-r-- 1 pete pete     20248 Apr 26 09:33 controllers/CheckoutController.php
@@ -23,7 +23,7 @@ $ ls -l index.php css/style.css js/main.js particles.json .htaccess config.php i
 -rw-rw-r-- 1 pete pete     12475 Apr 25 21:15 includes/SecurityMiddleware.php
 -rwxr-xr-x 1 pete www-data  1403 Apr 15 21:10 includes/auth.php
 -rwxr-xr-x 1 pete pete       890 Apr 18 07:04 includes/db.php
--rw-rw-r-- 1 pete pete     15438 Apr 26 00:50 index.php
+-rw-rw-r-- 1 pete pete     15722 Apr 26 19:08 index.php
 -rw-rw-r-- 1 pete pete     70516 Apr 26 08:24 js/main.js
 -rw-rw-r-- 1 pete pete      2402 Apr 25 11:06 models/Cart.php
 -rwxr-xr-x 1 pete www-data  2939 Apr 13 13:00 models/Order.php
@@ -32,9 +32,10 @@ $ ls -l index.php css/style.css js/main.js particles.json .htaccess config.php i
 -rwxr-xr-x 1 pete www-data  2053 Apr 13 13:00 models/User.php
 -rwxr-xr-x 1 pete pete      1401 Apr 18 04:53 particles.json
 -rw-rw-r-- 1 pete pete      1111 Apr 25 07:44 views/404.php
+-rw-rw-r-- 1 pete pete      6198 Apr 26 18:54 views/about.php
 -rwxr-xr-x 1 pete www-data  7898 Apr 25 07:48 views/admin/coupons.php
 -rw-rw-r-- 1 pete pete      4091 Apr 25 07:48 views/admin/quiz_analytics.php
--rwxr-xr-x 1 pete pete      4178 Apr 25 21:14 views/cart.php
+-rw-rw-r-- 1 pete pete     10765 Apr 26 13:46 views/cart.php
 -rwxr-xr-x 1 pete pete     15658 Apr 25 08:17 views/checkout.php
 -rw-rw-r-- 1 pete pete      1329 Apr 23 08:16 views/contact.php
 -rw-rw-r-- 1 pete pete      1521 Apr 25 07:44 views/error.php
@@ -45,7 +46,7 @@ $ ls -l index.php css/style.css js/main.js particles.json .htaccess config.php i
 -rw-rw-r-- 1 pete pete      2833 Apr 14 09:07 views/layout/admin_header.php
 -rw-rw-r-- 1 pete pete      4191 Apr 25 07:34 views/layout/footer.php
 -rw-rw-r-- 1 pete pete      7013 Apr 26 09:00 views/layout/header.php
--rwxr-xr-x 1 pete pete      2747 Apr 25 07:44 views/login.php
+-rw-rw-r-- 1 pete pete      5094 Apr 26 18:59 views/login.php
 -rw-rw-r-- 1 pete pete       975 Apr 23 08:16 views/order-tracking.php
 -rwxr-xr-x 1 pete pete      5800 Apr 25 08:16 views/order_confirmation.php
 -rw-rw-r-- 1 pete pete       756 Apr 23 08:16 views/privacy.php
