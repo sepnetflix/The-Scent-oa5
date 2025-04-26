@@ -13,169 +13,146 @@ require_once __DIR__ . '/../controllers/CartController.php'; // Needed for merge
 require_once __DIR__ . '/../config.php'; // Needed for BASE_URL
 
 class AccountController extends BaseController {
+    // Properties remain the same...
     private EmailService $emailService;
     private User $userModel;
     private Order $orderModel;
     private Quiz $quizModel;
-
-    // Constants from SECURITY_SETTINGS in config.php can be used if needed,
-    // but keeping specific controller logic separate can also be fine.
-    // private int $maxLoginAttempts = SECURITY_SETTINGS['password']['max_attempts'] ?? 5;
-    // private int $lockoutDuration = SECURITY_SETTINGS['password']['lockout_duration'] ?? 900;
-    private int $resetTokenExpiry = 3600; // 1 hour
-
-    // Security Headers are likely handled by SecurityMiddleware::apply() called in index.php
-    // Or potentially set via BaseController. Avoid duplicating header() calls here.
+    private int $resetTokenExpiry = 3600;
 
     public function __construct(PDO $pdo) {
-        parent::__construct($pdo); // Calls BaseController constructor
-        // Initialize models and services (EmailService is already initialized in BaseController)
+        parent::__construct($pdo);
         $this->userModel = new User($pdo);
         $this->orderModel = new Order($pdo);
         $this->quizModel = new Quiz($pdo);
+        // $this->emailService is initialized in parent constructor
     }
 
     // --- Account Management Pages ---
 
-    /**
-     * Displays the user's account dashboard.
-     * Assumes route like: index.php?page=account&action=dashboard (or similar)
-     */
     public function showDashboard() {
         try {
-            $this->requireLogin(); // From BaseController
-            $userId = $this->getUserId(); // From BaseController
+            $this->requireLogin();
+            $userId = $this->getUserId();
 
-            // Use transaction for consistency if needed, though reads might not require it strictly.
-            $this->beginTransaction(); // From BaseController
+            // Fetch data (using transaction is optional for reads like this)
+            $recentOrders = $this->orderModel->getRecentByUserId($userId, 5);
+            $quizResults = $this->quizModel->getResultsByUserId($userId);
 
-            try {
-                $recentOrders = $this->orderModel->getRecentByUserId($userId, 5);
-                $quizResults = $this->quizModel->getResultsByUserId($userId);
-
-                $this->commit(); // From BaseController
-
-                // Use renderView from BaseController - Adjusted path
-                echo $this->renderView('account_dashboard', [
-                    'pageTitle' => 'My Account - The Scent',
-                    'recentOrders' => $recentOrders,
-                    'quizResults' => $quizResults,
-                    // BaseController might automatically add csrfToken, or add it here if needed
-                    'csrfToken' => $this->generateCSRFToken()
-                ]);
-                return; // Stop execution after rendering
-
-            } catch (Exception $e) {
-                $this->rollback(); // From BaseController
-                throw $e; // Re-throw to be caught by the outer catch block
-            }
+            // Data for the view
+            $data = [
+                'pageTitle' => 'My Account - The Scent',
+                'recentOrders' => $recentOrders,
+                'quizResults' => $quizResults,
+                'csrfToken' => $this->generateCSRFToken(),
+                'bodyClass' => 'page-account-dashboard' // Added body class
+            ];
+            echo $this->renderView('account_dashboard', $data);
+            return;
 
         } catch (Exception $e) {
+            // Error handling remains the same...
+             $userId = $this->getUserId() ?? 'unknown'; // Ensure userId for logging
             error_log("Account Dashboard error for user {$userId}: " . $e->getMessage());
-            $this->setFlashMessage('Error loading dashboard. Please try again later.', 'error'); // From BaseController
-            $this->redirect('error'); // From BaseController (assuming 'error' page/route exists)
+            $this->setFlashMessage('Error loading dashboard. Please try again later.', 'error');
+            $this->redirect('error');
         }
     }
 
-    /**
-     * Displays the user's order history with pagination.
-     * Assumes route like: index.php?page=account&action=orders
-     */
     public function showOrders() {
         try {
             $this->requireLogin();
             $userId = $this->getUserId();
 
-            // Validate and sanitize pagination params using SecurityMiddleware
             $page = SecurityMiddleware::validateInput($_GET['p'] ?? 1, 'int', ['min' => 1]) ?: 1;
-            $perPage = 10; // Consider making this configurable
-
-            // Get paginated orders
+            $perPage = 10;
             $orders = $this->orderModel->getAllByUserId($userId, $page, $perPage);
             $totalOrders = $this->orderModel->getTotalOrdersByUserId($userId);
             $totalPages = ceil($totalOrders / $perPage);
 
-            // Render view - Adjusted path
-            echo $this->renderView('account_orders', [
+            // Data for the view
+            $data = [
                 'pageTitle' => 'My Orders - The Scent',
                 'orders' => $orders,
                 'currentPage' => $page,
                 'totalPages' => $totalPages,
-                'csrfToken' => $this->generateCSRFToken()
-            ]);
+                'csrfToken' => $this->generateCSRFToken(),
+                'bodyClass' => 'page-account-orders' // Added body class
+            ];
+            echo $this->renderView('account_orders', $data);
             return;
 
         } catch (Exception $e) {
+             $userId = $this->getUserId() ?? 'unknown'; // Ensure userId for logging
             error_log("Account Orders error for user {$userId}: " . $e->getMessage());
             $this->setFlashMessage('Error loading orders. Please try again later.', 'error');
             $this->redirect('error');
         }
     }
 
-    /**
-     * Displays the details of a specific order.
-     * Assumes route like: index.php?page=account&action=order_details&id=123
-     */
-    public function showOrderDetails(int $orderId) { // Type hint parameter
+    public function showOrderDetails(int $orderId) {
         try {
             $this->requireLogin();
             $userId = $this->getUserId();
 
-            // Basic validation (Type hint helps, also check > 0)
             if ($orderId <= 0) {
                  $this->setFlashMessage('Invalid order ID.', 'error');
-                 $this->redirect(BASE_URL . 'index.php?page=account&action=orders'); // Redirect to orders list
-                 return; // Stop execution
-            }
-
-            // Get order with auth check
-            $order = $this->orderModel->getByIdAndUserId($orderId, $userId);
-            if (!$order) {
-                // Log attempt to access unauthorized/non-existent order
-                error_log("User {$userId} failed to access order {$orderId}");
-                $this->setFlashMessage('Order not found or access denied.', 'error');
-                 // Render 404 view - using BaseController method
-                 http_response_code(404);
-                 echo $this->renderView('404', ['pageTitle' => 'Order Not Found']);
+                 $this->redirect(BASE_URL . 'index.php?page=account&action=orders');
                  return;
             }
 
-            // Render view - Adjusted path
-            echo $this->renderView('account_order_details', [
+            $order = $this->orderModel->getByIdAndUserId($orderId, $userId);
+            if (!$order) {
+                error_log("User {$userId} failed to access order {$orderId}");
+                $this->setFlashMessage('Order not found or access denied.', 'error');
+                 http_response_code(404);
+                 // Data for the 404 view
+                 $data = [
+                     'pageTitle' => 'Order Not Found',
+                     'csrfToken' => $this->generateCSRFToken(),
+                     'bodyClass' => 'page-404' // Add body class for 404 page too
+                 ];
+                 echo $this->renderView('404', $data);
+                 return;
+            }
+
+            // Data for the order details view
+            $data = [
                 'pageTitle' => "Order #" . htmlspecialchars(str_pad($order['id'], 6, '0', STR_PAD_LEFT), ENT_QUOTES, 'UTF-8') . " - The Scent",
                 'order' => $order,
-                'csrfToken' => $this->generateCSRFToken()
-            ]);
+                'csrfToken' => $this->generateCSRFToken(),
+                'bodyClass' => 'page-account-order-details' // Added body class
+            ];
+            echo $this->renderView('account_order_details', $data);
             return;
 
         } catch (Exception $e) {
+            $userId = $this->getUserId() ?? 'unknown'; // Ensure userId for logging
             error_log("Order details error for user {$userId}, order {$orderId}: " . $e->getMessage());
             $this->setFlashMessage('Error loading order details. Please try again later.', 'error');
             $this->redirect(BASE_URL . 'index.php?page=account&action=orders');
         }
     }
 
-    /**
-     * Displays the user profile editing form.
-     * Assumes route like: index.php?page=account&action=profile
-     */
     public function showProfile() {
         try {
             $this->requireLogin();
-            $user = $this->getCurrentUser(); // Assumes BaseController provides this securely
+            $user = $this->getCurrentUser();
 
             if (!$user) {
                  $this->setFlashMessage('Could not load user profile data.', 'error');
-                 $this->redirect('login'); // Redirect to login if user somehow lost
+                 $this->redirect('login');
                  return;
             }
 
-            // Render view - Adjusted path
-            echo $this->renderView('account_profile', [
+            // Data for the view
+            $data = [
                 'pageTitle' => 'My Profile - The Scent',
                 'user' => $user,
-                'csrfToken' => $this->generateCSRFToken()
-            ]);
+                'csrfToken' => $this->generateCSRFToken(),
+                'bodyClass' => 'page-account-profile' // Added body class
+            ];
+            echo $this->renderView('account_profile', $data);
             return;
 
         } catch (Exception $e) {
@@ -186,10 +163,7 @@ class AccountController extends BaseController {
         }
     }
 
-    /**
-     * Handles the submission of the profile update form.
-     * Assumes route like: index.php?page=account&action=update_profile (POST)
-     */
+    // updateProfile() method remains unchanged (uses redirect)
     public function updateProfile() {
         $userId = null; // Initialize for error logging
         try {
@@ -285,23 +259,20 @@ class AccountController extends BaseController {
 
     // --- Password Reset ---
 
-    /**
-     * Handles the request to reset a password (submitting email).
-     * Assumes route like: index.php?page=request_password_reset (POST)
-     * Also handles GET request to show the form.
-     */
     public function requestPasswordReset() {
         // Handle showing the form on GET
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            // Render the 'forgot_password' view using BaseController method
-            echo $this->renderView('forgot_password', [
+            // Data for the view
+            $data = [
                 'pageTitle' => 'Forgot Password - The Scent',
-                'csrfToken' => $this->generateCSRFToken()
-            ]);
+                'csrfToken' => $this->generateCSRFToken(),
+                'bodyClass' => 'page-forgot-password' // Added body class
+            ];
+            echo $this->renderView('forgot_password', $data);
             return;
         }
 
-        // Handle POST request
+        // POST logic remains unchanged (uses redirect)
         try {
             $this->validateCSRF();
             $this->validateRateLimit('password_reset_request'); // Use a specific key
@@ -377,17 +348,12 @@ class AccountController extends BaseController {
         $this->redirect('forgot_password'); // Redirect back to the form page
     }
 
-    /**
-     * Handles both showing the reset form (GET) and processing the reset (POST).
-     * Assumes route like: index.php?page=reset_password
-     * GET requires a 'token' parameter.
-     * POST requires 'token', 'password', 'confirm_password'.
-     */
+
     public function resetPassword() {
-        // Get token from GET or POST, sanitize it
-        $token = SecurityMiddleware::validateInput($_REQUEST['token'] ?? '', 'string', ['max' => 64]); // Validate as string, check length
+        $token = SecurityMiddleware::validateInput($_REQUEST['token'] ?? '', 'string', ['max' => 64]);
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // POST logic remains unchanged (uses redirect)
             try {
                 $this->validateCSRF();
                 $this->validateRateLimit('password_reset_attempt'); // Specific key
@@ -452,6 +418,7 @@ class AccountController extends BaseController {
                 $this->redirect($redirectUrl);
                 return;
             }
+
         } else {
             // --- GET request: Show the password reset form ---
             if ($token === false || empty($token)) {
@@ -460,32 +427,20 @@ class AccountController extends BaseController {
                 return;
             }
 
-            // Optional: Check if token is valid *before* showing the form
-            // $user = $this->userModel->getUserByValidResetToken($token);
-            // if (!$user) {
-            //     $this->logSecurityEvent('password_reset_invalid_token_get', ['token' => $token, 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN']);
-            //     $this->setFlashMessage('This password reset link is invalid or has expired.', 'error');
-            //     $this->redirect('forgot_password');
-            //     return;
-            // }
-
-            // Render the reset password form view using BaseController method
-            echo $this->renderView('reset_password', [ // View name matches file
+            // Data for the view
+            $data = [
                 'pageTitle' => 'Reset Your Password - The Scent',
-                'token' => $token, // Pass token to the view's form
-                'csrfToken' => $this->generateCSRFToken()
-            ]);
+                'token' => $token,
+                'csrfToken' => $this->generateCSRFToken(),
+                'bodyClass' => 'page-reset-password' // Added body class
+            ];
+            echo $this->renderView('reset_password', $data);
             return;
         }
     }
 
 
-    // --- Newsletter Preferences ---
-
-    /**
-     * Updates the user's newsletter subscription preference.
-     * Assumes route like: index.php?page=account&action=update_newsletter (POST)
-     */
+    // updateNewsletterPreferences() method remains unchanged (uses redirect)
     public function updateNewsletterPreferences() {
         $userId = null; // Initialize for logging
         try {
@@ -534,25 +489,22 @@ class AccountController extends BaseController {
         $this->redirect(BASE_URL . 'index.php?page=account&action=profile'); // Always redirect back
     }
 
-
     // --- Authentication (Login / Register) ---
-    // These primarily return JSON for AJAX forms but also handle GET requests to show the form.
 
-    /**
-     * Handles user login (GET shows form, POST processes).
-     * Assumes route: index.php?page=login
-     */
     public function login() {
         // Handle showing the login form on GET
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-             echo $this->renderView('login', [ // Use BaseController render
+             // Data for the view
+             $data = [
                  'pageTitle' => 'Login - The Scent',
-                 'csrfToken' => $this->generateCSRFToken()
-             ]);
+                 'csrfToken' => $this->generateCSRFToken(),
+                 'bodyClass' => 'page-login' // Added body class
+             ];
+             echo $this->renderView('login', $data);
              return;
         }
 
-        // Handle POST request for login attempt
+        // POST logic remains unchanged (uses jsonResponse)
         $emailSubmitted = $_POST['email'] ?? ''; // Get email for logging even if invalid
         $ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN';
 
@@ -634,21 +586,21 @@ class AccountController extends BaseController {
         }
     }
 
-     /**
-     * Handles user registration (GET shows form, POST processes).
-     * Assumes route: index.php?page=register
-     */
-    public function register() {
+
+     public function register() {
          // Handle showing the registration form on GET
          if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-             echo $this->renderView('register', [ // Use BaseController render
-                 'pageTitle' => 'Register - The Scent',
-                 'csrfToken' => $this->generateCSRFToken()
-             ]);
+              // Data for the view
+              $data = [
+                  'pageTitle' => 'Register - The Scent',
+                  'csrfToken' => $this->generateCSRFToken(),
+                  'bodyClass' => 'page-register' // Added body class
+              ];
+              echo $this->renderView('register', $data);
              return;
          }
 
-        // Handle POST request for registration attempt
+        // POST logic remains unchanged (uses jsonResponse)
         $emailSubmitted = $_POST['email'] ?? ''; // Get for logging
         $ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN';
 
@@ -732,10 +684,7 @@ class AccountController extends BaseController {
 
     // --- Private Helper Methods ---
 
-    /**
-     * Checks if a password meets the defined strength requirements.
-     * Aligned with potential checks in SecurityMiddleware/config.php
-     */
+    // isPasswordStrong() method remains unchanged
     private function isPasswordStrong(string $password): bool {
         $minLength = SECURITY_SETTINGS['password']['min_length'] ?? 12;
         $reqSpecial = SECURITY_SETTINGS['password']['require_special'] ?? true;
@@ -752,9 +701,8 @@ class AccountController extends BaseController {
         return true;
     }
 
-    /**
-     * Generates the full URL for the password reset link.
-     */
+
+    // getResetPasswordUrl() method remains unchanged
     private function getResetPasswordUrl(string $token): string {
         // Ensure HTTPS is used if appropriate (check server vars or config)
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
@@ -765,11 +713,6 @@ class AccountController extends BaseController {
         return $scheme . "://" . $host . $basePath . "/index.php?page=reset_password&token=" . urlencode($token);
     }
 
-    // logAuditTrail is inherited from BaseController
-    // monitorSuspiciousActivity - Requires implementation in UserModel (getRecentActivityCount) and EmailService (notifyAdminOfSuspiciousActivity)
-    // lockAccount - Requires implementation in UserModel (updateAccountStatus) and EmailService (sendAccountLockoutNotification)
-
-    // Other helpers like regenerateSession, logSecurityEvent are in BaseController.
 
 } // End of AccountController class
 
@@ -1006,15 +949,19 @@ require_once __DIR__ . '/../controllers/PaymentController.php';
 require_once __DIR__ . '/../controllers/InventoryController.php';
 require_once __DIR__ . '/../controllers/TaxController.php';
 require_once __DIR__ . '/../includes/EmailService.php';
+// Potentially need Cart model if checking cart items directly
+require_once __DIR__ . '/../models/Cart.php';
+require_once __DIR__ . '/../models/User.php'; // Needed for user details
 
 class CheckoutController extends BaseController {
+    // Properties remain the same...
     private $productModel;
     private $orderModel;
     private $inventoryController;
     private $taxController;
     private $paymentController;
     private $emailService;
-    
+
     public function __construct($pdo) {
         parent::__construct($pdo);
         $this->productModel = new Product($pdo);
@@ -1022,325 +969,429 @@ class CheckoutController extends BaseController {
         $this->inventoryController = new InventoryController($pdo);
         $this->taxController = new TaxController($pdo);
         $this->paymentController = new PaymentController();
-        $this->emailService = new EmailService();
+        // $this->emailService is initialized in parent
     }
-    
+
     public function showCheckout() {
-        $isLoggedIn = isset($_SESSION['user_id']);
+        // Ensure user is logged in for checkout
+        $this->requireLogin(); // Use BaseController method, handles redirect/exit if not logged in
+
+        $userId = $this->getUserId();
         $cartItems = [];
         $subtotal = 0;
-        if ($isLoggedIn) {
-            require_once __DIR__ . '/../models/Cart.php';
-            $cartModel = new \Cart($this->pdo, $_SESSION['user_id']);
-            $items = $cartModel->getItems();
-            foreach ($items as $item) {
-                $cartItems[] = [
-                    'product' => $item,
-                    'quantity' => $item['quantity'],
-                    'subtotal' => $item['price'] * $item['quantity']
-                ];
-                $subtotal += $item['price'] * $item['quantity'];
-            }
-        } else {
-            if (empty($_SESSION['cart'])) {
-                $this->redirect('cart');
-            }
-            foreach ($_SESSION['cart'] as $productId => $quantity) {
-                $product = $this->productModel->getById($productId);
-                if ($product) {
-                    $cartItems[] = [
-                        'product' => $product,
-                        'quantity' => $quantity,
-                        'subtotal' => $product['price'] * $quantity
-                    ];
-                    $subtotal += $product['price'] * $quantity;
-                }
-            }
+
+        // Fetch cart items from DB for logged-in user
+        $cartModel = new Cart($this->pdo, $userId);
+        $items = $cartModel->getItems();
+
+        // If cart is empty, redirect
+        if (empty($items)) {
+             $this->setFlashMessage('Your cart is empty. Add some products before checking out.', 'info');
+            $this->redirect('products'); // Redirect to products page
+            return; // Exit
         }
-        $tax_rate_formatted = '0%';
-        $tax_amount = 0;
+
+        foreach ($items as $item) {
+            // Basic stock check before showing checkout page (optional but good UX)
+            if (!$this->productModel->isInStock($item['product_id'], $item['quantity'])) {
+                $this->setFlashMessage("Item '{$item['name']}' is out of stock. Please update your cart.", 'error');
+                $this->redirect('cart'); // Redirect back to cart to resolve
+                return;
+            }
+            $cartItems[] = [
+                'product' => $item, // Assumes getItems() joins product data
+                'quantity' => $item['quantity'],
+                'subtotal' => $item['price'] * $item['quantity']
+            ];
+            $subtotal += $item['price'] * $item['quantity'];
+        }
+
+        // Initial calculations (Tax/Total might be updated via JS later)
+        $tax_rate_formatted = '0%'; // Initial placeholder
+        $tax_amount = 0; // Initial placeholder
         $shipping_cost = $subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
         $total = $subtotal + $shipping_cost + $tax_amount;
+
+        // Fetch user address details if available (assuming User model has getAddress)
+        $userModel = new User($this->pdo);
+        $userAddress = $userModel->getAddress($userId); // Implement this in UserModel
+
+        // Prepare data for the view
+        $csrfToken = $this->generateCSRFToken();
+        $bodyClass = 'page-checkout';
+        $pageTitle = 'Checkout - The Scent';
+
+        // Use require_once, so define variables directly
+        extract([
+            'cartItems' => $cartItems,
+            'subtotal' => $subtotal,
+            'tax_rate_formatted' => $tax_rate_formatted,
+            'tax_amount' => $tax_amount,
+            'shipping_cost' => $shipping_cost,
+            'total' => $total,
+            'csrfToken' => $csrfToken,
+            'bodyClass' => $bodyClass,
+            'pageTitle' => $pageTitle,
+            'userAddress' => $userAddress // Pass user address to pre-fill form
+        ]);
+
+        // Load the view file
         require_once __DIR__ . '/../views/checkout.php';
     }
-    
+
+
+    // calculateTax remains unchanged (uses jsonResponse)
     public function calculateTax() {
-        $this->validateCSRF();
+        // Ensure user is logged in to calculate tax based on their potential address context
+        $this->requireLogin();
+        // CSRF might not be strictly needed if just calculating, but good practice if form interaction triggers it
+        // $this->validateCSRF(); // Consider if this is needed based on how JS calls it
+
         $data = json_decode(file_get_contents('php://input'), true);
         $country = $this->validateInput($data['country'] ?? '', 'string');
         $state = $this->validateInput($data['state'] ?? '', 'string');
+
         if (empty($country)) {
-            $this->jsonResponse(['success' => false, 'error' => 'Country is required'], 400);
+           return $this->jsonResponse(['success' => false, 'error' => 'Country is required'], 400);
         }
-        $subtotal = $this->calculateCartSubtotal();
+
+        $subtotal = $this->calculateCartSubtotal(); // Recalculate based on current DB cart
         $shipping_cost = $subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
         $tax_amount = $this->taxController->calculateTax($subtotal, $country, $state);
-        $tax_rate = $this->taxController->getTaxRate($country, $state);
+        $tax_rate = $this->taxController->getTaxRate($country, $state); // Assuming TaxController has this
         $total = $subtotal + $shipping_cost + $tax_amount;
-        $this->jsonResponse([
+
+        return $this->jsonResponse([
             'success' => true,
-            'tax_rate_formatted' => $this->taxController->formatTaxRate($tax_rate),
+            'tax_rate_formatted' => $this->taxController->formatTaxRate($tax_rate), // Assuming TaxController has this
             'tax_amount' => number_format($tax_amount, 2),
             'total' => number_format($total, 2)
         ]);
     }
-    
+
+    // Helper to get cart subtotal for logged-in user
     private function calculateCartSubtotal() {
-        $isLoggedIn = isset($_SESSION['user_id']);
-        $subtotal = 0;
-        if ($isLoggedIn) {
-            require_once __DIR__ . '/../models/Cart.php';
-            $cartModel = new \Cart($this->pdo, $_SESSION['user_id']);
-            $items = $cartModel->getItems();
-            foreach ($items as $item) {
-                $subtotal += $item['price'] * $item['quantity'];
-            }
-        } else {
-            foreach ($_SESSION['cart'] as $productId => $quantity) {
-                $product = $this->productModel->getById($productId);
-                if ($product) {
-                    $subtotal += $product['price'] * $quantity;
-                }
-            }
-        }
-        return $subtotal;
+         // Recalculate subtotal based on current DB cart for accuracy
+         $userId = $this->getUserId();
+         if (!$userId) return 0; // Should not happen if requireLogin is used, but defensive check
+
+         $cartModel = new Cart($this->pdo, $userId);
+         $items = $cartModel->getItems();
+         $subtotal = 0;
+         foreach ($items as $item) {
+             $subtotal += $item['price'] * $item['quantity'];
+         }
+         return $subtotal;
     }
-    
+
+    // processCheckout remains unchanged (uses jsonResponse/redirect)
     public function processCheckout() {
         $this->validateRateLimit('checkout_submit');
-        $this->requireLogin();
-        $this->validateCSRF();
-        $isLoggedIn = isset($_SESSION['user_id']);
-        $cartItems = [];
+        $this->requireLogin(); // Ensure user is logged in
+        $this->validateCSRF(); // Validate CSRF token from the form submission
+
+        $userId = $this->getUserId();
+        $cartModel = new Cart($this->pdo, $userId);
+        $items = $cartModel->getItems();
+
+        // Check if cart is empty *before* processing
+        if (empty($items)) {
+             $this->setFlashMessage('Your cart is empty.', 'error');
+             $this->redirect('cart');
+             return;
+        }
+
+        // Collect cart items for order creation and stock validation
+        $cartItemsForOrder = [];
         $subtotal = 0;
-        if ($isLoggedIn) {
-            require_once __DIR__ . '/../models/Cart.php';
-            $cartModel = new \Cart($this->pdo, $_SESSION['user_id']);
-            $items = $cartModel->getItems();
-            foreach ($items as $item) {
-                $cartItems[$item['id']] = $item['quantity'];
-                $subtotal += $item['price'] * $item['quantity'];
-            }
-        } else {
-            if (empty($_SESSION['cart'])) {
-                $this->redirect('cart');
-            }
-            foreach ($_SESSION['cart'] as $productId => $quantity) {
-                $cartItems[$productId] = $quantity;
-                $product = $this->productModel->getById($productId);
-                if ($product) {
-                    $subtotal += $product['price'] * $quantity;
-                }
-            }
+        foreach ($items as $item) {
+            $cartItemsForOrder[$item['product_id']] = $item['quantity']; // Use product_id as key
+            $subtotal += $item['price'] * $item['quantity'];
         }
-        $required = ['shipping_name', 'shipping_email', 'shipping_address', 'shipping_city', 
-                    'shipping_state', 'shipping_zip', 'shipping_country'];
-        foreach ($required as $field) {
+
+        // Validate required POST fields
+        $requiredFields = [
+            'shipping_name', 'shipping_email', 'shipping_address', 'shipping_city',
+            'shipping_state', 'shipping_zip', 'shipping_country',
+            // Add payment fields if necessary (e.g., payment_method_id from Stripe Elements)
+             'payment_method_id' // Example for Stripe
+        ];
+        $missingFields = [];
+        $postData = [];
+        foreach ($requiredFields as $field) {
             if (empty($_POST[$field])) {
-                $this->setFlashMessage('Please fill in all required fields.', 'error');
-                $this->redirect('checkout');
+                $missingFields[] = ucwords(str_replace('_', ' ', $field));
+            } else {
+                 // Sanitize and validate input here before using it
+                 // Example using a simple validation type map
+                 $type = (strpos($field, 'email') !== false) ? 'email' : 'string';
+                 $validatedValue = $this->validateInput($_POST[$field], $type);
+                 if ($validatedValue === false) {
+                     $missingFields[] = ucwords(str_replace('_', ' ', $field)) . " (Invalid)";
+                 } else {
+                     $postData[$field] = $validatedValue;
+                 }
             }
         }
+
+        if (!empty($missingFields)) {
+            $this->setFlashMessage('Please fill in all required fields correctly: ' . implode(', ', $missingFields) . '.', 'error');
+            // Consider returning JSON if the checkout form submits via AJAX
+            // For standard POST, redirect back
+             $this->redirect('checkout');
+            return;
+        }
+
+
         try {
             $this->beginTransaction();
-            $stockErrors = $this->validateCartStock($cartItems);
+
+            // Final stock check within transaction
+            $stockErrors = $this->validateCartStock($cartItemsForOrder);
             if (!empty($stockErrors)) {
-                throw new Exception('Some items are out of stock: ' . implode(', ', $stockErrors));
+                // Rollback immediately if stock issue found
+                $this->rollback();
+                $this->setFlashMessage('Some items went out of stock while checking out: ' . implode(', ', $stockErrors) . '. Please review your cart.', 'error');
+                // Consider JSON response if AJAX
+                 $this->redirect('cart'); // Redirect to cart to resolve stock issues
+                return;
             }
+
+            // Calculate final totals
             $shipping_cost = $subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
             $tax_amount = $this->taxController->calculateTax(
                 $subtotal,
-                $this->validateInput($_POST['shipping_country'], 'string'),
-                $this->validateInput($_POST['shipping_state'], 'string')
+                $postData['shipping_country'], // Use validated data
+                $postData['shipping_state']    // Use validated data
             );
             $total = $subtotal + $shipping_cost + $tax_amount;
-            $userId = $this->getUserId();
+
+            // Create Order
             $orderData = [
                 'user_id' => $userId,
                 'subtotal' => $subtotal,
                 'shipping_cost' => $shipping_cost,
                 'tax_amount' => $tax_amount,
                 'total_amount' => $total,
-                'shipping_name' => $this->validateInput($_POST['shipping_name'], 'string'),
-                'shipping_email' => $this->validateInput($_POST['shipping_email'], 'email'),
-                'shipping_address' => $this->validateInput($_POST['shipping_address'], 'string'),
-                'shipping_city' => $this->validateInput($_POST['shipping_city'], 'string'),
-                'shipping_state' => $this->validateInput($_POST['shipping_state'], 'string'),
-                'shipping_zip' => $this->validateInput($_POST['shipping_zip'], 'string'),
-                'shipping_country' => $this->validateInput($_POST['shipping_country'], 'string')
+                'shipping_name' => $postData['shipping_name'],
+                'shipping_email' => $postData['shipping_email'],
+                'shipping_address' => $postData['shipping_address'],
+                'shipping_city' => $postData['shipping_city'],
+                'shipping_state' => $postData['shipping_state'],
+                'shipping_zip' => $postData['shipping_zip'],
+                'shipping_country' => $postData['shipping_country'],
+                 'status' => 'pending_payment' // Initial status before payment attempt
             ];
             $orderId = $this->orderModel->create($orderData);
+             if (!$orderId) throw new Exception("Failed to create order record.");
+
+
+            // Create Order Items & Update Inventory
             $stmt = $this->pdo->prepare("
                 INSERT INTO order_items (order_id, product_id, quantity, price)
                 VALUES (?, ?, ?, ?)
             ");
-            foreach ($cartItems as $productId => $quantity) {
-                $product = $this->productModel->getById($productId);
+            foreach ($cartItemsForOrder as $productId => $quantity) {
+                $product = $this->productModel->getById($productId); // Fetch price again for safety
                 if ($product) {
-                    $stmt->execute([
-                        $orderId,
-                        $productId,
-                        $quantity,
-                        $product['price']
-                    ]);
-                    if (!$this->inventoryController->updateStock(
-                        $productId,
-                        -$quantity,
-                        'order',
-                        $orderId,
-                        "Order #{$orderId}"
-                    )) {
-                        throw new Exception("Failed to update inventory for product {$product['name']}");
+                    $stmt->execute([$orderId, $productId, $quantity, $product['price']]);
+                    // Update inventory
+                    if (!$this->inventoryController->updateStock($productId, -$quantity, 'order', $orderId, "Order #{$orderId}")) {
+                        throw new Exception("Failed to update inventory for product ID {$productId}");
                     }
+                } else {
+                    // Should not happen due to earlier checks, but handle defensively
+                     throw new Exception("Product ID {$productId} not found during order item creation.");
                 }
             }
-            $paymentResult = $this->paymentController->processPayment($orderId);
+
+            // Process Payment (Example with Stripe Payment Intent)
+            $paymentResult = $this->paymentController->createPaymentIntent($orderId, $total, $postData['shipping_email']);
             if (!$paymentResult['success']) {
-                throw new Exception($paymentResult['error']);
+                 // Payment Intent creation failed *before* charging customer
+                 $this->orderModel->updateStatus($orderId, 'failed'); // Mark order as failed
+                throw new Exception($paymentResult['error'] ?? 'Could not initiate payment.');
             }
-            $this->commit();
-            $this->logAuditTrail('order_placed', $userId, [
-                'order_id' => $orderId,
-                'total_amount' => $total,
-                'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+
+            // Payment Intent created successfully, need confirmation from client-side (Stripe Elements)
+
+            $this->commit(); // Commit order creation BEFORE sending client secret
+
+            // Log order placement attempt (status is pending_payment)
+            $this->logAuditTrail('order_pending_payment', $userId, [
+                'order_id' => $orderId, 'total_amount' => $total, 'ip' => $_SERVER['REMOTE_ADDR'] ?? null
             ]);
-            $user = $this->getCurrentUser();
-            $order = $this->orderModel->getById($orderId);
-            $this->emailService->sendOrderConfirmation($order, $user);
-            $_SESSION['last_order_id'] = $orderId;
-            if ($isLoggedIn) {
-                $cartModel->clearCart();
-            } else {
-                $_SESSION['cart'] = [];
-            }
-            $this->jsonResponse([
+
+            // Send client secret back to the client-side JavaScript for payment confirmation
+            return $this->jsonResponse([
                 'success' => true,
                 'orderId' => $orderId,
-                'clientSecret' => $paymentResult['clientSecret']
+                'clientSecret' => $paymentResult['client_secret'] // Send client secret
+                // Add publishableKey if needed by JS: 'publishableKey' => STRIPE_PUBLIC_KEY
             ]);
+
         } catch (Exception $e) {
-            $this->rollback();
-            error_log($e->getMessage());
-            $this->jsonResponse([
+            $this->rollback(); // Rollback transaction on any error
+            error_log("Checkout processing error: " . $e->getMessage());
+            // Return JSON error
+            return $this->jsonResponse([
                 'success' => false,
-                'error' => 'An error occurred while processing your order. Please try again.'
+                'error' => 'An error occurred while processing your order. Please try again.' // Keep error generic for security
             ], 500);
         }
     }
-    
-    private function validateCartStock($cartItems = null) {
-        $errors = [];
-        if ($cartItems === null) {
-            $isLoggedIn = isset($_SESSION['user_id']);
-            if ($isLoggedIn) {
-                require_once __DIR__ . '/../models/Cart.php';
-                $cartModel = new \Cart($this->pdo, $_SESSION['user_id']);
-                $items = $cartModel->getItems();
-                foreach ($items as $item) {
-                    if (!$this->productModel->isInStock($item['product_id'], $item['quantity'])) {
-                        $errors[] = "{$item['name']} has insufficient stock";
-                    }
-                }
-            } else {
-                foreach ($_SESSION['cart'] as $productId => $quantity) {
-                    if (!$this->productModel->isInStock($productId, $quantity)) {
-                        $product = $this->productModel->getById($productId);
-                        $errors[] = "{$product['name']} has insufficient stock";
-                    }
-                }
-            }
-        } else {
-            foreach ($cartItems as $productId => $quantity) {
-                if (!$this->productModel->isInStock($productId, $quantity)) {
-                    $product = $this->productModel->getById($productId);
-                    $errors[] = "{$product['name']} has insufficient stock";
-                }
-            }
-        }
-        return $errors;
-    }
-    
-    public function showOrderConfirmation() {
-        $this->requireLogin();
-        
-        if (!isset($_SESSION['last_order_id'])) {
-            $this->redirect('products');
-        }
-        
-        $stmt = $this->pdo->prepare("
-            SELECT o.*, oi.product_id, oi.quantity, oi.price, p.name as product_name
-            FROM orders o
-            JOIN order_items oi ON o.id = oi.order_id
-            JOIN products p ON oi.product_id = p.id
-            WHERE o.id = ? AND o.user_id = ?
-        ");
-        
-        $stmt->execute([$_SESSION['last_order_id'], $this->getUserId()]);
-        $orderItems = $stmt->fetchAll();
-        
-        if (empty($orderItems)) {
-            $this->redirect('products');
-        }
-        
-        $order = [
-            'id' => $orderItems[0]['id'],
-            'total_amount' => $orderItems[0]['total_amount'],
-            'shipping_name' => $orderItems[0]['shipping_name'],
-            'shipping_email' => $orderItems[0]['shipping_email'],
-            'shipping_address' => $orderItems[0]['shipping_address'],
-            'shipping_city' => $orderItems[0]['shipping_city'],
-            'shipping_state' => $orderItems[0]['shipping_state'],
-            'shipping_zip' => $orderItems[0]['shipping_zip'],
-            'shipping_country' => $orderItems[0]['shipping_country'],
-            'created_at' => $orderItems[0]['created_at'],
-            'items' => $orderItems
-        ];
-        
-        unset($_SESSION['last_order_id']);
-        
-        require_once __DIR__ . '/../views/order_confirmation.php';
-    }
-    
+
+    // showOrderConfirmation remains largely the same, just add variables
+     public function showOrderConfirmation() {
+         // Security: Ensure user is logged in to view their confirmation
+         $this->requireLogin();
+         $userId = $this->getUserId();
+
+         // Use the order ID stored in the session after successful payment processing
+         if (!isset($_SESSION['last_order_id'])) {
+             // If no recent order ID, redirect to account/orders
+             $this->setFlashMessage('Could not find recent order details.', 'warning');
+             $this->redirect('account&action=orders'); // Redirect to orders list
+             return;
+         }
+
+         $lastOrderId = $_SESSION['last_order_id'];
+
+         // Fetch the specific order, ensuring it belongs to the current user
+         $order = $this->orderModel->getByIdAndUserId($lastOrderId, $userId);
+
+         // If order not found or doesn't belong to user, redirect
+         if (!$order) {
+             unset($_SESSION['last_order_id']); // Clear invalid session data
+             $this->setFlashMessage('Order details not found or access denied.', 'error');
+             $this->redirect('account&action=orders');
+             return;
+         }
+
+         // Clear the session variable after successfully retrieving the order
+         unset($_SESSION['last_order_id']);
+
+         // Prepare data for the view
+         $csrfToken = $this->generateCSRFToken(); // Still good practice for any potential forms/actions
+         $bodyClass = 'page-order-confirmation';
+         $pageTitle = 'Order Confirmation - The Scent';
+
+         // Use require_once, so define variables directly
+         extract([
+             'order' => $order, // Contains order details and items
+             'csrfToken' => $csrfToken,
+             'bodyClass' => $bodyClass,
+             'pageTitle' => $pageTitle
+         ]);
+
+         require_once __DIR__ . '/../views/order_confirmation.php';
+     }
+
+    // updateOrderStatus remains unchanged (uses jsonResponse, admin context)
     public function updateOrderStatus($orderId, $status, $trackingInfo = null) {
-        $this->requireAdmin();
-        $this->validateCSRF();
-        
-        $order = $this->orderModel->getById($orderId);
-        
-        if (!$order) {
-            $this->jsonResponse(['success' => false, 'error' => 'Order not found'], 404);
+        $this->requireAdmin(); // Ensure only admin can update status
+        $this->validateCSRF(); // Validate CSRF if called via POST form
+
+        // Validate input
+        $orderId = $this->validateInput($orderId, 'int');
+        $status = $this->validateInput($status, 'string'); // Add more specific validation if needed (e.g., enum check)
+        // Further validation for trackingInfo structure if provided
+
+        if (!$orderId || !$status) {
+            return $this->jsonResponse(['success' => false, 'error' => 'Invalid input.'], 400);
         }
-        
+
+        $order = $this->orderModel->getById($orderId);
+        if (!$order) {
+           return $this->jsonResponse(['success' => false, 'error' => 'Order not found'], 404);
+        }
+
         try {
             $this->beginTransaction();
-            
-            $this->orderModel->updateStatus($orderId, $status);
-            
-            if ($status === 'shipped' && $trackingInfo) {
-                $this->orderModel->updateTracking(
-                    $orderId,
-                    $trackingInfo['number'],
-                    $trackingInfo['carrier'],
-                    $trackingInfo['url']
-                );
-                
-                $user = (new User($this->pdo))->getById($order['user_id']);
-                $this->emailService->sendShippingUpdate(
-                    $order,
-                    $user,
-                    $trackingInfo['number'],
-                    $trackingInfo['carrier']
-                );
+
+            $updated = $this->orderModel->updateStatus($orderId, $status);
+            if (!$updated) throw new Exception("Failed to update order status.");
+
+
+            // If status is 'shipped' and tracking info is provided, update tracking and notify user
+            if ($status === 'shipped' && $trackingInfo && !empty($trackingInfo['number'])) {
+                 $trackingUpdated = $this->orderModel->updateTracking(
+                     $orderId,
+                     $this->validateInput($trackingInfo['number'], 'string'),
+                     $this->validateInput($trackingInfo['carrier'] ?? null, 'string'), // Optional carrier
+                     $this->validateInput($trackingInfo['url'] ?? null, 'url') // Optional URL
+                 );
+
+                 if ($trackingUpdated) {
+                     // Fetch user details to send email
+                     $userModel = new User($this->pdo);
+                     $user = $userModel->getById($order['user_id']);
+                     if ($user) {
+                         $this->emailService->sendShippingUpdate(
+                             $order, // Pass full order details
+                             $user,
+                             $trackingInfo['number'],
+                             $trackingInfo['carrier'] ?? ''
+                         );
+                     } else {
+                          error_log("Could not find user {$order['user_id']} to send shipping update for order {$orderId}");
+                     }
+                 } else {
+                     error_log("Failed to update tracking info for order {$orderId}");
+                     // Decide if this should be a fatal error for the transaction
+                 }
             }
-            
+
             $this->commit();
-            $this->jsonResponse(['success' => true]);
-            
+
+            // Log status update
+            $adminUserId = $this->getUserId();
+            $this->logAuditTrail('order_status_update', $adminUserId, [
+                 'order_id' => $orderId, 'new_status' => $status, 'tracking_provided' => !empty($trackingInfo)
+            ]);
+
+            return $this->jsonResponse(['success' => true, 'message' => 'Order status updated successfully.']);
+
         } catch (Exception $e) {
             $this->rollback();
-            $this->jsonResponse(['success' => false, 'error' => $e->getMessage()], 500);
+            error_log("Error updating order status for {$orderId}: " . $e->getMessage());
+           return $this->jsonResponse(['success' => false, 'error' => $e->getMessage()], 500);
         }
     }
-}
+
+
+    // validateCartStock remains the same
+     private function validateCartStock($cartItems = null) {
+         $errors = [];
+         // Use the provided cartItems if available (during checkout processing)
+         // Otherwise, fetch the current user's cart (e.g., for display on checkout page)
+         if ($cartItems === null) {
+             $userId = $this->getUserId();
+             if (!$userId) return ['User not logged in']; // Should be caught by requireLogin earlier
+
+             $cartModel = new Cart($this->pdo, $userId);
+             $items = $cartModel->getItems();
+             $cartItems = [];
+             foreach ($items as $item) {
+                 $cartItems[$item['product_id']] = $item['quantity'];
+             }
+         }
+
+         if (empty($cartItems)) {
+             return ['Cart is empty'];
+         }
+
+         foreach ($cartItems as $productId => $quantity) {
+             if (!$this->productModel->isInStock($productId, $quantity)) {
+                 $product = $this->productModel->getById($productId);
+                 $errors[] = ($product ? $product['name'] : "Product ID {$productId}") . " has insufficient stock";
+             }
+         }
+         return $errors;
+     }
+
+
+} // End of CheckoutController class
+
 ```
 
