@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>The Scent — Signature Aromatherapy & Wellness</title>
+
+  <!-- Fonts / Icons / Tailwind -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Montserrat:wght@400;500&family=Raleway:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+
+  <!-- =========== CUSTOM STYLE =========== -->
+  <style>
+    /* ————— Color, typographic & layout variables remain unchanged ————— */
+    :root{
+      --clr-bg:#f6f5f1;--clr-bg-dark:#182024;
+      --clr-text:#262c2f;--clr-text-dark:#ebeaea;
+      --clr-primary:#2c899a;--clr-primary-dark:#30ccbb;
+      --clr-accent:#d69f61;--clr-accent-dark:#e2bb85;
+      --clr-soap:#b9cfc3;
+      --clr-cta:#ff7f50;--clr-cta-hover:#ff6347;
+      --transition:.26s cubic-bezier(.35,2,.31,1);
+      --font-head:'Cormorant Garamond',serif;
+      --font-body:'Montserrat',sans-serif;
+      --font-accent:'Raleway',sans-serif;
+      --container:1160px;
+    }
+    body{font-family:var(--font-body);background:var(--clr-bg);color:var(--clr-text);transition:background .7s,color .6s;}
+    body.dark{background:var(--clr-bg-dark);color:var(--clr-text-dark);}
+    h1,h2,h3,h4,h5,h6{font-family:var(--font-head);font-weight:700;color:var(--clr-primary);}
+    body.dark h1,body.dark h2,body.dark h3{color:var(--clr-accent-dark);}
+    /* ------------- NAV BAR + TOGGLES ------------- */
+    nav.navbar{position:fixed;width:100%;z-index:1009;top:0;left:0;background:rgba(255,255,255,.8);backdrop-filter:blur(8px);box-shadow:0 2px 19px rgba(44,137,154,.08);}
+    body.dark nav.navbar{background:rgba(22,29,32,.97);}
+    .nav-container{max-width:var(--container);width:90%;margin-inline:auto;display:flex;align-items:center;justify-content:space-between;}
+    .brand{font-family:var(--font-head);font-size:2rem;color:var(--clr-primary);display:flex;align-items:center;gap:.6em;}
+    .nav-links{display:flex;align-items:center;gap:2rem;font-family:var(--font-accent);}
+    .nav-links a{font-size:1rem;font-weight:600;text-transform:uppercase;position:relative;letter-spacing:1px;color:var(--clr-text);}
+    body.dark .nav-links a{color:var(--clr-text-dark);}
+    /* — Dark-mode toggle icon — */
+    .dark-toggle{border:none;background:none;font-size:1.4rem;cursor:pointer;color:var(--clr-accent);transition:transform .2s;}
+    body.dark .dark-toggle{color:var(--clr-accent-dark);}
+    .dark-toggle:hover{transform:rotate(18deg);}
+    /* ------------- SOUND TOGGLE ------------- */
+    .ambient-toggle{position:fixed;top:1.3em;right:1.8em;z-index:1098;background:rgba(255,255,255,.46);border-radius:50%;box-shadow:0 5px 22px rgba(40,40,31,.14);}
+    .ambient-toggle button{border:none;background:none;border-radius:50%;padding:.7em;font-size:1.5rem;color:var(--clr-accent);cursor:pointer;}
+    .ambient-toggle button:hover{background:var(--clr-soap);}
+    body.dark .ambient-toggle{background:rgba(24,32,36,.7);}
+    /* ---------- HERO + GENERIC SECTION STYLES stay unchanged ---------- */
+
+    /* ---------- “Discover Your Perfect Scent” GRID ---------- */
+    .scent-grid{display:grid;gap:1.2rem;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
+    .scent-btn{padding:1.2rem 1.4rem;border-radius:12px;text-align:center;font-family:var(--font-accent);font-weight:600;letter-spacing:.5px;background:var(--clr-primary);color:#fff;transition:background .2s,transform .2s;}
+    .scent-btn:hover{background:var(--clr-primary-dark);transform:translateY(-4px);}
+    body.dark .scent-btn{background:var(--clr-accent);color:#182024;}
+    body.dark .scent-btn:hover{background:var(--clr-accent-dark);}
+
+    /* ---------- UTILITIES ---------- */
+    section{padding:5rem 0;}
+    section h2{text-align:center;font-size:2.6rem;margin-bottom:2.4rem;}
+    /* quick responsiveness tweak */
+    @media(max-width:800px){.nav-container{flex-direction:column;gap:.5rem}}
+  </style>
+</head>
+
+<body>
+<!-- ======== NAVIGATION ======== -->
+<nav class="navbar">
+  <div class="nav-container">
+    <a href="#" class="brand"><i class="fas fa-leaf"></i> The&nbsp;Scent</a>
+
+    <div class="nav-links">
+      <a href="#about">About</a>
+      <a href="#discover">Discover</a>
+      <a href="#contact">Contact</a>
+
+      <!-- Day/Night Toggle -->
+      <button id="darkToggle" class="dark-toggle" aria-label="Toggle dark mode">
+        <i class="fas fa-moon"></i>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- ======== SOUND TOGGLE ======== -->
+<div class="ambient-toggle">
+  <button id="audioToggle" aria-label="Toggle ambient audio">
+    <!-- Default “sound on” icon (custom SVG) -->
+    <svg id="icon-sound" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M3 9v6h4l5 5V4L7 9H3z"/>
+      <path d="M14.5 12c0-1.77-.77-3.33-1.98-4.39l1.42-1.42A8.022 8.022 0 0 1 16.5 12a8.022 8.022 0 0 1-2.56 5.81l-1.42-1.42A6.012 6.012 0 0 0 14.5 12z"/>
+      <path d="M18.5 12c0-3.04-1.23-5.8-3.22-7.78l1.42-1.42A10.984 10.984 0 0 1 20.5 12c0 3.04-1.23 5.8-3.22 7.78l-1.42-1.42A8.984 8.984 0 0 0 18.5 12z"/>
+    </svg>
+  </button>
+</div>
+<!-- Hidden audio element -->
+<audio id="ambientAudio" src="https://cdn.pixabay.com/download/audio/2022/11/01/audio_64e79e6802.mp3?filename=winter-wind-cold-whistling-ambient-loop-124233.mp3" loop></audio>
+
+<!-- ======== HERO (stub only, keep yours) ======== -->
+<header class="hero relative flex items-center justify-center min-h-screen bg-gray-900 text-white">
+  <div class="hero-content text-center z-10 px-6">
+    <h1 class="text-5xl md:text-6xl font-bold">Elevate Your Essence</h1>
+    <p class="max-w-xl mx-auto mt-6 text-lg">Curated aromatherapy blends to balance mind, body, and soul.</p>
+    <button class="cta-main mt-8 inline-flex items-center gap-3 rounded-full bg-orange-400 px-7 py-4 text-lg font-semibold text-white shadow-lg transition hover:bg-orange-500">
+      Shop New Arrivals <i class="fas fa-arrow-right"></i>
+    </button>
+  </div>
+  <!-- Optional: background video / illustration goes here -->
+</header>
+
+<!-- ======== DISCOVER SECTION ======== -->
+<section id="discover">
+  <h2>Discover Your Perfect Scent</h2>
+
+  <div class="container mx-auto px-6">
+    <div class="scent-grid">
+      <button class="scent-btn">Relaxing&nbsp;Lavender</button>
+      <button class="scent-btn">Morning&nbsp;Citrus</button>
+      <button class="scent-btn">Forest&nbsp;Breeze</button>
+      <button class="scent-btn">Sweet&nbsp;Vanilla</button>
+      <button class="scent-btn">Ocean&nbsp;Mist</button>
+      <button class="scent-btn">Spiced&nbsp;Chai</button>
+    </div>
+  </div>
+</section>
+
+<!-- ======== ABOUT / CONTACT / FOOTER (keep or extend your originals) ======== -->
+<section id="about">
+  <h2>Artisanal Ingredients, Ethical Roots</h2>
+  <div class="container mx-auto px-6 prose lg:prose-lg">
+    <p>We hand-craft every blend in small batches with ethically sourced botanicals...</p>
+  </div>
+</section>
+
+<!-- ======== FOOTER (minimal) ======== -->
+<footer class="text-center py-10 text-sm opacity-75">
+  © <span id="year"></span> The Scent. All rights reserved.
+</footer>
+
+<!-- =========== INTERACTIVITY =========== -->
+<script>
+  /* ——— CURRENT YEAR ——— */
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  /* ——— DARK-MODE TOGGLE ——— */
+  const darkBtn = document.getElementById('darkToggle');
+  const darkIcon = darkBtn.querySelector('i');
+  function setTheme(isDark){
+    document.body.classList.toggle('dark', isDark);
+    darkIcon.classList.toggle('fa-moon', !isDark);
+    darkIcon.classList.toggle('fa-sun', isDark);
+    localStorage.setItem('ts-theme', isDark ? 'dark' : 'light');
+  }
+  // initial state
+  setTheme(localStorage.getItem('ts-theme') === 'dark');
+  darkBtn.addEventListener('click', () => setTheme(!document.body.classList.contains('dark')));
+
+  /* ——— AMBIENT AUDIO TOGGLE ——— */
+  const audio     = document.getElementById('ambientAudio');
+  const audioBtn  = document.getElementById('audioToggle');
+  const svgSound  = document.getElementById('icon-sound');
+
+  const muteSVG = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M16.5 12c0-1.77-.77-3.33-1.98-4.39l1.42-1.42A8.022 8.022 0 0 1 18.5 12a8.022 8.022 0 0 1-2.56 5.81l-1.42-1.42A6.012 6.012 0 0 0 16.5 12z"/>
+      <path d="M5 9v6h4l5 5V4L9 9H5z" opacity=".3"/>
+      <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>`;
+
+  function setAudioState(playing){
+    if(playing){ audio.play(); svgSound.outerHTML = svgSound.outerHTML; } // reset to original
+    else        { audio.pause(); svgSound.outerHTML = muteSVG; }
+    audioBtn.setAttribute('aria-label', playing ? 'Mute ambient audio' : 'Play ambient audio');
+  }
+  // auto-start muted to respect best practices
+  setAudioState(false);
+  audioBtn.addEventListener('click', () => setAudioState(audio.paused));
+</script>
+</body>
+</html>
