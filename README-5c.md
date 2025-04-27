@@ -375,48 +375,48 @@ This application adopts a layered architecture, heavily influenced by Domain-Dri
 
 ```mermaid
 graph TD
-    subgraph User Interaction
+    subgraph "User Interaction"
         direction LR
         CLIENT[Browser / SPA / Mobile App]
     end
 
     CLIENT -- HTTPS --> GW(API Gateway / Load Balancer / CDN);
 
-    subgraph Web Application [Laravel Application]
+    subgraph "Web Application (Laravel)"
         direction TB
-        GW --> ROUTER[Laravel Router (web.php / api.php)];
-        ROUTER --> MIDDLEWARE[HTTP Middleware (Auth, CSRF, CORS, RateLimit, etc.)];
-        MIDDLEWARE --> CONTROLLERS[HTTP Controllers (app/Http/Controllers)];
-        CONTROLLERS --> ACTIONS[Action Classes (Optional - app/Domain/.../Actions)];
-        CONTROLLERS --> SERVICES[Service Layer (app/Domain/.../Services)];
-        ACTIONS --> SERVICES; // Actions can use Services
-        CONTROLLERS --> VIEWS_RESOURCES[Presentation (Blade Views / API Resources)];
-        VIEWS_RESOURCES -- Vite --> ASSETS[Compiled CSS/JS (public/build)];
+        GW --> ROUTER[Laravel Router];
+        ROUTER --> MIDDLEWARE[HTTP Middleware];
+        MIDDLEWARE --> CONTROLLERS[HTTP Controllers];
+        CONTROLLERS --> ACTIONS[Action Classes (Optional)];
+        CONTROLLERS --> SERVICES[Service Layer];
+        ACTIONS --> SERVICES;
+        CONTROLLERS --> VIEWS_RESOURCES[Presentation (Views/Resources)];
+        VIEWS_RESOURCES -- Vite --> ASSETS[Compiled CSS/JS];
     end
 
-    subgraph Domain Layer [Core Business Logic]
+    subgraph "Domain Layer (Core Business Logic)"
         direction TB
-        SERVICES --> DOMAIN_MODELS[Domain Models / Aggregates (Eloquent Models - app/Domain/.../Models)];
-        SERVICES --> REPOSITORIES[Repositories (Implicit via Eloquent / Explicit Interfaces)];
-        SERVICES --> DOMAIN_EVENTS[Domain Events & Listeners (app/Domain/.../Events, app/Listeners)];
-        DOMAIN_MODELS -- Uses --> VALUE_OBJECTS[Value Objects (e.g., Money, Address, EmailAddress - app/Domain/.../ValueObjects)];
-        DOMAIN_MODELS -- Uses --> DOMAIN_EXCEPTIONS[Domain Exceptions (app/Domain/.../Exceptions)];
+        SERVICES --> DOMAIN_MODELS[Domain Models / Aggregates];
+        SERVICES --> REPOSITORIES[Repositories];
+        SERVICES --> DOMAIN_EVENTS[Domain Events & Listeners];
+        DOMAIN_MODELS -- Uses --> VALUE_OBJECTS[Value Objects];
+        DOMAIN_MODELS -- Uses --> DOMAIN_EXCEPTIONS[Domain Exceptions];
     end
 
-    subgraph Infrastructure Layer
+    subgraph "Infrastructure Layer"
         direction TB
-        REPOSITORIES -- Eloquent ORM --> DB[(MariaDB 11.7 - Database)];
-        SERVICES -- Adapters/Clients --> EXT_PAYMENT[Payment Gateways (Stripe, PayPal)];
-        SERVICES -- Adapters/Clients --> EXT_MAIL[Email Services (Mailgun, SES, Mailpit)];
-        SERVICES -- Adapters/Clients --> EXT_SEARCH[Search Services (Algolia - Future)];
-        SERVICES -- Adapters/Clients --> EXT_FILES[(File Storage - S3 / Local)];
-        DOMAIN_EVENTS -- Dispatched To --> QUEUE[Job Queue (Redis / Database)];
+        REPOSITORIES -- Eloquent ORM --> DB[(Database)];
+        SERVICES -- Adapters/Clients --> EXT_PAYMENT[Payment Gateways];
+        SERVICES -- Adapters/Clients --> EXT_MAIL[Email Services];
+        SERVICES -- Adapters/Clients --> EXT_SEARCH[Search Services (Future)];
+        SERVICES -- Adapters/Clients --> EXT_FILES[(File Storage)];
+        DOMAIN_EVENTS -- Dispatched To --> QUEUE[Job Queue];
     end
 
-    subgraph Async Processing
+    subgraph "Async Processing"
         direction LR
-        QUEUE --> WORKERS[Queue Workers (Horizon / queue:work)];
-        WORKERS --> SERVICES;  // Workers often re-interact with Services or Actions
+        QUEUE --> WORKERS[Queue Workers];
+        WORKERS --> SERVICES;
     end
 
     %% Styling
