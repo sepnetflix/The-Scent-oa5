@@ -1,6 +1,20 @@
 <?php
 define('ROOT_PATH', __DIR__);
 require_once __DIR__ . '/config.php'; // Defines BASE_URL, etc.
+
+// --- START: Added Composer Autoloader ---
+// Ensure the vendor directory exists (check after running 'composer install' or 'composer require')
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+} else {
+    // Log a fatal error or display a message if Composer dependencies are missing
+    error_log("FATAL ERROR: Composer autoloader not found. Run 'composer install'.");
+    // Optionally display a user-friendly error page if possible, but dependencies might be needed for that too.
+    echo "Internal Server Error: Application dependencies are missing. Please contact support.";
+    exit(1); // Stop execution
+}
+// --- END: Added Composer Autoloader ---
+
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/auth.php'; // Provides isLoggedIn(), isAdmin(), logoutUser()
 require_once __DIR__ . '/includes/SecurityMiddleware.php';
@@ -223,7 +237,7 @@ try {
                  $controller->unsubscribe(); // Handles GET request with token, exits via jsonResponse
              } else {
                   http_response_code(404);
-                  echo $this->renderView('404', ['pageTitle' => 'Not Found']); // Use renderView if available in this context
+                  require_once __DIR__ . '/views/404.php'; // Directly include 404 view
              }
              break;
 
@@ -249,14 +263,29 @@ try {
                     $controller = new CouponController($pdo);
                     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ($task === 'save') {
-                            $controller->saveCoupon(); // Handles create/update, redirects
+                            // Controller should handle create/update logic and redirection/response
+                            // E.g., $controller->saveCoupon();
+                        } elseif ($task === 'toggle_status' && $id) {
+                            // Controller should handle status toggle and response
+                            // E.g., $controller->toggleCouponStatus($id);
+                        } elseif ($task === 'delete' && $id) {
+                           // Controller should handle deletion and response
+                           // E.g., $controller->deleteCoupon($id);
+                        } else {
+                             // Default POST for coupons? Maybe just list again or show error.
+                             $controller->listCoupons();
                         }
-                    } elseif ($task === 'toggle_status' && $id) {
-                        $controller->toggleCouponStatus($id); // Handles JSON response or redirect
-                    } elseif ($task === 'delete' && $id) {
-                        $controller->deleteCoupon($id); // Handles JSON response or redirect
-                    } else {
-                        $controller->listCoupons(); // Default action: show list
+                    } else { // GET Requests for coupons section
+                         if ($task === 'edit' && $id) {
+                              // Controller should show edit form
+                              // E.g., $controller->showEditForm($id);
+                         } elseif ($task === 'create') {
+                              // Controller should show create form
+                              // E.g., $controller->showCreateForm();
+                         } else {
+                             // Default GET action: show list
+                             $controller->listCoupons(); // Method needs to exist in CouponController
+                         }
                     }
                     break;
                 // Add other admin sections (products, orders, users) here...
@@ -265,6 +294,9 @@ try {
                 default: // Admin Dashboard
                     // Load admin dashboard view directly or via a controller method
                      $pageTitle = "Admin Dashboard"; // Example title
+                     $bodyClass = "page-admin-dashboard"; // Example class
+                     $csrfToken = SecurityMiddleware::generateCSRFToken(); // Needed if dashboard has actions
+                     extract(['pageTitle' => $pageTitle, 'bodyClass' => $bodyClass, 'csrfToken' => $csrfToken]);
                      require_once __DIR__ . '/views/admin/dashboard.php'; // Direct include for simple dashboard
                     break;
             }
@@ -274,26 +306,36 @@ try {
         case 'contact':
             $pageTitle = 'Contact Us';
             $csrfToken = SecurityMiddleware::generateCSRFToken();
+            $bodyClass = 'page-contact';
+             extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
             require_once __DIR__ . '/views/contact.php';
             break;
         case 'faq':
             $pageTitle = 'FAQs';
             $csrfToken = SecurityMiddleware::generateCSRFToken();
+             $bodyClass = 'page-faq';
+            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
             require_once __DIR__ . '/views/faq.php';
             break;
         case 'shipping':
             $pageTitle = 'Shipping & Returns';
             $csrfToken = SecurityMiddleware::generateCSRFToken();
+            $bodyClass = 'page-shipping';
+            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
             require_once __DIR__ . '/views/shipping.php';
             break;
         case 'order-tracking': // Maybe needs a controller if dynamic
             $pageTitle = 'Track Your Order';
             $csrfToken = SecurityMiddleware::generateCSRFToken();
+            $bodyClass = 'page-order-tracking';
+            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
             require_once __DIR__ . '/views/order-tracking.php';
             break;
         case 'privacy':
             $pageTitle = 'Privacy Policy';
             $csrfToken = SecurityMiddleware::generateCSRFToken();
+            $bodyClass = 'page-privacy';
+            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
             require_once __DIR__ . '/views/privacy.php';
             break;
         case 'about': // Add route for about page if needed
@@ -302,30 +344,34 @@ try {
              $bodyClass = 'page-about'; // Set body class
              // Make variables available to the view scope before including it
              extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
-             require_once __DIR__ . '/views/about.php'; // Require the *new* view file
+             require_once __DIR__ . '/views/about.php'; // Require the view file
              break;
         case 'error': // Explicit error page route
             $pageTitle = 'Error';
+            $bodyClass = 'page-error';
+            $csrfToken = SecurityMiddleware::generateCSRFToken(); // For consistency if layout needs it
             http_response_code(500); // Set appropriate code if possible
+            extract(['pageTitle' => $pageTitle, 'bodyClass' => $bodyClass, 'csrfToken' => $csrfToken]);
             require_once __DIR__ . '/views/error.php';
             break;
 
         default: // 404 Not Found
             http_response_code(404);
+            $pageTitle = 'Page Not Found';
+            $bodyClass = 'page-404';
+            $csrfToken = SecurityMiddleware::generateCSRFToken();
+            extract(['pageTitle' => $pageTitle, 'bodyClass' => $bodyClass, 'csrfToken' => $csrfToken]);
             require_once __DIR__ . '/views/404.php';
             break;
     }
 } catch (PDOException $e) {
-    error_log("Database error in index.php: " . $e->getMessage());
-    // Delegate to ErrorHandler or display generic error view
+    // Delegate to ErrorHandler (which should exist now)
     ErrorHandler::handleException($e); // Let the handler manage display/logging
-    // require_once __DIR__ . '/views/error.php'; // Fallback if handler doesn't exit
-    exit();
-} catch (Exception $e) {
-    // Catch other exceptions (e.g., CSRF, routing errors)
-    error_log("General error in index.php: " . $e->getMessage());
+    exit(1);
+} catch (Throwable $e) { // Catch Throwable for broader coverage (PHP 7+)
+    // Catch other exceptions (e.g., CSRF, routing errors, general errors)
+    error_log("General error/exception in index.php: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
     // Delegate to ErrorHandler
     ErrorHandler::handleException($e);
-    // require_once __DIR__ . '/views/error.php'; // Fallback
-    exit();
+    exit(1);
 }

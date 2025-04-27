@@ -291,7 +291,7 @@ class AccountController extends BaseController {
 
             try {
                 // Find user *before* generating token to avoid unnecessary token generation
-                $user = $this->userModel->getByEmail($email);
+                $user = $this->userModel->getByEmail($email); // Correct method name used
 
                 if ($user) {
                     // Generate a secure random token
@@ -496,7 +496,6 @@ class AccountController extends BaseController {
              $data = [
                  'pageTitle' => 'Login - The Scent',
                  'csrfToken' => $this->generateCSRFToken(),
-                 // *** APPLY FIX HERE ***
                  'bodyClass' => 'page-login bg-gradient-to-br from-light to-secondary/20'
              ];
              // Use renderView to pass data correctly
@@ -521,8 +520,9 @@ class AccountController extends BaseController {
                 throw new Exception('Invalid email or password format.'); // More specific error
             }
 
-            // Attempt login
-            $user = $this->userModel->findByEmail($email);
+            // --- FIX APPLIED HERE ---
+            // Attempt login using the correct method name
+            $user = $this->userModel->getByEmail($email); // Use getByEmail instead of findByEmail
 
             // Use password_verify - crucial!
             if (!$user || !password_verify($password, $user['password'])) {
@@ -542,8 +542,6 @@ class AccountController extends BaseController {
 
             // --- Success ---
             // Regenerate session ID and set user data in session
-            // This should ideally be handled within a dedicated auth service/helper
-            // For now, mimic expected session setup. BaseController regenerateSession handles the ID.
             $this->regenerateSession(); // Call BaseController method explicitly here after successful login
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_role'] = $user['role'] ?? 'customer'; // Assuming a role column
@@ -553,13 +551,13 @@ class AccountController extends BaseController {
                  'email' => $user['email'],
                  'role' => $_SESSION['user_role']
             ];
-            // Set session integrity markers (done by BaseController::regenerateSession or here)
+            // Set session integrity markers
              $_SESSION['user_agent'] = $_SERVER['HTTP_USER_AGENT'] ?? '';
              $_SESSION['ip_address'] = $ipAddress;
              $_SESSION['last_login'] = time();
 
 
-            // Merge session cart into DB cart (Ensure CartController and method exist)
+            // Merge session cart into DB cart
             CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
 
             // Log successful login using BaseController method
@@ -567,9 +565,9 @@ class AccountController extends BaseController {
 
             // Clear any previous failed login attempts tracking for this user/IP if implemented
 
-            // Determine redirect URL (e.g., intended page or dashboard)
-             $redirectUrl = $_SESSION['redirect_after_login'] ?? (BASE_URL . 'index.php?page=account&action=dashboard'); // Use constant/helper
-             unset($_SESSION['redirect_after_login']); // Clear redirect destination
+            // Determine redirect URL
+             $redirectUrl = $_SESSION['redirect_after_login'] ?? (BASE_URL . 'index.php?page=account&action=dashboard');
+             unset($_SESSION['redirect_after_login']);
 
 
             // Use jsonResponse from BaseController
@@ -620,8 +618,9 @@ class AccountController extends BaseController {
                  throw new Exception('Invalid input provided. Please check email, name, and password.');
             }
 
-            // Check if email exists *before* hashing password
-            if ($this->userModel->findByEmail($email)) {
+            // --- FIX APPLIED HERE ---
+            // Check if email exists *before* hashing password using the correct method name
+            if ($this->userModel->getByEmail($email)) { // Use getByEmail instead of findByEmail
                  throw new Exception('This email address is already registered.');
             }
 
@@ -644,7 +643,7 @@ class AccountController extends BaseController {
                     'email' => $email,
                     'password' => $hashedPassword, // Use the securely hashed password
                     'name' => $name,
-                    'role' => 'customer' // Default role
+                    'role' => 'user' // Default role, changed from customer to user
                     // Add other fields like 'newsletter' preference if applicable from form
                     // 'newsletter' => filter_input(INPUT_POST, 'newsletter', FILTER_VALIDATE_BOOLEAN) ?? false,
                 ]);

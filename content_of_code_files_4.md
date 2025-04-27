@@ -293,7 +293,7 @@ class AccountController extends BaseController {
 
             try {
                 // Find user *before* generating token to avoid unnecessary token generation
-                $user = $this->userModel->getByEmail($email);
+                $user = $this->userModel->getByEmail($email); // Correct method name used
 
                 if ($user) {
                     // Generate a secure random token
@@ -498,7 +498,6 @@ class AccountController extends BaseController {
              $data = [
                  'pageTitle' => 'Login - The Scent',
                  'csrfToken' => $this->generateCSRFToken(),
-                 // *** APPLY FIX HERE ***
                  'bodyClass' => 'page-login bg-gradient-to-br from-light to-secondary/20'
              ];
              // Use renderView to pass data correctly
@@ -523,8 +522,9 @@ class AccountController extends BaseController {
                 throw new Exception('Invalid email or password format.'); // More specific error
             }
 
-            // Attempt login
-            $user = $this->userModel->findByEmail($email);
+            // --- FIX APPLIED HERE ---
+            // Attempt login using the correct method name
+            $user = $this->userModel->getByEmail($email); // Use getByEmail instead of findByEmail
 
             // Use password_verify - crucial!
             if (!$user || !password_verify($password, $user['password'])) {
@@ -544,8 +544,6 @@ class AccountController extends BaseController {
 
             // --- Success ---
             // Regenerate session ID and set user data in session
-            // This should ideally be handled within a dedicated auth service/helper
-            // For now, mimic expected session setup. BaseController regenerateSession handles the ID.
             $this->regenerateSession(); // Call BaseController method explicitly here after successful login
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_role'] = $user['role'] ?? 'customer'; // Assuming a role column
@@ -555,13 +553,13 @@ class AccountController extends BaseController {
                  'email' => $user['email'],
                  'role' => $_SESSION['user_role']
             ];
-            // Set session integrity markers (done by BaseController::regenerateSession or here)
+            // Set session integrity markers
              $_SESSION['user_agent'] = $_SERVER['HTTP_USER_AGENT'] ?? '';
              $_SESSION['ip_address'] = $ipAddress;
              $_SESSION['last_login'] = time();
 
 
-            // Merge session cart into DB cart (Ensure CartController and method exist)
+            // Merge session cart into DB cart
             CartController::mergeSessionCartOnLogin($this->pdo, $user['id']);
 
             // Log successful login using BaseController method
@@ -569,9 +567,9 @@ class AccountController extends BaseController {
 
             // Clear any previous failed login attempts tracking for this user/IP if implemented
 
-            // Determine redirect URL (e.g., intended page or dashboard)
-             $redirectUrl = $_SESSION['redirect_after_login'] ?? (BASE_URL . 'index.php?page=account&action=dashboard'); // Use constant/helper
-             unset($_SESSION['redirect_after_login']); // Clear redirect destination
+            // Determine redirect URL
+             $redirectUrl = $_SESSION['redirect_after_login'] ?? (BASE_URL . 'index.php?page=account&action=dashboard');
+             unset($_SESSION['redirect_after_login']);
 
 
             // Use jsonResponse from BaseController
@@ -622,8 +620,9 @@ class AccountController extends BaseController {
                  throw new Exception('Invalid input provided. Please check email, name, and password.');
             }
 
-            // Check if email exists *before* hashing password
-            if ($this->userModel->findByEmail($email)) {
+            // --- FIX APPLIED HERE ---
+            // Check if email exists *before* hashing password using the correct method name
+            if ($this->userModel->getByEmail($email)) { // Use getByEmail instead of findByEmail
                  throw new Exception('This email address is already registered.');
             }
 
@@ -646,7 +645,7 @@ class AccountController extends BaseController {
                     'email' => $email,
                     'password' => $hashedPassword, // Use the securely hashed password
                     'name' => $name,
-                    'role' => 'customer' // Default role
+                    'role' => 'user' // Default role, changed from customer to user
                     // Add other fields like 'newsletter' preference if applicable from form
                     // 'newsletter' => filter_input(INPUT_POST, 'newsletter', FILTER_VALIDATE_BOOLEAN) ?? false,
                 ]);
@@ -723,222 +722,253 @@ class AccountController extends BaseController {
 # controllers/NewsletterController.php  
 ```php
 <?php
+// controllers/NewsletterController.php (Updated)
+
 require_once __DIR__ . '/BaseController.php';
-require_once __DIR__ . '/../includes/EmailService.php';
+// EmailService is included via BaseController's include
 
 class NewsletterController extends BaseController {
-    private $emailService;
+    // private $emailService; // Removed - Inherited from BaseController
 
-    public function __construct($pdo) {
-        parent::__construct($pdo);
-        $this->emailService = new EmailService();
+    // Constructor now only needs PDO, EmailService is handled by parent
+    public function __construct(PDO $pdo) { // Use type hint PDO $pdo
+        parent::__construct($pdo); // Calls parent constructor
     }
-    
+
     public function subscribe() {
         try {
             $this->validateCSRF();
-            
-            // Standardized rate limiting
             $this->validateRateLimit('newsletter');
-            
+
+            // Use validateInput from BaseController which uses SecurityMiddleware
             $email = $this->validateInput($_POST['email'] ?? null, 'email');
-            if (!$email) {
+            if ($email === false) { // validateInput returns false on failure
                 return $this->jsonResponse([
                     'success' => false,
                     'message' => 'Please provide a valid email address.'
                 ], 400);
             }
-            
+
             $this->beginTransaction();
-            
-            // Check if already subscribed
-            $stmt = $this->pdo->prepare("
-                SELECT id, status 
-                FROM newsletter_subscribers 
+
+            // Use $this->db for database operations
+            $stmt = $this->db->prepare("
+                SELECT id, status, unsubscribe_token
+                FROM newsletter_subscribers
                 WHERE email = ?
             ");
             $stmt->execute([$email]);
             $subscriber = $stmt->fetch();
-            
+
+            $isNewSubscriber = false;
+            $subscriberId = null;
+            $token = null;
+
             if ($subscriber) {
+                $subscriberId = $subscriber['id'];
+                $token = $subscriber['unsubscribe_token']; // Get existing token
                 if ($subscriber['status'] === 'active') {
+                    $this->rollback(); // No changes needed
                     return $this->jsonResponse([
-                        'success' => false,
-                        'message' => 'This email is already subscribed to our newsletter.'
+                        'success' => true, // Return true, but indicate already subscribed
+                        'message' => 'This email is already subscribed.'
                     ]);
                 }
-                
-                // Reactivate unsubscribed user
-                $stmt = $this->pdo->prepare("
+
+                // Reactivate unsubscribed user & ensure token exists
+                $token = $token ?: $this->generateUnsubscribeToken($email); // Generate if missing
+                $updateStmt = $this->db->prepare("
                     UPDATE newsletter_subscribers
                     SET status = 'active',
                         updated_at = NOW(),
-                        unsubscribed_at = NULL
+                        unsubscribed_at = NULL,
+                        unsubscribe_token = ? -- Update token just in case
                     WHERE id = ?
                 ");
-                $stmt->execute([$subscriber['id']]);
+                $updateStmt->execute([$token, $subscriber['id']]);
             } else {
                 // Add new subscriber
-                $stmt = $this->pdo->prepare("
+                $isNewSubscriber = true;
+                $token = $this->generateUnsubscribeToken($email); // Generate new token
+                $insertStmt = $this->db->prepare("
                     INSERT INTO newsletter_subscribers (
-                        email, 
-                        status, 
+                        email,
+                        status,
                         ip_address,
-                        unsubscribe_token
-                    ) VALUES (?, 'active', ?, ?)
+                        unsubscribe_token,
+                        created_at,
+                        updated_at
+                    ) VALUES (?, 'active', ?, ?, NOW(), NOW())
                 ");
-                $stmt->execute([
+                $insertStmt->execute([
                     $email,
-                    $_SERVER['REMOTE_ADDR'],
-                    $this->generateUnsubscribeToken($email)
+                    $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN',
+                    $token
                 ]);
+                $subscriberId = $this->db->lastInsertId();
             }
-            
-            // Send welcome email
-            $content = $this->getWelcomeEmailContent();
-            $this->emailService->sendNewsletter($email, $content);
-            
-            // Log the email
-            $this->logEmail(
-                $this->getUserId(),
-                'newsletter_welcome',
+
+            // Send Welcome/Confirmation Email (using correct method)
+            $unsubscribeLink = $this->getUnsubscribeUrl($email, $token);
+            $emailSubject = $isNewSubscriber ? 'Welcome to The Scent Newsletter!' : 'You are now subscribed again!';
+            $emailTemplate = 'newsletter_welcome'; // Use a consistent template name
+            $emailData = [
+                'email' => $email,
+                'unsubscribe_link' => $unsubscribeLink,
+                'is_reactivation' => !$isNewSubscriber
+            ];
+
+            // Use the inherited emailService instance and its sendEmail method
+            $emailSent = $this->emailService->sendEmail(
                 $email,
-                'Welcome to The Scent Newsletter',
-                'sent'
+                $emailSubject,
+                $emailTemplate,
+                $emailData,
+                false, // Not high priority
+                null, // No specific user ID associated with newsletter signup itself
+                'newsletter_welcome' // Email type for logging
             );
-            
+
+            if (!$emailSent) {
+                 // Log but don't necessarily fail the whole subscription if email fails
+                 error_log("Failed to send newsletter welcome email to {$email}");
+            }
+
             $this->commit();
-            
+
             return $this->jsonResponse([
                 'success' => true,
-                'message' => 'Thank you for subscribing to our newsletter!'
+                'message' => 'Thank you for subscribing!'
             ]);
-            
+
         } catch (Exception $e) {
             $this->rollback();
             error_log("Newsletter subscription error: " . $e->getMessage());
-            
+            $this->logSecurityEvent('newsletter_subscribe_error', ['error' => $e->getMessage(), 'email' => $email ?? null]);
+
             return $this->jsonResponse([
                 'success' => false,
-                'message' => 'An error occurred while processing your subscription.'
+                'message' => 'An error occurred. Please try again later.'
             ], 500);
         }
     }
-    
+
     public function unsubscribe() {
         try {
+            // Validate inputs using BaseController method
             $email = $this->validateInput($_GET['email'] ?? null, 'email');
-            $token = $this->validateInput($_GET['token'] ?? null, 'string');
-            
-            if (!$email || !$token) {
-                throw new Exception('Invalid unsubscribe request');
+            $token = $this->validateInput($_GET['token'] ?? null, 'string', ['max' => 64]); // Basic validation
+
+            if ($email === false || $token === false || empty($token)) {
+                throw new Exception('Invalid unsubscribe link parameters.');
             }
-            
+
             $this->beginTransaction();
-            
-            $stmt = $this->pdo->prepare("
-                UPDATE newsletter_subscribers 
+
+            // Use $this->db
+            $stmt = $this->db->prepare("
+                UPDATE newsletter_subscribers
                 SET status = 'unsubscribed',
                     unsubscribed_at = NOW(),
                     updated_at = NOW()
-                WHERE email = ? 
+                WHERE email = ?
                 AND unsubscribe_token = ?
-                AND status = 'active'
+                AND status = 'active' -- Only unsubscribe active users
             ");
             $stmt->execute([$email, $token]);
-            
+
+            // Check if any row was actually updated
             if ($stmt->rowCount() === 0) {
-                throw new Exception('Invalid unsubscribe request');
+                 // Could be already unsubscribed, or invalid link
+                 // Check if the user exists but is already unsubscribed
+                 $checkStmt = $this->db->prepare("SELECT status FROM newsletter_subscribers WHERE email = ? AND unsubscribe_token = ?");
+                 $checkStmt->execute([$email, $token]);
+                 $currentStatus = $checkStmt->fetchColumn();
+                 if ($currentStatus === 'unsubscribed') {
+                     // Already done, treat as success? Or specific message?
+                     $this->commit(); // Commit as no change needed
+                     return $this->jsonResponse([
+                         'success' => true, // Indicate success as they are unsubscribed
+                         'message' => 'You are already unsubscribed.'
+                     ]);
+                 } else {
+                    // Invalid link / email / token combo
+                     throw new Exception('Invalid or expired unsubscribe link.');
+                 }
             }
-            
-            // Log unsubscribe
-            $this->logEmail(
-                null,
-                'newsletter_unsubscribe',
-                $email,
-                'Newsletter Unsubscription',
-                'processed'
-            );
-            
+
+             // Log successful unsubscribe using BaseController method
+             $this->logAuditTrail('newsletter_unsubscribe', null, ['email' => $email]);
+
+
             $this->commit();
-            
+
+            // Consider showing a simple confirmation page instead of JSON for GET request
+            // For now, returning JSON as per original structure
             return $this->jsonResponse([
                 'success' => true,
                 'message' => 'You have been successfully unsubscribed.'
             ]);
-            
+
         } catch (Exception $e) {
             $this->rollback();
             error_log("Newsletter unsubscribe error: " . $e->getMessage());
-            
+            $this->logSecurityEvent('newsletter_unsubscribe_error', ['error' => $e->getMessage(), 'email' => $email ?? null]);
+
+            // Return error JSON
             return $this->jsonResponse([
                 'success' => false,
-                'message' => 'Invalid unsubscribe request.'
+                'message' => $e->getMessage() // Show specific error message
             ], 400);
         }
     }
-    
-    private function generateUnsubscribeToken($email) {
-        return hash_hmac(
-            'sha256',
-            $email . time(),
-            NEWSLETTER_SECRET_KEY
-        );
-    }
-    
-    public function logEmail($userId, $emailType, $recipientEmail, $subject, $status, $errorMessage = null) {
-        try {
-            $stmt = $this->pdo->prepare("
-                INSERT INTO email_log 
-                (user_id, email_type, recipient_email, subject, status, error_message)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([
-                $userId,
-                $emailType,
-                $recipientEmail,
-                $subject,
-                $status,
-                $errorMessage
-            ]);
-            return true;
-        } catch (Exception $e) {
-            error_log("Email logging error: " . $e->getMessage());
-            return false;
-        }
-    }
-    
-    private function getWelcomeEmailContent() {
-        ob_start();
-        include __DIR__ . '/../views/emails/newsletter_welcome.php';
-        return ob_get_clean();
-    }
-    
+
+    private function generateUnsubscribeToken(string $email): string {
+         // Use a more secure method if possible, but HMAC is reasonable
+         // Ensure NEWSLETTER_SECRET_KEY is defined and strong in config.php
+         if (!defined('NEWSLETTER_SECRET_KEY')) {
+             error_log("NEWSLETTER_SECRET_KEY is not defined in config.php!");
+             // Fallback, but highly insecure
+             return bin2hex(random_bytes(16));
+         }
+         return hash_hmac(
+             'sha256',
+             $email . microtime(), // Add microtime for more uniqueness
+             NEWSLETTER_SECRET_KEY
+         );
+     }
+
+     private function getUnsubscribeUrl(string $email, string $token): string {
+         // Construct the unsubscribe URL using BASE_URL
+         $baseUrl = rtrim(BASE_URL, '/');
+         return $baseUrl . '/index.php?page=newsletter&action=unsubscribe&email=' . urlencode($email) . '&token=' . urlencode($token);
+     }
+
+    // Remove logEmail method - it's inherited from BaseController
+    // Remove getWelcomeEmailContent - welcome email content generated via renderTemplate
+
+    // getSubscriberCount uses $this->db (inherited) - OK
     public function getSubscriberCount() {
         $this->requireAdmin();
-        
-        $stmt = $this->pdo->query("
-            SELECT COUNT(*) 
-            FROM newsletter_subscribers 
-            WHERE status = 'active'
-        ");
+        $stmt = $this->db->query("SELECT COUNT(*) FROM newsletter_subscribers WHERE status = 'active'");
         return $stmt->fetchColumn();
     }
-    
+
+    // getRecentSubscribers uses $this->db (inherited) - OK
     public function getRecentSubscribers($limit = 10) {
         $this->requireAdmin();
-        
-        $stmt = $this->pdo->prepare("
-            SELECT email, created_at
-            FROM newsletter_subscribers
-            WHERE status = 'active'
-            ORDER BY created_at DESC
-            LIMIT ?
+        // Use prepare statement for limit
+        $stmt = $this->db->prepare("
+            SELECT email, created_at FROM newsletter_subscribers
+            WHERE status = 'active' ORDER BY created_at DESC LIMIT ?
         ");
-        $stmt->execute([$limit]);
+        $stmt->bindValue(1, (int)$limit, PDO::PARAM_INT);
+        $stmt->execute();
         return $stmt->fetchAll();
     }
-}
+
+} // End of NewsletterController class
+
 ```
 
 # controllers/CheckoutController.php  

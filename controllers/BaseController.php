@@ -11,7 +11,7 @@ abstract class BaseController {
         $this->db = $pdo;
         $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $this->securityMiddleware = new SecurityMiddleware();
-        $this->emailService = new EmailService();
+        $this->emailService = new EmailService($this->db); // Pass the PDO connection
         $this->initializeSecurityHeaders();
     }
     

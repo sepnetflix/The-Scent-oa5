@@ -27,7 +27,7 @@ class User {
         return $stmt->execute([
             $data['name'],
             $data['email'],
-            password_hash($data['password'], PASSWORD_DEFAULT),
+	    $data['password'], // Expecting already hashed password from controller
             $data['role'] ?? 'user'
         ]);
     }

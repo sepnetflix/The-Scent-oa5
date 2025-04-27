@@ -456,32 +456,65 @@ class Cart {
 # includes/ErrorHandler.php  
 ```php
 <?php
+// includes/ErrorHandler.php (Corrected - Re-added missing handler methods)
+
+// Ensure SecurityLogger class is defined before ErrorHandler uses it.
+// (It's defined below in this same file)
 
 class ErrorHandler {
-    private static $logger;
-    private static $securityLogger;
-    private static $errorCount = [];
-    private static $lastErrorTime = [];
-    
-    public static function init($logger = null) {
+    private static $logger; // For optional external PSR logger
+    private static ?SecurityLogger $securityLogger = null; // Use type hint, initialize as null
+    private static array $errorCount = []; // Use type hint
+    private static array $lastErrorTime = []; // Use type hint
+
+    public static function init($logger = null): void { // Add void return type hint
         self::$logger = $logger;
-        self::$securityLogger = new SecurityLogger();
-        
+
+        // Instantiate SecurityLogger - PDO injection needs careful handling here
+        // Since init is static and called early, we rely on the logger's fallback
+        if (self::$securityLogger === null) {
+            self::$securityLogger = new SecurityLogger(); // Instantiated without PDO initially
+        }
+
+        // --- Set up handlers ---
+        // Ensure these methods exist below before setting handlers!
         set_error_handler([self::class, 'handleError']);
         set_exception_handler([self::class, 'handleException']);
         register_shutdown_function([self::class, 'handleFatalError']);
-        
-        // Set up error log rotation
-        if (!is_dir(__DIR__ . '/../logs')) {
-            mkdir(__DIR__ . '/../logs', 0750, true);
+        // --- End of Set up handlers ---
+
+
+        // Log rotation setup (Improved checks)
+        $logDir = realpath(__DIR__ . '/../logs');
+        if ($logDir === false) {
+             if (!is_dir(__DIR__ . '/../logs')) { // Check if directory creation is needed
+                if (!@mkdir(__DIR__ . '/../logs', 0750, true)) { // Attempt creation, suppress errors for logging
+                      error_log("FATAL: Failed to create log directory: " . __DIR__ . '/../logs' . " - Check parent directory permissions.");
+                      // Potentially terminate or throw exception if logging is critical
+                 } else {
+                     @chmod(__DIR__ . '/../logs', 0750); // Try setting permissions after creation
+                 }
+            } else {
+                 // Directory exists but realpath failed (symlink issue?)
+                 error_log("Warning: Log directory path resolution failed for: " . __DIR__ . '/../logs');
+            }
+        } elseif (!is_writable($logDir)) {
+             error_log("FATAL: Log directory is not writable: " . $logDir . " - Check permissions.");
+             // Potentially terminate or throw exception
         }
     }
-    
-    public static function handleError($errno, $errstr, $errfile, $errline) {
+
+    // --- START: Missing Handler Methods Added Back ---
+
+    /**
+     * Custom error handler. Converts PHP errors to exceptions (optional) or logs and displays them.
+     */
+    public static function handleError(int $errno, string $errstr, string $errfile = '', int $errline = 0): bool {
+        // Check if error reporting is suppressed with @
         if (!(error_reporting() & $errno)) {
-            return false;
+            return false; // Don't execute the PHP internal error handler
         }
-        
+
         $error = [
             'type' => self::getErrorType($errno),
             'message' => $errstr,
@@ -489,259 +522,523 @@ class ErrorHandler {
             'line' => $errline,
             'context' => self::getSecureContext()
         ];
-        
-        self::trackError($error);
-        self::logError($error);
-        
-        if (ENVIRONMENT === 'development') {
-            self::displayError($error);
+
+        self::trackError($error); // Track frequency
+        self::logErrorToFile($error); // Log to file/logger
+
+        // Display error only in development, hide details in production
+        // Using output buffering inside displayErrorPage for safety
+        if (!headers_sent()) {
+             http_response_code(500);
         } else {
-            self::displayProductionError();
+            error_log("ErrorHandler Warning: Cannot set HTTP 500 status code, headers already sent before error handling (errno: {$errno}).");
         }
-        
+
+        if (defined('ENVIRONMENT') && ENVIRONMENT === 'development') {
+            self::displayErrorPage($error);
+        } else {
+            self::displayErrorPage(null); // Display generic error page
+        }
+
+        // Returning true prevents PHP's default error handler.
+        // Usually desired, but might want to return false for certain non-fatal errors
+        // if you want PHP's logging to also occur.
+        // For E_USER_ERROR, returning true *might* prevent script termination, depending on PHP version/config.
+        // It's safer to exit explicitly in handleException for uncaught exceptions.
+        // If this error is fatal (E_ERROR, E_PARSE, etc.), PHP will likely terminate anyway.
+        // Let's return true to indicate we've handled it.
         return true;
     }
-    
-    private static function trackError($error) {
-        $errorKey = md5($error['file'] . $error['line'] . $error['type']);
-        $now = time();
-        
-        if (!isset(self::$errorCount[$errorKey])) {
-            self::$errorCount[$errorKey] = 0;
-            self::$lastErrorTime[$errorKey] = $now;
-        }
-        
-        // Reset count if more than an hour has passed
-        if ($now - self::$lastErrorTime[$errorKey] > 3600) {
-            self::$errorCount[$errorKey] = 0;
-        }
-        
-        self::$errorCount[$errorKey]++;
-        self::$lastErrorTime[$errorKey] = $now;
-        
-        // Alert on high frequency errors
-        if (self::$errorCount[$errorKey] > 10) {
-            self::$securityLogger->alert("High frequency error detected", [
-                'error' => $error,
-                'count' => self::$errorCount[$errorKey],
-                'timespan' => $now - self::$lastErrorTime[$errorKey]
-            ]);
-        }
-    }
-    
-    public static function handleException($exception) {
+
+     /**
+      * Custom exception handler. Logs uncaught exceptions and displays an error page.
+      */
+     public static function handleException(Throwable $exception): void { // Use Throwable type hint (PHP 7+)
+        // --- Enhanced Logging ---
+        $errorMessage = sprintf(
+            "Uncaught Exception '%s': \"%s\" in %s:%d",
+            get_class($exception),
+            $exception->getMessage(),
+            $exception->getFile(),
+            $exception->getLine()
+        );
+        error_log($errorMessage); // Log basic info immediately
+        error_log("Stack trace:\n" . $exception->getTraceAsString()); // Log trace separately
+
         $error = [
             'type' => get_class($exception),
             'message' => $exception->getMessage(),
             'file' => $exception->getFile(),
             'line' => $exception->getLine(),
-            'trace' => $exception->getTraceAsString(),
+            'trace' => $exception->getTraceAsString(), // Include trace
             'context' => self::getSecureContext()
         ];
-        
-        if ($exception instanceof SecurityException) {
-            self::$securityLogger->critical("Security exception occurred", $error);
+
+        // Log security exceptions specifically
+        if (self::isSecurityError($error)) { // Check keywords for security relevance
+             if(self::$securityLogger) self::$securityLogger->warning("Potentially security-related exception caught", $error);
         }
-        
-        self::logError($error);
-        
-        if (ENVIRONMENT === 'development') {
-            self::displayError($error);
-        } else {
-            self::displayProductionError();
-        }
-    }
-    
-    public static function handleFatalError() {
-        $error = error_get_last();
-        if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
-            self::handleError(
-                $error['type'],
-                $error['message'],
-                $error['file'],
-                $error['line']
-            );
-        }
-    }
-    
-    private static function getErrorType($errno) {
+
+        self::logErrorToFile($error); // Log all exceptions with more detail
+
+         // Display error only in development, hide details in production
+         if (!headers_sent()) {
+              http_response_code(500);
+         } else {
+             error_log("ErrorHandler Warning: Cannot set HTTP 500 status code, headers already sent before exception handling.");
+         }
+
+         // Use output buffering to capture the error page output safely
+         ob_start();
+         try {
+             if (defined('ENVIRONMENT') && ENVIRONMENT === 'development') {
+                 self::displayErrorPage($error);
+             } else {
+                 self::displayErrorPage(null);
+             }
+             echo ob_get_clean(); // Send buffered output
+         } catch (Throwable $displayError) {
+              ob_end_clean(); // Discard buffer if error page itself fails
+              // Fallback to plain text if error page fails
+              if (!headers_sent()) { // Check again before sending fallback header
+                   header('Content-Type: text/plain; charset=UTF-8', true, 500);
+              }
+              echo "A critical error occurred, and the error page could not be displayed.\n";
+              echo "Please check the server error logs for details.\n";
+              error_log("FATAL: Failed to display error page. Original error: " . print_r($error, true) . ". Display error: " . $displayError->getMessage());
+         }
+
+         exit(1); // Ensure script terminates after handling uncaught exception
+     }
+
+     /**
+      * Shutdown handler to catch fatal errors that aren't caught by set_error_handler.
+      */
+     public static function handleFatalError(): void {
+         $error = error_get_last();
+         // Check if it's a fatal error type we want to handle
+         if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR])) {
+              // Create a structured error array similar to handleError/handleException
+             $fatalError = [
+                 'type' => self::getErrorType($error['type']),
+                 'message' => $error['message'],
+                 'file' => $error['file'],
+                 'line' => $error['line'],
+                 'context' => self::getSecureContext(),
+                 'trace' => "N/A (Fatal Error)" // No trace available for most fatal errors
+             ];
+
+             self::logErrorToFile($fatalError); // Log the fatal error
+
+              // Avoid double display if headers already sent by previous output/error
+              // Use output buffering for safety
+              ob_start();
+              try {
+                   if (!headers_sent()) {
+                       http_response_code(500);
+                       // We might be mid-output, but try to set HTML type if possible
+                       // Avoid this if displaying a plain text fallback later
+                       // header('Content-Type: text/html; charset=UTF-8');
+                   } else {
+                        error_log("ErrorHandler Warning: Cannot set HTTP 500 status code, headers already sent before fatal error handling.");
+                   }
+
+                   if (defined('ENVIRONMENT') && ENVIRONMENT === 'development') {
+                       self::displayErrorPage($fatalError);
+                   } else {
+                       self::displayErrorPage(null); // Generic error page
+                   }
+                   echo ob_get_clean(); // Send buffered output
+               } catch (Throwable $displayError) {
+                   ob_end_clean(); // Discard buffer if error page itself fails
+                   if (!headers_sent()) { // Check again before sending fallback header
+                       header('Content-Type: text/plain; charset=UTF-8', true, 500);
+                   }
+                   // If headers WERE sent, this plain text might interleave badly, but it's a last resort
+                   echo "\n\nA critical fatal error occurred, and the error page could not be displayed.\n";
+                   echo "Please check the server error logs for details.\n";
+                   error_log("FATAL: Failed to display fatal error page. Original error: " . print_r($fatalError, true) . ". Display error: " . $displayError->getMessage());
+               }
+              // No exit() here, as shutdown function runs after script execution theoretically finishes.
+         }
+     }
+
+     private static function getErrorType(int $errno): string {
         switch ($errno) {
-            case E_ERROR:
-                return 'Fatal Error';
-            case E_WARNING:
-                return 'Warning';
-            case E_PARSE:
-                return 'Parse Error';
-            case E_NOTICE:
-                return 'Notice';
-            case E_CORE_ERROR:
-                return 'Core Error';
-            case E_CORE_WARNING:
-                return 'Core Warning';
-            case E_COMPILE_ERROR:
-                return 'Compile Error';
-            case E_COMPILE_WARNING:
-                return 'Compile Warning';
-            case E_USER_ERROR:
-                return 'User Error';
-            case E_USER_WARNING:
-                return 'User Warning';
-            case E_USER_NOTICE:
-                return 'User Notice';
-            case E_STRICT:
-                return 'Strict Notice';
-            case E_RECOVERABLE_ERROR:
-                return 'Recoverable Error';
-            case E_DEPRECATED:
-                return 'Deprecated';
-            case E_USER_DEPRECATED:
-                return 'User Deprecated';
-            default:
-                return 'Unknown Error';
+            case E_ERROR: return 'E_ERROR (Fatal Error)';
+            case E_WARNING: return 'E_WARNING (Warning)';
+            case E_PARSE: return 'E_PARSE (Parse Error)';
+            case E_NOTICE: return 'E_NOTICE (Notice)';
+            case E_CORE_ERROR: return 'E_CORE_ERROR (Core Error)';
+            case E_CORE_WARNING: return 'E_CORE_WARNING (Core Warning)';
+            case E_COMPILE_ERROR: return 'E_COMPILE_ERROR (Compile Error)';
+            case E_COMPILE_WARNING: return 'E_COMPILE_WARNING (Compile Warning)';
+            case E_USER_ERROR: return 'E_USER_ERROR (User Error)';
+            case E_USER_WARNING: return 'E_USER_WARNING (User Warning)';
+            case E_USER_NOTICE: return 'E_USER_NOTICE (User Notice)';
+            case E_STRICT: return 'E_STRICT (Strict Notice)';
+            case E_RECOVERABLE_ERROR: return 'E_RECOVERABLE_ERROR (Recoverable Error)';
+            case E_DEPRECATED: return 'E_DEPRECATED (Deprecated)';
+            case E_USER_DEPRECATED: return 'E_USER_DEPRECATED (User Deprecated)';
+            default: return 'Unknown Error Type (' . $errno . ')';
         }
     }
-    
-    private static function getSecureContext() {
+
+     private static function getSecureContext(): array {
         $context = [
-            'url' => $_SERVER['REQUEST_URI'] ?? 'unknown',
-            'method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown',
-            'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-            'timestamp' => date('Y-m-d H:i:s')
+            'url' => $_SERVER['REQUEST_URI'] ?? 'N/A',
+            'method' => $_SERVER['REQUEST_METHOD'] ?? 'N/A',
+            'ip' => $_SERVER['REMOTE_ADDR'] ?? 'N/A',
+            'timestamp' => date('Y-m-d H:i:s T') // Add timezone
         ];
-        
-        // Add user context if available
-        if (isset($_SESSION['user_id'])) {
+
+        // Add user context if available and session started
+        if (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION['user_id'])) {
             $context['user_id'] = $_SESSION['user_id'];
         }
-        
+         if (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION['user']['id'])) { // Check preferred structure
+             $context['user_id'] = $_SESSION['user']['id'];
+         }
+
         return $context;
     }
-    
-    private static function logError($error) {
+
+     // Renamed logError to logErrorToFile to avoid confusion with SecurityLogger::error
+     private static function logErrorToFile(array $error): void {
         $message = sprintf(
-            "[%s] %s: %s in %s on line %d",
-            date('Y-m-d H:i:s'),
+            "[%s] [%s] %s in %s on line %d",
+            date('Y-m-d H:i:s T'), // Add timezone
             $error['type'],
             $error['message'],
             $error['file'],
             $error['line']
         );
-        
-        if (isset($error['trace'])) {
+
+        // Append trace if available and relevant (not for notices/warnings usually)
+        if (!empty($error['trace']) && !in_array($error['type'], ['E_NOTICE', 'E_USER_NOTICE', 'E_WARNING', 'E_USER_WARNING', 'E_DEPRECATED', 'E_USER_DEPRECATED', 'E_STRICT'])) {
             $message .= "\nStack trace:\n" . $error['trace'];
         }
-        
-        if (isset($error['context'])) {
-            $message .= "\nContext: " . json_encode($error['context']);
+
+        // Append context if available
+        if (!empty($error['context'])) {
+            // Use pretty print for readability in logs
+            $contextJson = json_encode($error['context'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+            if ($contextJson === false) {
+                 $contextJson = "Failed to encode context: " . json_last_error_msg();
+            }
+            $message .= "\nContext: " . $contextJson;
         }
-        
+
+        // Log to external logger if provided, otherwise use PHP's error_log
         if (self::$logger) {
-            self::$logger->error($message);
+            // Map error type to PSR log level (simplified mapping)
+            $level = match (substr($error['type'], 0, 7)) {
+                 'E_ERROR', 'E_PARSE', 'E_CORE_', 'E_COMPI' => 'critical', // Treat fatal/compile/parse as critical
+                 'E_USER_' => 'error', // User errors treated as errors
+                 'E_WARNI', 'E_RECOV' => 'warning', // Warnings, recoverable
+                 'E_DEPRE' => 'notice', // Deprecated as notice
+                 'E_NOTIC', 'E_STRIC' => 'notice', // Notices, strict standards
+                 default => 'error' // Default to error
+            };
+            // Ensure logger implements PSR-3 or adapt call accordingly
+            if (method_exists(self::$logger, $level)) {
+                 self::$logger->{$level}($message); // Assumes PSR-3 compatible logger
+            } else {
+                self::$logger->log('error', $message); // Fallback PSR log level
+            }
         } else {
-            error_log($message);
+             // Log to PHP's configured error log
+             error_log($message);
         }
-        
-        // Log to security log if it's a security-related error
+
+        // Log to security log if it seems security-related
         if (self::isSecurityError($error)) {
-            self::$securityLogger->warning("Security-related error detected", $error);
+             if(self::$securityLogger) self::$securityLogger->warning("Security-related error detected", $error);
         }
     }
-    
-    private static function isSecurityError($error) {
+
+
+    private static function isSecurityError(array $error): bool {
+        // Keep this simple keyword check
         $securityKeywords = [
-            'injection', 'xss', 'csrf', 'auth', 'password',
-            'login', 'permission', 'access', 'token', 'ssl',
-            'encryption', 'sql', 'database', 'overflow'
+            'sql', 'database', 'injection', // Common DB/Injection terms
+            'xss', 'cross-site', 'script', // XSS related
+            'csrf', 'token', // CSRF related
+            'auth', 'password', 'login', 'permission', 'credentials', 'unauthorized', // Auth/Access
+            'ssl', 'tls', 'certificate', 'encryption', // Security transport/crypto
+            'overflow', 'upload', 'file inclusion', 'directory traversal', // Common vulnerabilities
+            'session fixation', 'hijack' // Session issues
         ];
-        
+
+        $errorMessageLower = strtolower($error['message']);
+        $errorFileLower = isset($error['file']) ? strtolower($error['file']) : '';
+
         foreach ($securityKeywords as $keyword) {
-            if (stripos($error['message'], $keyword) !== false) {
+            if (str_contains($errorMessageLower, $keyword)) { // Use str_contains (PHP 8+)
                 return true;
             }
         }
-        
+         // Check if error occurs in sensitive files
+         if (str_contains($errorFileLower, 'securitymiddleware.php') || str_contains($errorFileLower, 'auth.php')) {
+             return true;
+         }
+
         return false;
     }
-    
-    private static function displayError($error) {
-        http_response_code(500);
-        if (php_sapi_name() === 'cli') {
-            echo "\nError: {$error['message']}\n";
-            echo "Type: {$error['type']}\n";
-            echo "File: {$error['file']}\n";
-            echo "Line: {$error['line']}\n";
-            if (isset($error['trace'])) {
-                echo "\nStack trace:\n{$error['trace']}\n";
+
+
+     // Renamed displayError to displayErrorPage for clarity
+     private static function displayErrorPage(?array $error = null): void { // Allow null for production
+        // This method now assumes it's called *within* output buffering
+        // in the handler methods (handleError, handleException, handleFatalError)
+        try {
+            $pageTitle = 'Error'; // Define variables needed by the view
+            $bodyClass = 'page-error';
+            $isDevelopment = defined('ENVIRONMENT') && ENVIRONMENT === 'development';
+
+            // Prepare data for extraction
+            $viewData = [
+                'pageTitle' => $pageTitle,
+                'bodyClass' => $bodyClass,
+                // Only pass detailed error info if in development
+                'error' => ($isDevelopment && $error !== null) ? $error : null
+            ];
+
+            extract($viewData); // Extract variables into the current scope
+
+            // Define ROOT_PATH if not already defined globally
+            if (!defined('ROOT_PATH')) {
+                define('ROOT_PATH', realpath(__DIR__ . '/..'));
             }
-        } else {
-            ob_start();
-            $errorVar = $error; // for compact/extract
-            extract(['error' => $errorVar]);
-            require __DIR__ . '/../views/error.php';
-            ob_end_flush();
+
+            // Use a dedicated, self-contained error view
+            $errorViewPath = ROOT_PATH . '/views/error.php';
+
+            if (file_exists($errorViewPath)) {
+                // Include the error view - This view should NOT include header/footer
+                include $errorViewPath;
+            } else {
+                 // Fallback INLINE HTML if error view is missing
+                 echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Error</title>';
+                 echo '<style>body { font-family: sans-serif; padding: 20px; } .error-details { margin-top: 20px; padding: 15px; background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; }</style>';
+                 echo '</head><body><h1>Application Error</h1>';
+                 echo '<p>An unexpected error occurred. Please try again later or contact support.</p>';
+                 if ($isDevelopment && isset($error)) { // Only show details in dev
+                     echo '<div class="error-details"><strong>Details (Development Mode):</strong><br>';
+                     echo htmlspecialchars(print_r($error, true));
+                     echo '</div>';
+                 }
+                 echo '</body></html>';
+                 error_log("FATAL: Error view file not found at: " . $errorViewPath);
+            }
+
+        } catch (Throwable $t) {
+            // If displaying the error page ITSELF throws an error, fallback to text
+             if (!headers_sent()) {
+                  header('Content-Type: text/plain; charset=UTF-8', true, 500);
+             }
+            echo "A critical error occurred while trying to display the error page.\n";
+            echo "Original Error: " . ($error['message'] ?? 'N/A') . "\n";
+            echo "Error Display Error: " . $t->getMessage() . "\n";
+            error_log("FATAL: Failed to display error page itself. Original error: " . print_r($error, true) . ". Display error: " . $t->getMessage());
         }
-    }
-    
-    private static function displayProductionError() {
-        http_response_code(500);
-        if (php_sapi_name() === 'cli') {
-            echo "\nAn error occurred. Please check the error logs for details.\n";
-        } else {
-            ob_start();
-            require __DIR__ . '/../views/error.php';
-            ob_end_flush();
-        }
-    }
-}
+     }
+
+    // --- END: Missing Handler Methods Added Back ---
+
+
+    // --- TrackError method from new version ---
+    private static function trackError(array $error): void { // Use type hint, keep private
+         $errorKey = md5(($error['file'] ?? 'unknown_file') . ($error['line'] ?? '0') . ($error['type'] ?? 'unknown_type'));
+         $now = time();
+
+         // Initialize if not set
+         self::$errorCount[$errorKey] = self::$errorCount[$errorKey] ?? 0;
+         self::$lastErrorTime[$errorKey] = self::$lastErrorTime[$errorKey] ?? $now;
+
+
+         // Reset count if more than an hour has passed
+         if ($now - self::$lastErrorTime[$errorKey] > 3600) {
+             self::$errorCount[$errorKey] = 0;
+             self::$lastErrorTime[$errorKey] = $now; // Reset time as well
+         }
+
+         self::$errorCount[$errorKey]++;
+         // Update last error time on each occurrence within the window
+         // self::$lastErrorTime[$errorKey] = $now; // Decide if you want last time or first time in window
+
+         // Alert on high frequency errors
+         // Use constant or configurable value
+         $alertThreshold = defined('ERROR_ALERT_THRESHOLD') ? (int)ERROR_ALERT_THRESHOLD : 10;
+         if (self::$errorCount[$errorKey] > $alertThreshold) {
+             // Ensure securityLogger is initialized
+             if (isset(self::$securityLogger)) {
+                 self::$securityLogger->alert("High frequency error detected", [
+                     'error_type' => $error['type'] ?? 'Unknown', // Use specific fields
+                     'error_message' => $error['message'] ?? 'N/A',
+                     'file' => $error['file'] ?? 'N/A',
+                     'line' => $error['line'] ?? 'N/A',
+                     'count_in_window' => self::$errorCount[$errorKey],
+                     'window_start_time' => date('Y-m-d H:i:s T', self::$lastErrorTime[$errorKey]) // Time window started
+                 ]);
+                 // Optionally reset count after alerting to prevent spamming
+                 // self::$errorCount[$errorKey] = 0; // Reset immediately after alert
+             } else {
+                 error_log("High frequency error detected but SecurityLogger not available: " . print_r($error, true));
+             }
+         }
+     }
+
+} // End of ErrorHandler class
+
+
+// --- SecurityLogger Class Update (from new version) ---
 
 class SecurityLogger {
-    private $logFile;
-    
-    public function __construct() {
-        $this->logFile = __DIR__ . '/../logs/security.log';
+    private string $logFile; // Use type hint
+    private ?PDO $pdo = null; // Allow PDO to be nullable or set later
+
+    public function __construct(?PDO $pdo = null) { // Make PDO optional for flexibility
+         $this->pdo = $pdo; // Store PDO if provided
+        // Define log path using config or default
+         $logDir = defined('SECURITY_SETTINGS') && isset(SECURITY_SETTINGS['logging']['security_log'])
+                 ? dirname(SECURITY_SETTINGS['logging']['security_log'])
+                 : realpath(__DIR__ . '/../logs');
+
+         // Corrected directory check and creation logic
+         if ($logDir === false) {
+             $potentialLogDir = __DIR__ . '/../logs';
+             // Attempt to create if directory check itself failed (e.g. doesn't exist)
+             if (!is_dir($potentialLogDir)) {
+                 if (!@mkdir($potentialLogDir, 0750, true)) {
+                      error_log("SecurityLogger FATAL: Failed to create log directory: " . $potentialLogDir);
+                      $this->logFile = '/tmp/security_fallback.log'; // Use fallback
+                 } else {
+                      @chmod($potentialLogDir, 0750);
+                      $logDir = realpath($potentialLogDir); // Try realpath again
+                      if (!$logDir) $logDir = $potentialLogDir; // Use path even if realpath fails after creation
+                 }
+             } else {
+                  // Directory exists but realpath failed? Log warning.
+                  error_log("SecurityLogger Warning: Log directory path resolution failed for: " . $potentialLogDir);
+                  $logDir = $potentialLogDir; // Use the path directly
+             }
+         }
+
+         if (!$logDir || !is_writable($logDir)) {
+             error_log("SecurityLogger FATAL: Log directory is not writable: " . ($logDir ?: 'Not Found'));
+             $this->logFile = '/tmp/security_fallback.log'; // Use fallback
+         } else {
+             $logFileName = defined('SECURITY_SETTINGS') && isset(SECURITY_SETTINGS['logging']['security_log'])
+                           ? basename(SECURITY_SETTINGS['logging']['security_log'])
+                           : 'security.log'; // Default filename
+             $this->logFile = $logDir . '/' . $logFileName;
+         }
     }
-    
-    public function emergency($message, $context = []) {
-        $this->log('EMERGENCY', $message, $context);
-    }
-    
-    public function alert($message, $context = []) {
-        $this->log('ALERT', $message, $context);
-    }
-    
-    public function critical($message, $context = []) {
-        $this->log('CRITICAL', $message, $context);
-    }
-    
-    public function error($message, $context = []) {
-        $this->log('ERROR', $message, $context);
-    }
-    
-    public function warning($message, $context = []) {
-        $this->log('WARNING', $message, $context);
-    }
-    
-    private function log($level, $message, $context) {
-        $timestamp = date('Y-m-d H:i:s');
-        $contextStr = json_encode($context);
-        $logMessage = "[$timestamp] [$level] $message | $contextStr\n";
-        
-        file_put_contents($this->logFile, $logMessage, FILE_APPEND);
-        
+
+    // --- Logging Methods (emergency, alert, etc.) ---
+     public function emergency(string $message, array $context = []): void { $this->log('EMERGENCY', $message, $context); }
+     public function alert(string $message, array $context = []): void { $this->log('ALERT', $message, $context); }
+     public function critical(string $message, array $context = []): void { $this->log('CRITICAL', $message, $context); }
+     public function error(string $message, array $context = []): void { $this->log('ERROR', $message, $context); }
+     public function warning(string $message, array $context = []): void { $this->log('WARNING', $message, $context); }
+     public function info(string $message, array $context = []): void { $this->log('INFO', $message, $context); } // Added info level
+     public function debug(string $message, array $context = []): void { // Only log debug if enabled
+         // Check if ENVIRONMENT constant is defined and set to 'development'
+         $isDebug = (defined('ENVIRONMENT') && ENVIRONMENT === 'development');
+         // Allow overriding with DEBUG_MODE if defined
+         if (defined('DEBUG_MODE')) {
+             $isDebug = (DEBUG_MODE === true);
+         }
+
+         if ($isDebug) {
+             $this->log('DEBUG', $message, $context);
+         }
+     }
+
+    // --- Private log method (from new version) ---
+    private function log(string $level, string $message, array $context): void {
+        $timestamp = date('Y-m-d H:i:s T'); // Add Timezone
+
+        // Include essential context automatically if not provided
+        $autoContext = [
+            'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN',
+            // Attempt to get user ID safely
+            'user_id' => (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION['user']['id']))
+                         ? $_SESSION['user']['id']
+                         : ((session_status() === PHP_SESSION_ACTIVE && isset($_SESSION['user_id'])) ? $_SESSION['user_id'] : null),
+             // 'url' => $_SERVER['REQUEST_URI'] ?? null // Can be verbose
+        ];
+        // Merge auto-context first, so provided context can override if needed
+        $finalContext = array_merge($autoContext, $context);
+
+
+        // Use json_encode with flags for better readability and error handling
+        $contextStr = json_encode($finalContext, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+        if ($contextStr === false) {
+             $contextStr = "Failed to encode context: " . json_last_error_msg();
+        }
+
+        $logMessage = "[{$timestamp}] [{$level}] {$message} | Context: {$contextStr}" . PHP_EOL;
+
+        // Log to file with locking
+        // Suppress errors here as we have fallbacks and error logging within this class
+        // Check if file exists and is writable one last time
+        if (is_writable($this->logFile) || (is_writable(dirname($this->logFile)) && @touch($this->logFile)) ) {
+             @file_put_contents($this->logFile, $logMessage, FILE_APPEND | LOCK_EX);
+        } else {
+            // Fallback to PHP's error log if primary security log isn't writable
+            error_log("SecurityLogger Fallback: Failed to write to {$this->logFile}. Logging message instead: {$logMessage}");
+        }
+
         // Alert admins on critical issues
         if (in_array($level, ['EMERGENCY', 'ALERT', 'CRITICAL'])) {
-            $this->alertAdmins($level, $message, $context);
+            $this->alertAdmins($level, $message, $finalContext);
         }
     }
-    
-    private function alertAdmins($level, $message, $context) {
-        // Implementation for alerting admins (email, SMS, etc.)
-        if (class_exists('EmailService')) {
-            $emailService = new EmailService();
-            $emailService->sendSecurityAlert($level, $message, $context);
+
+    // --- alertAdmins method (from new version with pragmatic fix) ---
+    private function alertAdmins(string $level, string $message, array $context): void {
+        // Ensure EmailService class exists and is included/autoloaded
+        if (!class_exists('EmailService')) {
+             error_log("EmailService class not found. Cannot send security alert email.");
+             return;
+        }
+        // Ensure BASE_URL is defined for EmailService constructor/methods
+        if (!defined('BASE_URL')) {
+             error_log("BASE_URL not defined. Cannot send security alert email.");
+             return;
+        }
+
+        // Pragmatic Fix: Use global $pdo IF $this->pdo wasn't set during instantiation
+        $pdoToUse = $this->pdo;
+        if ($pdoToUse === null) {
+             global $pdo; // Access global PDO (defined in db.php)
+             if (!isset($pdo) || !$pdo instanceof PDO) {
+                 error_log("Global PDO not available for SecurityLogger email alert. Cannot send email.");
+                 return; // Cannot proceed without PDO
+             }
+             $pdoToUse = $pdo;
+        }
+
+        try {
+             // Instantiate EmailService here, passing the required PDO object
+             $emailService = new EmailService($pdoToUse);
+             // Call the method responsible for sending security alerts
+             // Ensure EmailService::sendSecurityAlert exists and accepts these parameters
+             if (method_exists($emailService, 'sendSecurityAlert')) {
+                 $emailService->sendSecurityAlert($level, $message, $context);
+             } else {
+                  error_log("EmailService::sendSecurityAlert method not found. Cannot send security alert email.");
+             }
+        } catch (Throwable $e) { // Catch Throwable for broader error coverage
+            // Log failure to send alert email
+            error_log("Failed to send security alert email: Level={$level}, Error=" . $e->getMessage() . " Trace: " . $e->getTraceAsString());
         }
     }
-}
+
+} // End of SecurityLogger class
+
 ```
 
 # js/main.js  
@@ -2249,270 +2546,463 @@ function fetchMiniCart() {
 ```php
 <?php
 require_once __DIR__ . '/BaseController.php';
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/../config.php';
+// Remove this line: require_once __DIR__ . '/../vendor/autoload.php'; // Now loaded globally
+require_once __DIR__ . '/../config.php'; // Keep config include
+
+// Use statement for StripeClient if not already present
+use Stripe\StripeClient;
+use Stripe\Webhook;
+use Stripe\Exception\ApiErrorException;
+use Stripe\Exception\SignatureVerificationException;
+
 
 class PaymentController extends BaseController {
     private $stripe;
     private $webhookSecret;
-    
+
     public function __construct($pdo = null) {
-        parent::__construct($pdo);
-        $this->stripe = new \Stripe\StripeClient(STRIPE_SECRET_KEY);
-        $this->webhookSecret = STRIPE_WEBHOOK_SECRET;
-    }
-    
-    public function createPaymentIntent($amount, $currency = 'usd') {
+        parent::__construct($pdo); // BaseController handles EmailService init now
+
+        // Ensure Stripe keys are defined
+        if (!defined('STRIPE_SECRET_KEY') || !defined('STRIPE_WEBHOOK_SECRET')) {
+            error_log("Stripe keys are not defined in config.php");
+            // Depending on context, might throw an exception or handle gracefully
+            // For now, let StripeClient constructor potentially fail if key is missing
+        }
+
+        // Use try-catch for external service initialization
         try {
-            // Validate input
-            $amount = $this->validateInput($amount, 'float');
-            $currency = $this->validateInput($currency, 'string');
-            
+            $this->stripe = new StripeClient(STRIPE_SECRET_KEY);
+            $this->webhookSecret = STRIPE_WEBHOOK_SECRET;
+        } catch (\Exception $e) {
+             error_log("Failed to initialize Stripe client: " . $e->getMessage());
+             // Handle error appropriately, maybe throw exception to be caught by ErrorHandler
+             // throw new Exception("Payment system configuration error.");
+             $this->stripe = null; // Ensure stripe is null if init fails
+             $this->webhookSecret = null;
+        }
+    }
+
+    public function createPaymentIntent(float $amount, string $currency = 'usd', int $orderId = 0, string $customerEmail = '') {
+        // Ensure Stripe client is initialized
+        if (!$this->stripe) {
+             return ['success' => false, 'error' => 'Payment system unavailable.'];
+        }
+
+        try {
+            // Basic validation (more robust validation might be needed)
             if ($amount <= 0) {
-                throw new Exception('Invalid payment amount');
+                throw new Exception('Invalid payment amount.');
             }
-            
-            $paymentIntent = $this->stripe->paymentIntents->create([
-                'amount' => (int)($amount * 100), // Convert to cents
-                'currency' => strtolower($currency),
+            $currency = strtolower(trim($currency));
+            if (strlen($currency) !== 3) {
+                 throw new Exception('Invalid currency code.');
+            }
+
+            $paymentIntentParams = [
+                'amount' => (int)round($amount * 100), // Convert to cents, use round() for precision
+                'currency' => $currency,
                 'automatic_payment_methods' => ['enabled' => true],
                 'metadata' => [
                     'user_id' => $this->getUserId() ?? 'guest',
-                    'ip_address' => $_SERVER['REMOTE_ADDR']
+                    'order_id' => $orderId, // Include order ID
+                    'ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN'
                 ]
-            ]);
-            
+            ];
+
+             // Add customer email if provided (helps Stripe Radar, guest checkout)
+             if (!empty($customerEmail)) {
+                 // Optional: Find or create Stripe Customer ID first for better tracking
+                 // $paymentIntentParams['customer'] = $this->getStripeCustomerId($customerEmail);
+                 // Or just add receipt email
+                 $paymentIntentParams['receipt_email'] = $customerEmail;
+             }
+
+
+            $paymentIntent = $this->stripe->paymentIntents->create($paymentIntentParams);
+
             return [
                 'success' => true,
-                'clientSecret' => $paymentIntent->client_secret
+                'client_secret' => $paymentIntent->client_secret // Correct key name
             ];
-            
-        } catch (\Stripe\Exception\ApiErrorException $e) {
-            error_log("Stripe API Error: " . $e->getMessage());
+
+        } catch (ApiErrorException $e) {
+            error_log("Stripe API Error creating PaymentIntent: " . $e->getMessage() . " | Params: " . json_encode($paymentIntentParams));
             return [
                 'success' => false,
-                'error' => 'Payment processing failed'
+                'error' => 'Payment processing failed. Please try again or contact support.' // User-friendly
             ];
         } catch (Exception $e) {
-            error_log("Payment Intent Error: " . $e->getMessage());
+            error_log("Payment Intent Creation Error: " . $e->getMessage() . " | Params: " . json_encode($paymentIntentParams));
             return [
                 'success' => false,
-                'error' => 'Invalid payment request'
+                'error' => 'Invalid payment request. Please check details and try again.' // User-friendly
             ];
         }
     }
-    
+
+    // processPayment seems deprecated by the CheckoutController logic which calls createPaymentIntent directly
+    // If needed, it should be updated to fit the current checkout flow.
+    /*
     public function processPayment($orderId) {
-        try {
-            $this->validateCSRF();
-            $orderId = $this->validateInput($orderId, 'int');
-            
-            if (!$orderId) {
-                throw new Exception('Invalid order ID');
-            }
-            
-            $this->beginTransaction();
-            
-            // Get order details
-            $stmt = $this->pdo->prepare("SELECT * FROM orders WHERE id = ?");
-            $stmt->execute([$orderId]);
-            $order = $stmt->fetch();
-            
-            if (!$order) {
-                throw new Exception('Order not found');
-            }
-            
-            // Verify order belongs to current user
-            if ($order['user_id'] !== $this->getUserId()) {
-                throw new Exception('Unauthorized access to order');
-            }
-            
-            // Create payment intent
-            $result = $this->createPaymentIntent($order['total_amount']);
-            if (!$result['success']) {
-                throw new Exception($result['error']);
-            }
-            
-            // Update order with payment intent
-            $stmt = $this->pdo->prepare("
-                UPDATE orders 
-                SET payment_intent_id = ?,
-                    updated_at = NOW()
-                WHERE id = ?
-            ");
-            $stmt->execute([$result['clientSecret'], $orderId]);
-            
-            $this->commit();
-            return $result;
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            error_log("Payment Processing Error: " . $e->getMessage());
-            return [
-                'success' => false,
-                'error' => 'Payment processing failed'
-            ];
-        }
+        // ... (Needs review based on actual usage) ...
     }
-    
+    */
+
     public function handleWebhook() {
+         // Ensure Stripe client is initialized
+        if (!$this->stripe || !$this->webhookSecret) {
+             http_response_code(503); // Service Unavailable
+             error_log("Webhook handler cannot run: Stripe client or secret not initialized.");
+             echo json_encode(['error' => 'Webhook configuration error.']);
+             exit;
+        }
+
+        $payload = @file_get_contents('php://input');
+        $sigHeader = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? null;
+
+        if (!$sigHeader) {
+             error_log("Webhook Error: Missing Stripe signature header.");
+             return $this->jsonResponse(['error' => 'Missing signature'], 400);
+        }
+        if (empty($payload)) {
+             error_log("Webhook Error: Empty payload received.");
+             return $this->jsonResponse(['error' => 'Empty payload'], 400);
+        }
+
+
         try {
-            $payload = @file_get_contents('php://input');
-            $sigHeader = $_SERVER['HTTP_STRIPE_SIGNATURE'];
-            
-            // Verify webhook signature
-            try {
-                $event = \Stripe\Webhook::constructEvent(
-                    $payload,
-                    $sigHeader,
-                    $this->webhookSecret
-                );
-            } catch (\UnexpectedValueException $e) {
-                throw new Exception('Invalid payload');
-            } catch (\Stripe\Exception\SignatureVerificationException $e) {
-                throw new Exception('Invalid signature');
-            }
-            
-            $this->beginTransaction();
-            
+            $event = Webhook::constructEvent(
+                $payload, $sigHeader, $this->webhookSecret
+            );
+        } catch (\UnexpectedValueException $e) {
+            // Invalid payload
+            error_log("Webhook Error: Invalid payload. " . $e->getMessage());
+            return $this->jsonResponse(['error' => 'Invalid payload'], 400);
+        } catch (SignatureVerificationException $e) {
+            // Invalid signature
+            error_log("Webhook Error: Invalid signature. " . $e->getMessage());
+            return $this->jsonResponse(['error' => 'Invalid signature'], 400);
+        } catch (\Exception $e) {
+            // Other construction error
+            error_log("Webhook Error: Event construction failed. " . $e->getMessage());
+            return $this->jsonResponse(['error' => 'Webhook processing error'], 400);
+        }
+
+        // Handle the event
+        try {
+            $this->beginTransaction(); // Start transaction for DB updates
+
             switch ($event->type) {
                 case 'payment_intent.succeeded':
                     $this->handleSuccessfulPayment($event->data->object);
                     break;
-                    
+
                 case 'payment_intent.payment_failed':
                     $this->handleFailedPayment($event->data->object);
                     break;
-                    
+
+                case 'charge.succeeded':
+                     // Often redundant if using Payment Intents, but can be useful for logging charge details
+                     $this->handleChargeSucceeded($event->data->object);
+                     break;
+
                 case 'charge.dispute.created':
                     $this->handleDisputeCreated($event->data->object);
                     break;
-                    
+
                 case 'charge.refunded':
                     $this->handleRefund($event->data->object);
                     break;
+
+                // Add other event types as needed (e.g., checkout.session.completed for Stripe Checkout)
+
+                default:
+                    error_log('Webhook Warning: Received unhandled event type ' . $event->type);
             }
-            
-            $this->commit();
-            return $this->jsonResponse(['success' => true]);
-            
+
+            $this->commit(); // Commit DB changes if no exceptions
+            return $this->jsonResponse(['success' => true, 'message' => 'Webhook received']);
+
         } catch (Exception $e) {
-            $this->rollback();
-            error_log("Webhook Error: " . $e->getMessage());
+            $this->rollback(); // Rollback DB changes on error
+            error_log("Webhook Handling Error (Event: {$event->type}): " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
+            // Return 500 to signal Stripe to retry (if applicable for the error type)
             return $this->jsonResponse(
-                ['success' => false, 'error' => $e->getMessage()],
-                400
+                ['success' => false, 'error' => 'Internal server error handling webhook.'],
+                500 // Use 500 for internal errors where retry might help
             );
         }
     }
-    
-    private function handleSuccessfulPayment($paymentIntent) {
-        $stmt = $this->pdo->prepare("
-            UPDATE orders 
-            SET status = 'paid', 
+
+    private function handleSuccessfulPayment(\Stripe\PaymentIntent $paymentIntent): void {
+        // Find order by payment_intent_id (ensure this column exists and is set)
+         $stmt = $this->db->prepare("
+             SELECT id, user_id, total_amount, status
+             FROM orders
+             WHERE payment_intent_id = ?
+             LIMIT 1
+         ");
+         $stmt->execute([$paymentIntent->id]);
+         $order = $stmt->fetch();
+
+         if (!$order) {
+              // Critical: Payment succeeded but no matching order found in DB
+              $errorMessage = "Webhook Critical: PaymentIntent {$paymentIntent->id} succeeded but no matching order found.";
+              error_log($errorMessage);
+              $this->logSecurityEvent('webhook_order_mismatch', ['payment_intent_id' => $paymentIntent->id, 'event_type' => 'payment_intent.succeeded']);
+              // Do not throw exception here to acknowledge webhook receipt, but log heavily.
+              return; // Acknowledge webhook, but log the mismatch
+         }
+
+         // Prevent processing already completed orders
+         if (in_array($order['status'], ['paid', 'shipped', 'delivered', 'completed'])) {
+             error_log("Webhook Info: Received successful payment event for already processed order ID {$order['id']}.");
+             return; // Idempotency: Already handled
+         }
+
+        $updateStmt = $this->db->prepare("
+            UPDATE orders
+            SET status = 'paid', -- Or 'processing' if that's your next step
                 payment_status = 'completed',
                 paid_at = NOW(),
                 updated_at = NOW()
-            WHERE payment_intent_id = ?
+            WHERE id = ? AND payment_intent_id = ?
         ");
-        
-        if (!$stmt->execute([$paymentIntent->client_secret])) {
-            throw new Exception('Failed to update order payment status');
+
+        if (!$updateStmt->execute([$order['id'], $paymentIntent->id])) {
+            throw new Exception("Failed to update order ID {$order['id']} payment status to 'paid'.");
         }
-        
-        // Get order details for notification
-        $stmt = $this->pdo->prepare("
-            SELECT o.*, u.email 
+         error_log("Webhook Success: Updated order ID {$order['id']} status to 'paid' for PaymentIntent {$paymentIntent->id}.");
+
+
+        // Fetch order details again for notification (or use $order if it has user info)
+        $notifyStmt = $this->db->prepare("
+            SELECT o.*, u.email, u.name as user_name
             FROM orders o
             JOIN users u ON o.user_id = u.id
-            WHERE o.payment_intent_id = ?
+            WHERE o.id = ?
         ");
-        $stmt->execute([$paymentIntent->client_secret]);
-        $order = $stmt->fetch();
-        
-        if ($order) {
+        $notifyStmt->execute([$order['id']]);
+        $fullOrder = $notifyStmt->fetch();
+
+        if ($fullOrder) {
             // Send payment confirmation email
-            $this->emailService->sendPaymentConfirmation($order);
+             // Ensure EmailService is available and method exists
+             if ($this->emailService && method_exists($this->emailService, 'sendOrderConfirmation')) {
+                  $this->emailService->sendOrderConfirmation($fullOrder); // Assumes method takes order data
+                  error_log("Webhook Success: Order confirmation email queued for order ID {$fullOrder['id']}.");
+             } else {
+                  error_log("Webhook Warning: EmailService or sendOrderConfirmation method not available for order ID {$fullOrder['id']}.");
+             }
+        } else {
+             error_log("Webhook Warning: Could not fetch full order details for notification (Order ID: {$order['id']}).");
+        }
+
+        // Optional: Clear user's cart after successful payment
+        if ($order['user_id']) {
+            try {
+                if (!class_exists('Cart')) require_once __DIR__ . '/../models/Cart.php';
+                $cartModel = new Cart($this->db, $order['user_id']);
+                $cartModel->clearCart();
+                error_log("Webhook Success: Cart cleared for user ID {$order['user_id']} after order {$order['id']} payment.");
+            } catch (Exception $cartError) {
+                 error_log("Webhook Warning: Failed to clear cart for user ID {$order['user_id']} after order {$order['id']} payment: " . $cartError->getMessage());
+                 // Don't fail the webhook for this
+            }
         }
     }
-    
-    private function handleFailedPayment($paymentIntent) {
-        $stmt = $this->pdo->prepare("
-            UPDATE orders 
+
+    private function handleFailedPayment(\Stripe\PaymentIntent $paymentIntent): void {
+         // Find order by payment_intent_id
+         $stmt = $this->db->prepare("
+             SELECT id, user_id, status
+             FROM orders
+             WHERE payment_intent_id = ?
+             LIMIT 1
+         ");
+         $stmt->execute([$paymentIntent->id]);
+         $order = $stmt->fetch();
+
+         if (!$order) {
+              error_log("Webhook Warning: PaymentIntent {$paymentIntent->id} failed but no matching order found.");
+              return; // Acknowledge webhook
+         }
+
+          // Don't update status if order was already cancelled or completed differently
+          if (in_array($order['status'], ['cancelled', 'paid', 'shipped', 'delivered', 'completed'])) {
+              error_log("Webhook Info: Received failed payment event for already resolved order ID {$order['id']}.");
+              return;
+          }
+
+
+        $updateStmt = $this->db->prepare("
+            UPDATE orders
             SET status = 'payment_failed',
                 payment_status = 'failed',
                 updated_at = NOW()
-            WHERE payment_intent_id = ?
+            WHERE id = ? AND payment_intent_id = ?
         ");
-        
-        if (!$stmt->execute([$paymentIntent->client_secret])) {
-            throw new Exception('Failed to update order payment status');
+
+        if (!$updateStmt->execute([$order['id'], $paymentIntent->id])) {
+            throw new Exception("Failed to update order ID {$order['id']} status to 'payment_failed'.");
         }
-        
+         error_log("Webhook Info: Updated order ID {$order['id']} status to 'payment_failed' for PaymentIntent {$paymentIntent->id}.");
+
         // Get order details for notification
-        $stmt = $this->pdo->prepare("
-            SELECT o.*, u.email 
+        $notifyStmt = $this->db->prepare("
+            SELECT o.*, u.email, u.name as user_name
             FROM orders o
             JOIN users u ON o.user_id = u.id
-            WHERE o.payment_intent_id = ?
+            WHERE o.id = ?
         ");
-        $stmt->execute([$paymentIntent->client_secret]);
-        $order = $stmt->fetch();
-        
-        if ($order) {
+        $notifyStmt->execute([$order['id']]);
+        $fullOrder = $notifyStmt->fetch();
+
+        if ($fullOrder) {
             // Send payment failed notification
-            $this->emailService->sendPaymentFailedNotification($order);
+             if ($this->emailService && method_exists($this->emailService, 'sendPaymentFailedNotification')) {
+                  $this->emailService->sendPaymentFailedNotification($fullOrder); // Assumes method takes order data
+                  error_log("Webhook Info: Payment failed email queued for order ID {$fullOrder['id']}.");
+             } else {
+                  error_log("Webhook Warning: EmailService or sendPaymentFailedNotification method not available for order ID {$fullOrder['id']}.");
+             }
+        } else {
+             error_log("Webhook Warning: Could not fetch full order details for failed payment notification (Order ID: {$order['id']}).");
         }
     }
-    
-    private function handleDisputeCreated($dispute) {
-        $stmt = $this->pdo->prepare("
-            UPDATE orders 
+
+     // Optional handler if needed
+     private function handleChargeSucceeded(\Stripe\Charge $charge): void {
+         // You might log charge details or link it more explicitly to the order if necessary
+         error_log("Webhook Info: Charge {$charge->id} succeeded for PaymentIntent {$charge->payment_intent} (Order linked via PI).");
+         // Often, action is taken on payment_intent.succeeded instead.
+     }
+
+
+    private function handleDisputeCreated(\Stripe\Dispute $dispute): void {
+         // Find order by payment_intent_id
+         $stmt = $this->db->prepare("
+             SELECT id, user_id, status
+             FROM orders
+             WHERE payment_intent_id = ?
+             LIMIT 1
+         ");
+         $stmt->execute([$dispute->payment_intent]);
+         $order = $stmt->fetch();
+
+         if (!$order) {
+              error_log("Webhook Warning: Dispute {$dispute->id} created for PaymentIntent {$dispute->payment_intent} but no matching order found.");
+              return; // Acknowledge webhook
+         }
+
+        $updateStmt = $this->db->prepare("
+            UPDATE orders
             SET status = 'disputed',
+                payment_status = 'disputed', // Add or use appropriate payment status
                 dispute_id = ?,
                 disputed_at = NOW(),
                 updated_at = NOW()
-            WHERE payment_intent_id = ?
+            WHERE id = ?
         ");
-        
-        if (!$stmt->execute([$dispute->id, $dispute->payment_intent])) {
-            throw new Exception('Failed to update order dispute status');
+
+        if (!$updateStmt->execute([$dispute->id, $order['id']])) {
+            throw new Exception("Failed to update order ID {$order['id']} dispute status.");
         }
-        
-        // Log dispute details for review
-        error_log("Dispute created for payment: " . $dispute->payment_intent);
+         error_log("Webhook Alert: Order ID {$order['id']} status updated to 'disputed' due to Dispute {$dispute->id}.");
+
+        // Log dispute details for review - Consider sending admin alert
+        $this->logSecurityEvent('stripe_dispute_created', [
+             'order_id' => $order['id'],
+             'dispute_id' => $dispute->id,
+             'payment_intent_id' => $dispute->payment_intent,
+             'amount' => $dispute->amount,
+             'reason' => $dispute->reason
+        ]);
+
+        // Send alert to admin
+         if ($this->emailService && method_exists($this->emailService, 'sendAdminDisputeAlert')) {
+              $this->emailService->sendAdminDisputeAlert($order['id'], $dispute->id, $dispute->reason, $dispute->amount);
+         }
     }
-    
-    private function handleRefund($charge) {
-        $stmt = $this->pdo->prepare("
-            UPDATE orders 
-            SET status = 'refunded',
-                refund_id = ?,
+
+    private function handleRefund(\Stripe\Charge $charge): void {
+         // A charge can have multiple refunds. Process the relevant one.
+         // This assumes you are interested in the latest refund if multiple occur.
+         $refund = $charge->refunds->data[0] ?? null; // Get the first/latest refund object
+         if (!$refund) {
+             error_log("Webhook Warning: Received charge.refunded event for Charge {$charge->id} but no refund data found.");
+             return;
+         }
+
+
+         // Find order by payment_intent_id
+         $stmt = $this->db->prepare("
+             SELECT id, user_id, status
+             FROM orders
+             WHERE payment_intent_id = ?
+             LIMIT 1
+         ");
+         $stmt->execute([$charge->payment_intent]);
+         $order = $stmt->fetch();
+
+         if (!$order) {
+              error_log("Webhook Warning: Refund {$refund->id} processed for PaymentIntent {$charge->payment_intent} but no matching order found.");
+              return; // Acknowledge webhook
+         }
+
+          // Determine new status based on refund amount vs order total? Partial vs Full refund?
+          // Simple approach: Mark as refunded regardless of amount for now.
+          $newStatus = 'refunded';
+          // Optionally add logic for partial refunds if needed:
+          // $orderTotal = $this->getOrderTotal($order['id']); // Need helper to get total
+          // if ($charge->amount_refunded < $orderTotal) { $newStatus = 'partially_refunded'; }
+
+
+        $updateStmt = $this->db->prepare("
+            UPDATE orders
+            SET status = ?,
+                payment_status = ?, -- Use 'refunded' or 'partially_refunded'
+                refund_id = ?,      -- Store the Stripe Refund ID
                 refunded_at = NOW(),
                 updated_at = NOW()
-            WHERE payment_intent_id = ?
+            WHERE id = ?
         ");
-        
-        if (!$stmt->execute([$charge->refunds->data[0]->id, $charge->payment_intent])) {
-            throw new Exception('Failed to update order refund status');
+
+         $paymentStatus = ($charge->amount_refunded === $charge->amount) ? 'refunded' : 'partially_refunded';
+
+        if (!$updateStmt->execute([$newStatus, $paymentStatus, $refund->id, $order['id']])) {
+            throw new Exception("Failed to update order ID {$order['id']} refund status.");
         }
-        
+         error_log("Webhook Info: Order ID {$order['id']} status updated to '{$newStatus}' due to Refund {$refund->id}.");
+
+
         // Get order details for notification
-        $stmt = $this->pdo->prepare("
-            SELECT o.*, u.email 
-            FROM orders o
-            JOIN users u ON o.user_id = u.id
-            WHERE o.payment_intent_id = ?
-        ");
-        $stmt->execute([$charge->payment_intent]);
-        $order = $stmt->fetch();
-        
-        if ($order) {
+         $notifyStmt = $this->db->prepare("
+             SELECT o.*, u.email, u.name as user_name
+             FROM orders o
+             JOIN users u ON o.user_id = u.id
+             WHERE o.id = ?
+         ");
+         $notifyStmt->execute([$order['id']]);
+         $fullOrder = $notifyStmt->fetch();
+
+
+        if ($fullOrder) {
             // Send refund confirmation email
-            $this->emailService->sendRefundConfirmation($order);
+             if ($this->emailService && method_exists($this->emailService, 'sendRefundConfirmation')) {
+                  // Pass refund amount for clarity in email
+                  $this->emailService->sendRefundConfirmation($fullOrder, $refund->amount / 100.0);
+                   error_log("Webhook Info: Refund confirmation email queued for order ID {$fullOrder['id']}.");
+             } else {
+                  error_log("Webhook Warning: EmailService or sendRefundConfirmation method not available for order ID {$fullOrder['id']}.");
+             }
+        } else {
+             error_log("Webhook Warning: Could not fetch full order details for refund notification (Order ID: {$order['id']}).");
         }
     }
 }
+
 ```
 
 # controllers/TaxController.php  
@@ -2805,279 +3295,354 @@ class TaxController extends BaseController {
 # controllers/InventoryController.php  
 ```php
 <?php
+// controllers/InventoryController.php (Updated)
+
 require_once __DIR__ . '/BaseController.php';
 require_once __DIR__ . '/../models/Product.php';
-require_once __DIR__ . '/../includes/EmailService.php';
+// EmailService is included via BaseController's include
 
 class InventoryController extends BaseController {
-    private $emailService;
-    private $alertThreshold = 5; // Alert when stock drops below this percentage of initial stock
-    
-    public function __construct($pdo) {
-        parent::__construct($pdo);
-        $this->emailService = new EmailService();
+    // private $emailService; // Removed - Inherited from BaseController
+    private Product $productModel; // Added type hint
+    private $alertThreshold = 5;
+
+    // Constructor now only needs PDO, EmailService is handled by parent
+    public function __construct(PDO $pdo) { // Use type hint PDO $pdo
+        parent::__construct($pdo); // Calls parent constructor which initializes $this->db and $this->emailService
+        $this->productModel = new Product($pdo); // Initialize Product model
     }
-    
-    public function updateStock($productId, $quantity, $type = 'adjustment', $referenceId = null, $notes = null) {
-        try {
-            $this->requireAdmin();
-            $this->validateCSRF();
-            
-            // Validate inputs
-            $productId = $this->validateInput($productId, 'int');
-            $quantity = $this->validateInput($quantity, 'float');
-            $type = $this->validateInput($type, 'string');
-            $referenceId = $this->validateInput($referenceId, 'int');
-            $notes = $this->validateInput($notes, 'string');
-            
-            if (!$productId || !$quantity) {
-                throw new Exception('Invalid product or quantity');
-            }
-            
-            $this->beginTransaction();
-            
-            // Get current stock with locking
-            $stmt = $this->pdo->prepare("
-                SELECT id, name, stock_quantity, initial_stock, 
-                       backorder_allowed, low_stock_threshold
-                FROM products 
-                WHERE id = ? 
-                FOR UPDATE
-            ");
-            $stmt->execute([$productId]);
-            $product = $stmt->fetch();
-            
-            if (!$product) {
-                throw new Exception('Product not found');
-            }
-            
-            // Check if we have enough stock for reduction
-            if ($quantity < 0 && !$product['backorder_allowed'] && 
-                ($product['stock_quantity'] + $quantity) < 0) {
-                throw new Exception('Insufficient stock');
-            }
-            
-            // Update product stock
-            $stmt = $this->pdo->prepare("
-                UPDATE products 
-                SET stock_quantity = stock_quantity + ?,
-                    updated_at = NOW()
-                WHERE id = ?
-            ");
-            $stmt->execute([$quantity, $productId]);
-            
-            // Record movement with audit trail
-            $stmt = $this->pdo->prepare("
-                INSERT INTO inventory_movements (
-                    product_id, 
-                    quantity_change, 
-                    previous_quantity,
-                    new_quantity,
-                    type, 
-                    reference_id, 
-                    notes, 
-                    created_by,
-                    ip_address
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([
-                $productId,
-                $quantity,
-                $product['stock_quantity'],
-                $product['stock_quantity'] + $quantity,
-                $type,
-                $referenceId,
-                $notes,
-                $this->getUserId(),
-                $_SERVER['REMOTE_ADDR']
-            ]);
-            
-            // Check stock levels and send alerts if needed
-            $newQuantity = $product['stock_quantity'] + $quantity;
-            $this->checkStockLevels($product, $newQuantity);
-            
-            $this->commit();
-            
-            return $this->jsonResponse([
-                'success' => true,
-                'message' => 'Stock updated successfully',
-                'new_quantity' => $newQuantity
-            ]);
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            error_log("Stock update error: " . $e->getMessage());
-            
-            return $this->jsonResponse([
-                'success' => false,
-                'message' => $e->getMessage()
-            ], 500);
-        }
-    }
-    
-    private function checkStockLevels($product, $newQuantity) {
-        // Check if stock is below threshold
-        if ($newQuantity <= $product['low_stock_threshold']) {
-            // Log low stock alert
-            error_log("Low stock alert: {$product['name']} has only {$newQuantity} units left");
-            
-            // Calculate stock percentage
-            $stockPercentage = $product['initial_stock'] > 0 
-                ? ($newQuantity / $product['initial_stock']) * 100 
-                : 0;
-            
-            // Send alert if stock is critically low
-            if ($stockPercentage <= $this->alertThreshold) {
-                $this->emailService->sendLowStockAlert(
-                    $product['name'],
-                    $newQuantity,
-                    $product['initial_stock'],
-                    $stockPercentage
-                );
-            }
-        }
-    }
-    
-    public function getInventoryMovements($productId, $startDate = null, $endDate = null, $type = null) {
-        try {
-            $this->requireAdmin();
-            
-            $productId = $this->validateInput($productId, 'int');
-            $startDate = $this->validateInput($startDate, 'string');
-            $endDate = $this->validateInput($endDate, 'string');
-            $type = $this->validateInput($type, 'string');
-            
-            if (!$productId) {
-                throw new Exception('Invalid product ID');
-            }
-            
-            $params = [$productId];
-            $sql = "
-                SELECT 
-                    m.*,
-                    u.name as user_name,
-                    p.name as product_name
-                FROM inventory_movements m
-                LEFT JOIN users u ON m.created_by = u.id
-                JOIN products p ON m.product_id = p.id
-                WHERE m.product_id = ?
-            ";
-            
-            if ($startDate) {
-                $sql .= " AND m.created_at >= ?";
-                $params[] = $startDate;
-            }
-            
-            if ($endDate) {
-                $sql .= " AND m.created_at <= ?";
-                $params[] = $endDate;
-            }
-            
-            if ($type) {
-                $sql .= " AND m.type = ?";
-                $params[] = $type;
-            }
-            
-            $sql .= " ORDER BY m.created_at DESC";
-            
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($params);
-            
-            return $this->jsonResponse([
-                'success' => true,
-                'movements' => $stmt->fetchAll()
-            ]);
-            
-        } catch (Exception $e) {
-            error_log("Error fetching inventory movements: " . $e->getMessage());
-            return $this->jsonResponse([
-                'success' => false,
-                'message' => 'Failed to retrieve inventory movements'
-            ], 500);
-        }
-    }
-    
-    public function getStockReport($categoryId = null) {
-        try {
-            $this->requireAdmin();
-            
-            $params = [];
-            $sql = "
-                SELECT 
-                    p.id,
-                    p.name,
-                    p.stock_quantity,
-                    p.initial_stock,
-                    p.low_stock_threshold,
-                    p.backorder_allowed,
-                    COALESCE(SUM(CASE WHEN m.type = 'sale' THEN ABS(m.quantity_change) ELSE 0 END), 0) as total_sales,
-                    COALESCE(SUM(CASE WHEN m.type = 'return' THEN m.quantity_change ELSE 0 END), 0) as total_returns,
-                    CASE 
-                        WHEN p.initial_stock > 0 THEN (p.stock_quantity / p.initial_stock) * 100 
-                        ELSE 0 
-                    END as stock_percentage
-                FROM products p
-                LEFT JOIN inventory_movements m ON p.id = m.product_id
-            ";
-            
-            if ($categoryId) {
-                $sql .= " WHERE p.category_id = ?";
-                $params[] = $this->validateInput($categoryId, 'int');
-            }
-            
-            $sql .= " GROUP BY p.id ORDER BY stock_percentage ASC";
-            
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($params);
-            
-            return $this->jsonResponse([
-                'success' => true,
-                'report' => $stmt->fetchAll()
-            ]);
-            
-        } catch (Exception $e) {
-            error_log("Error generating stock report: " . $e->getMessage());
-            return $this->jsonResponse([
-                'success' => false,
-                'message' => 'Failed to generate stock report'
-            ], 500);
-        }
-    }
-    
-    public function adjustStockThreshold($productId, $threshold) {
-        try {
-            $this->requireAdmin();
-            $this->validateCSRF();
-            
-            $productId = $this->validateInput($productId, 'int');
-            $threshold = $this->validateInput($threshold, 'int');
-            
-            if (!$productId || $threshold < 0) {
-                throw new Exception('Invalid product ID or threshold');
-            }
-            
-            $stmt = $this->pdo->prepare("
-                UPDATE products 
-                SET low_stock_threshold = ?,
-                    updated_at = NOW()
-                WHERE id = ?
-            ");
-            $stmt->execute([$threshold, $productId]);
-            
-            return $this->jsonResponse([
-                'success' => true,
-                'message' => 'Stock threshold updated successfully'
-            ]);
-            
-        } catch (Exception $e) {
-            error_log("Error updating stock threshold: " . $e->getMessage());
-            return $this->jsonResponse([
-                'success' => false,
-                'message' => 'Failed to update stock threshold'
-            ], 500);
-        }
-    }
-}
+
+    // --- updateStock Method ---
+     // Added type hints and clarified variable usage
+     public function updateStock(int $productId, float $quantity, string $type = 'adjustment', ?int $referenceId = null, ?string $notes = null) {
+         try {
+             $this->requireAdmin(); // Check admin role
+             // CSRF validation needed if triggered by a form POST
+             // Assuming this might be called internally or via secured API for now
+             // $this->validateCSRF(); // Uncomment if called via form
+
+             // Validate inputs (Basic validation done via type hints, add more if needed)
+             $type = $this->validateInput($type, 'string'); // Validate type string further if needed
+             $notes = $this->validateInput($notes, 'string'); // Ensure notes are safe
+
+             if (!$type || !in_array($type, ['sale', 'restock', 'return', 'adjustment'])) {
+                  throw new Exception('Invalid inventory movement type');
+             }
+
+             $this->beginTransaction();
+
+             // Get current stock with locking (use $this->db)
+             $stmt = $this->db->prepare("
+                 SELECT id, name, stock_quantity, initial_stock,
+                        backorder_allowed, low_stock_threshold
+                 FROM products
+                 WHERE id = ?
+                 FOR UPDATE
+             ");
+             $stmt->execute([$productId]);
+             $product = $stmt->fetch();
+
+             if (!$product) {
+                 throw new Exception('Product not found');
+             }
+
+             // Use stricter comparison and check backorder logic
+             $newPotentialStock = $product['stock_quantity'] + $quantity;
+             if ($quantity < 0 && !$product['backorder_allowed'] && $newPotentialStock < 0) {
+                 throw new Exception('Insufficient stock for ' . htmlspecialchars($product['name']));
+             }
+
+             // Update product stock (use $this->db)
+             $updateStmt = $this->db->prepare("
+                 UPDATE products
+                 SET stock_quantity = stock_quantity + ?,
+                     updated_at = NOW()
+                 WHERE id = ?
+             ");
+             $updateStmt->execute([$quantity, $productId]);
+
+             // Record movement with audit trail (use $this->db)
+             $movementStmt = $this->db->prepare("
+                 INSERT INTO inventory_movements (
+                     product_id,
+                     quantity_change,
+                     previous_quantity,
+                     new_quantity,
+                     type,
+                     reference_id,
+                     notes,
+                     created_by,
+                     ip_address,
+                     created_at
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+             ");
+             $movementStmt->execute([
+                 $productId,
+                 $quantity,
+                 $product['stock_quantity'], // Previous quantity before update
+                 $newPotentialStock, // New quantity after update
+                 $type,
+                 $referenceId,
+                 $notes,
+                 $this->getUserId(), // Get current admin user ID
+                 $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN'
+             ]);
+
+             // Check stock levels and send alerts if needed
+             $this->checkStockLevels($product, $newPotentialStock);
+
+             $this->commit();
+
+             // Use standardized jsonResponse
+             return $this->jsonResponse([
+                 'success' => true,
+                 'message' => 'Stock updated successfully for ' . htmlspecialchars($product['name']),
+                 'new_quantity' => $newPotentialStock
+             ]);
+
+         } catch (Exception $e) {
+             $this->rollback();
+             error_log("Stock update error for product {$productId}: " . $e->getMessage());
+
+             // Use standardized jsonResponse for errors
+             return $this->jsonResponse([
+                 'success' => false,
+                 'message' => $e->getMessage() // Provide specific error message
+             ], 500);
+         }
+     }
+
+
+    // Updated checkStockLevels to handle potential missing EmailService method
+     private function checkStockLevels(array $product, float $newQuantity): void {
+         // Defensive check for necessary keys
+         if (!isset($product['low_stock_threshold']) || !isset($product['initial_stock'])) {
+              error_log("Missing stock level data for product ID {$product['id']} in checkStockLevels");
+              return;
+         }
+
+         // Ensure threshold is numeric
+         $lowStockThreshold = filter_var($product['low_stock_threshold'], FILTER_VALIDATE_INT);
+         if ($lowStockThreshold === false) $lowStockThreshold = 0; // Default to 0 if invalid
+
+
+         // Check if stock is below threshold
+         if ($newQuantity <= $lowStockThreshold && $lowStockThreshold > 0) { // Only alert if threshold > 0
+             // Log low stock alert consistently
+             $logMessage = "Low stock alert: Product '{$product['name']}' (ID: {$product['id']}) has only {$newQuantity} units left (Threshold: {$lowStockThreshold}).";
+             error_log($logMessage);
+             $this->logSecurityEvent('low_stock_alert', ['product_id' => $product['id'], 'product_name' => $product['name'], 'current_stock' => $newQuantity, 'threshold' => $lowStockThreshold]);
+
+             // Calculate stock percentage if initial stock is valid
+             $initialStock = filter_var($product['initial_stock'], FILTER_VALIDATE_INT);
+             $stockPercentage = ($initialStock !== false && $initialStock > 0)
+                 ? ($newQuantity / $initialStock) * 100
+                 : 0; // Avoid division by zero
+
+             // Ensure alert threshold is numeric
+             $alertThresholdPercent = filter_var($this->alertThreshold, FILTER_VALIDATE_FLOAT);
+             if ($alertThresholdPercent === false) $alertThresholdPercent = 5.0; // Default percentage
+
+             // Send alert email if stock is critically low based on percentage
+             // Check if the method exists before calling
+             if ($stockPercentage <= $alertThresholdPercent && method_exists($this->emailService, 'sendLowStockAlert')) {
+                 try {
+                    $this->emailService->sendLowStockAlert(
+                         $product['name'],
+                         $newQuantity,
+                         $initialStock > 0 ? $initialStock : 'N/A', // Handle case where initial stock might be 0 or invalid
+                         $stockPercentage
+                     );
+                 } catch (Exception $e) {
+                      error_log("Failed to send low stock alert email for product ID {$product['id']}: " . $e->getMessage());
+                 }
+
+             }
+         }
+     }
+
+
+    // --- getInventoryMovements Method ---
+     // Added type hints and PDO usage correction
+     public function getInventoryMovements(int $productId, ?string $startDate = null, ?string $endDate = null, ?string $type = null) {
+         try {
+             $this->requireAdmin();
+
+             // Validate optional parameters further if needed (e.g., date format)
+             $type = $this->validateInput($type, 'string'); // Basic validation
+
+             $params = [$productId];
+             $sql = "
+                 SELECT
+                     m.id, m.quantity_change, m.previous_quantity, m.new_quantity,
+                     m.type, m.reference_id, m.notes, m.created_at, m.ip_address,
+                     u.name as user_name,
+                     p.name as product_name
+                 FROM inventory_movements m
+                 LEFT JOIN users u ON m.created_by = u.id
+                 JOIN products p ON m.product_id = p.id
+                 WHERE m.product_id = ?
+             ";
+
+             if ($startDate) {
+                 // Basic date validation attempt
+                 if (DateTime::createFromFormat('Y-m-d', $startDate) !== false) {
+                     $sql .= " AND DATE(m.created_at) >= ?";
+                     $params[] = $startDate;
+                 } else {
+                     // Handle invalid date format? Log or ignore?
+                      error_log("Invalid start date format provided: " . $startDate);
+                 }
+             }
+
+             if ($endDate) {
+                  if (DateTime::createFromFormat('Y-m-d', $endDate) !== false) {
+                      $sql .= " AND DATE(m.created_at) <= ?";
+                      $params[] = $endDate;
+                  } else {
+                      error_log("Invalid end date format provided: " . $endDate);
+                  }
+             }
+
+             if ($type && in_array($type, ['sale', 'restock', 'return', 'adjustment'])) {
+                 $sql .= " AND m.type = ?";
+                 $params[] = $type;
+             }
+
+             $sql .= " ORDER BY m.created_at DESC";
+
+             // Use $this->db
+             $stmt = $this->db->prepare($sql);
+             $stmt->execute($params);
+
+             return $this->jsonResponse([
+                 'success' => true,
+                 'movements' => $stmt->fetchAll()
+             ]);
+
+         } catch (Exception $e) {
+             error_log("Error fetching inventory movements for product {$productId}: " . $e->getMessage());
+             return $this->jsonResponse([
+                 'success' => false,
+                 'message' => 'Failed to retrieve inventory movements'
+             ], 500);
+         }
+     }
+
+
+    // --- getStockReport Method ---
+    // Added type hints and PDO usage correction
+     public function getStockReport(?int $categoryId = null) {
+         try {
+             $this->requireAdmin();
+
+             $params = [];
+             // Added c.name for category name in report
+             $sql = "
+                 SELECT
+                     p.id,
+                     p.name,
+                     p.sku, -- Added SKU
+                     c.name as category_name, -- Added Category Name
+                     p.stock_quantity,
+                     p.initial_stock,
+                     p.low_stock_threshold,
+                     p.backorder_allowed,
+                     -- Corrected SUM logic for movements (assuming quantity_change is negative for sales)
+                     COALESCE(SUM(CASE WHEN m.type = 'sale' THEN ABS(m.quantity_change) ELSE 0 END), 0) as total_sales_units,
+                     COALESCE(SUM(CASE WHEN m.type = 'return' THEN m.quantity_change ELSE 0 END), 0) as total_returns_units,
+                     COALESCE(SUM(CASE WHEN m.type = 'restock' THEN m.quantity_change ELSE 0 END), 0) as total_restock_units,
+                     COALESCE(SUM(CASE WHEN m.type = 'adjustment' THEN m.quantity_change ELSE 0 END), 0) as total_adjustment_units,
+                     CASE
+                         WHEN p.initial_stock > 0 THEN ROUND((p.stock_quantity / p.initial_stock) * 100, 2)
+                         ELSE NULL -- Use NULL if initial stock is 0 or invalid
+                     END as stock_percentage
+                 FROM products p
+                 LEFT JOIN inventory_movements m ON p.id = m.product_id
+                 LEFT JOIN categories c ON p.category_id = c.id -- Join categories table
+             ";
+
+             if ($categoryId) {
+                 $sql .= " WHERE p.category_id = ?";
+                 $params[] = $categoryId; // Already validated if passed as int
+             }
+
+             $sql .= " GROUP BY p.id, c.name ORDER BY p.name ASC"; // Group by category name too, order by product name
+
+             // Use $this->db
+             $stmt = $this->db->prepare($sql);
+             $stmt->execute($params);
+
+             return $this->jsonResponse([
+                 'success' => true,
+                 'report' => $stmt->fetchAll()
+             ]);
+
+         } catch (Exception $e) {
+             error_log("Error generating stock report: " . $e->getMessage());
+             return $this->jsonResponse([
+                 'success' => false,
+                 'message' => 'Failed to generate stock report'
+             ], 500);
+         }
+     }
+
+
+    // --- adjustStockThreshold Method ---
+     // Added type hints and PDO usage correction
+     public function adjustStockThreshold(int $productId, int $threshold) {
+         try {
+             $this->requireAdmin();
+             // Assuming called via AJAX POST
+             $this->validateCSRF(); // Validate if called from a form/AJAX requiring CSRF
+
+             if ($threshold < 0) { // Basic validation
+                 throw new Exception('Threshold cannot be negative');
+             }
+
+             // Use $this->db
+             $stmt = $this->db->prepare("
+                 UPDATE products
+                 SET low_stock_threshold = ?,
+                     updated_at = NOW()
+                 WHERE id = ?
+             ");
+             $stmt->execute([$threshold, $productId]);
+
+             if ($stmt->rowCount() > 0) {
+                  $this->logAuditTrail('stock_threshold_update', $this->getUserId(), ['product_id' => $productId, 'new_threshold' => $threshold]);
+                  return $this->jsonResponse([
+                     'success' => true,
+                     'message' => 'Stock threshold updated successfully'
+                  ]);
+             } else {
+                  // Product ID might not exist or threshold was already the same
+                  // Check if product exists
+                  $checkStmt = $this->db->prepare("SELECT id FROM products WHERE id = ?");
+                  $checkStmt->execute([$productId]);
+                  if (!$checkStmt->fetch()) {
+                       throw new Exception('Product not found');
+                  } else {
+                       // Threshold was likely unchanged
+                       return $this->jsonResponse([
+                           'success' => true, // Or false depending on desired behavior
+                           'message' => 'Stock threshold unchanged or product not found.'
+                       ]);
+                  }
+             }
+
+         } catch (Exception $e) {
+             error_log("Error updating stock threshold for product {$productId}: " . $e->getMessage());
+             return $this->jsonResponse([
+                 'success' => false,
+                 'message' => 'Failed to update stock threshold: ' . $e->getMessage()
+             ], 500);
+         }
+     }
+
+
+} // End of InventoryController class
+
 ```
 
 # controllers/CouponController.php  
