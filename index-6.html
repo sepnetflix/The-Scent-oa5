@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>The Scent — Signature Aromatherapy & Wellness</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Montserrat:wght@400;500&family=Raleway:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-HK5fgLBL+xu6dm/DyWoyxN0jSs4zO9cdUgqhS7Zvw1zqhpQUtDBC3omc7jx5AD+NkMyPzaWxM+cvBYS7LqunBg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    /* Custom styles not easily replicated with Tailwind or to override Tailwind defaults */
+    :root {
+      /* Color palette from oa1, with button/shop accent from oa2 */
+      --clr-bg: #f6f5f1;
+      --clr-bg-dark: #182024;
+      --clr-text: #262c2f;
+      --clr-text-dark: #ebeaea;
+      --clr-primary: #2c899a;
+      --clr-primary-dark: #30ccbb;
+      --clr-accent: #d69f61;
+      --clr-accent-dark: #e2bb85;
+      --clr-soap: #b9cfc3;
+      --clr-overlay: rgba(44,137,154,0.08);
+      --clr-overlay-dark: rgba(24,32,36,0.6);
+      --clr-cta: #ff7f50;
+      --clr-cta-hover: #ff6347;
+      --clr-cta-dark: #ff4a39;
+      --clr-cta-dark-hover: #ff3098;
+
+      --font-head: 'Cormorant Garamond', serif;
+      --font-body: 'Montserrat', sans-serif;
+      --font-accent: 'Raleway', sans-serif;
+
+      --transition: 0.26s cubic-bezier(.35,2,.31,1);
+      --shadow: 0 8px 34px 0 rgba(60,35,16,0.11);
+      --shadow-dark: 0 8px 34px 0 rgba(0,0,0,0.16);
+      --container: 1160px;
+
+      --mist-light: rgba(255,255,255,0.17);
+      --mist-dark: rgba(200,235,255,0.26);
+
+      --parallax-blur: 2.5px;
+    }
+    body {
+      font-family: var(--font-body);
+      background: var(--clr-bg);
+      color: var(--clr-text);
+      line-height: 1.75;
+      min-height: 100vh;
+      transition: background 0.7s, color 0.6s;
+    }
+    body.dark {
+      background: var(--clr-bg-dark);
+      color: var(--clr-text-dark);
+    }
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-head);
+      font-weight: 700;
+      color: var(--clr-primary);
+      margin: 0 0 0.7em 0;
+      letter-spacing: .5px;
+    }
+    body.dark h1, body.dark h2, body.dark h3, body.dark h4, body.dark h5, body.dark h6 {
+      color: var(--clr-accent-dark);
+    }
+    a { color: var(--clr-primary); text-decoration: none; transition: color .2s; }
+    a:focus { outline: 2px solid var(--clr-accent); }
+
+    /* Adjusting container for Tailwind usage */
+    .container {
+       max-width: var(--container); /* Keeping the original max-width */
+    }
+
+    /* ---------- Nav Styles + Dark/Light Toggle ---------- */
+    nav.navbar {
+      width:100%; position:fixed; z-index:1009; top:0; left:0;
+      background:rgba(255,255,255,0.8); backdrop-filter: blur(8px);
+      box-shadow:0 2px 19px rgba(44,137,154,0.08);
+      display:flex; align-items:center; justify-content:center;
+      padding: 0.7rem 0;
+      transition: background .35s;
+    }
+    body.dark nav.navbar {
+      background:rgba(22,29,32,0.97);
+      box-shadow: var(--shadow-dark);
+    }
+    .nav-container {
+      width:90%; max-width: var(--container); display:flex; align-items:center; justify-content:space-between;
+    }
+    .brand {
+      font-family: var(--font-head);
+      font-weight:700;
+      font-size:2rem;
+      color:var(--clr-primary);
+      letter-spacing:2px;
+      display:flex;
+      align-items:center;
+      gap:.7em;
+      transition: color .2s;
+    }
+    body.dark .brand { color: var(--clr-primary-dark);}
+    .brand i {font-size:1.28em;color:var(--clr-accent);}
+    .nav-links {
+      display:flex; align-items:center; gap:2.4rem;
+      font-family: var(--font-accent);
+    }
+    .nav-links a {
+      font-weight:600; text-transform:uppercase; font-size:1.01rem;
+      letter-spacing: 1px; color:var(--clr-text); position:relative;
+      display:inline-flex; align-items:center; gap:0.37em;
+      padding: 0.7em 0 0.6em 0;
+      transition: color .17s;
+    }
+    body.dark .nav-links a { color: var(--clr-text-dark);}
+    .nav-links a::after {
+      content: '';
+      position: absolute; left:50%; bottom:0; width:0; height:2.1px;
+      background: var(--clr-accent); border-radius:2px; transition: width .24s; transform:translateX(-50%);
+    }
+    .nav-links a:hover, .nav-links a:focus { color: var(--clr-accent); }
+    .nav-links a:hover::after, .nav-links a:focus::after { width: 70%; }
+    .nav-links .dark-toggle {
+      background: none; border:none; cursor:pointer; margin-left:1.35rem;
+      font-size:1.38rem; color:var(--clr-accent);
+      display:inline-flex; align-items:center; transition: color .18s;
+      border-radius:50%;
+      padding:0.13em 0.34em;
+    }
+    body.dark .nav-links .dark-toggle { color:var(--clr-accent-dark);}
+    .nav-links .dark-toggle:focus { outline:2px solid var(--clr-primary); }
+    
+    /* SVG Icon Styles */
+    .dark-toggle svg, .ambient-audio-toggle button svg {
+      width: 24px;
+      height: 24px;
+    }
+    .sound-on, .sound-off, .day-mode, .night-mode {
+      display: none;
+    }
+    .sound-on.active, .sound-off.active {
+      display: block;
+    }
+    body:not(.dark) .day-mode {
+      display: block;
+    }
+    body.dark .night-mode {
+      display: block;
+    }
+    
+    @media (max-width: 800px) {
+      nav .nav-container { flex-direction:column; gap:.4em;}
+      .nav-links { flex-wrap: wrap; gap:1.1em;}
+    }
+    
+    /* ---------- Ambient Audio Toggle ---------- */
+    .ambient-audio-toggle {
+      position: fixed; top: 1.3em; right: 1.7em; z-index: 1098;
+      background:rgba(255,255,255,0.46);border-radius:50%;
+      box-shadow:0 5px 22px rgba(40,40,31,0.14);
+      transition: background 0.3s;
+    }
+    body.dark .ambient-audio-toggle {
+      background:rgba(30,37,40,0.6);
+      box-shadow:0 5px 22px rgba(0,0,0,0.2);
+    }
+    .ambient-audio-toggle button {
+      border-radius:50%; border:none;
+      padding:0.7em 0.8em; background:none;
+      font-size:1.5em; color:var(--clr-accent);
+      transition: background .21s;
+      cursor:pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    body.dark .ambient-audio-toggle button {
+      color:var(--clr-accent-dark);
+    }
+    .ambient-audio-toggle button:focus, .ambient-audio-toggle button:hover {background:var(--clr-soap);}
+    body.dark .ambient-audio-toggle button:focus, body.dark .ambient-audio-toggle button:hover {
+      background:rgba(50,57,60,0.8);
+    }
+    
+    /* ---------- HERO SECTION ---------- */
+    header.hero {
+      min-height: 100vh; position:relative; width:100%;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      overflow:hidden; isolation: isolate;
+      box-shadow:0 6px 44px rgba(44,137,154,0.07);
+      background: #222;
+    }
+    .hero-bg-video {
+      position:absolute; inset:0; width:100vw; height:100vh; object-fit:cover; z-index:0;
+      filter: blur(0.7px) brightness(0.93);
+    }
+    .hero-bg-fallback { display:none; }
+    .mist-trails {
+      pointer-events:none; position:absolute; inset:0; z-index:2;
+      mix-blend-mode:lighten;
+    }
+    .mist-path {
+      fill:none; stroke:var(--mist-light); stroke-width: 14; opacity:.72;
+      stroke-linecap:round; stroke-linejoin:round;
+      filter: blur(0.5px);
+      stroke-dasharray:4400; stroke-dashoffset:4400;
+      animation: mistTrail 16s linear infinite;
+    }
+    .mist-path2 {
+      stroke: var(--mist-light); stroke-width: 8; opacity: 0.59;
+      stroke-dasharray:4000; stroke-dashoffset:4000;
+      animation: mistTrail2 22s linear infinite;
+    }
+    body.dark .mist-path, body.dark .mist-path2 {
+      stroke: var(--mist-dark);
+      opacity:0.77;
+    }
+    @keyframes mistTrail {
+      0% { stroke-dashoffset:4400; opacity:.45;}
+      65% { opacity:.87;}
+      100% { stroke-dashoffset:0; opacity:.45;}
+    }
+    @keyframes mistTrail2 {
+      0% { stroke-dashoffset:4000; opacity:0.22;}
+      35% { opacity:.6;}
+      100% { stroke-dashoffset:0; opacity:.33;}
+    }
+    .hero-content {
+      z-index:10; max-width:760px; text-align:center; margin-inline:auto;
+      margin-top:8vh;
+      position:relative;
+      font-family: var(--font-head);
+    }
+    .hero-content h1 {
+      font-size:clamp(2.9rem,7vw,4.4rem); color:#fff;
+      text-shadow:0 3px 16px rgba(32,66,88,0.29);
+      letter-spacing:1.7px;
+      margin-bottom: 0.45em;
+    }
+    .hero-content p {
+      color: #e5e8ea;
+      margin:2.5rem 0 3rem 0; font-size:clamp(1.25rem,2.4vw,1.55rem);
+      text-shadow:0 1px 6px rgba(50,80,92,0.17);
+      font-family: var(--font-body);
+    }
+    .hero-content .cta-main {
+      background:var(--clr-cta); color:white;
+      font-family:var(--font-accent); font-weight:700;
+      font-size:1.2rem; padding:1.1em 2.5em;
+      border-radius:37px; border:none; cursor:pointer;
+      box-shadow:0 6px 22px rgba(244,112,83,0.16);
+      transition:background 0.22s, transform 0.19s, box-shadow 0.19s;
+      animation: ctaPulse 2.6s infinite alternate cubic-bezier(.68,.09,.34,.98);
+      display:inline-flex; align-items:center; gap:.95em;
+      letter-spacing: 0.02em;
+    }
+    .hero-content .cta-main i { font-size:1.26em; }
+    .hero-content .cta-main:hover, .hero-content .cta-main:focus {
+      background:var(--clr-cta-hover); color:var(--clr-primary);
+      transform:scale(1.06);
+      box-shadow:0 10px 26px rgba(228,183,125,0.22);
+      outline:none;
+    }
+    @keyframes ctaPulse {
+      from {box-shadow: 0 2px 22px 2px var(--clr-cta);}
+      to   {box-shadow: 0 0 35px 7px var(--clr-cta-hover);transform:translateY(-5px) scale(1.027);}
+    }
+    
+    /* --- Floating shop now button --- */
+    .shop-now {
+      position:fixed; bottom:2.2em; right:2.2em; z-index:1091;
+      background:var(--clr-cta); color:#fff; font-size:1rem; font-weight:600;
+      border-radius:50px; padding:1.1em 2em 1.09em 2.3em;
+      box-shadow:0 6px 19px rgba(255,115,80,0.16);
+      display:flex; align-items:center; gap:0.86em;
+      transition: background .22s, transform .2s, box-shadow .19s;
+      border: none; cursor: pointer;
+      animation: shopNowPulse 1.88s infinite alternate cubic-bezier(.44,1.38,.46,1);
+      font-family: var(--font-accent);
+      letter-spacing: 0.01em;
+    }
+    .shop-now i { font-size:1.38em; }
+    .shop-now:hover, .shop-now:focus {
+      background:var(--clr-cta-hover); color:var(--clr-primary);
+      transform:scale(1.08);
+      box-shadow: 0 8px 30px var(--clr-accent);
+      outline:none;
+    }
+    @keyframes shopNowPulse {
+      0% { box-shadow: 0 0 15px 0 var(--clr-cta);}
+      100% { box-shadow: 0 0 35px 11px var(--clr-accent);}
+    }
+    @media (max-width:615px) {
+      .shop-now { bottom:1.2em; right:3vw; font-size:.93rem;}
+    }
+    
+    /* ------- Section base styles -------- */
+    section { padding:5.6rem 0 5rem 0;}
+    section h2 { font-family:var(--font-head); font-size:2.6rem; color:var(--clr-primary); text-align:center; margin-bottom:2.6rem; letter-spacing:.5px; }
+    body.dark section h2 { color:var(--clr-accent-dark); }
+    
+    /* ------- Discover Section with Symmetrical Grid -------- */
+    .discover-section {
+      background-color: var(--clr-overlay);
+      padding: 6rem 0;
+      position: relative;
+    }
+    body.dark .discover-section {
+      background-color: var(--clr-overlay-dark);
+    }
+    .discover-section::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url('assets/images/pattern-bg.png');
+      background-size: 300px;
+      opacity: 0.05;
+      pointer-events: none;
+    }
+    body.dark .discover-section::before {
+      opacity: 0.03;
+    }
+    .scent-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .scent-button {
+      background: rgba(255, 255, 255, 0.7);
+      border: 2px solid var(--clr-primary);
+      border-radius: 12px;
+      padding: 1.5rem 1rem;
+      font-family: var(--font-accent);
+      font-weight: 600;
+      font-size: 1.1rem;
+      color: var(--clr-primary);
+      transition: all var(--transition);
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    body.dark .scent-button {
+      background: rgba(44, 51, 56, 0.7);
+      border-color: var(--clr-accent-dark);
+      color: var(--clr-accent-dark);
+      box-shadow: var(--shadow-dark);
+    }
+    .scent-button::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--clr-primary);
+      opacity: 0;
+      transform: translateY(100%);
+      transition: all 0.3s ease;
+      z-index: -1;
+    }
+    body.dark .scent-button::before {
+      background: var(--clr-accent-dark);
+    }
+    .scent-button:hover, .scent-button:focus {
+      color: white;
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(44, 137, 154, 0.2);
+    }
+    body.dark .scent-button:hover, body.dark .scent-button:focus {
+      box-shadow: 0 10px 25px rgba(226, 187, 133, 0.2);
+    }
+    .scent-button:hover::before, .scent-button:focus::before {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    @media (max-width: 768px) {
+      .scent-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    @media (max-width: 480px) {
+      .scent-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="#" class="brand">
+        <i class="fas fa-leaf"></i>
+        The Scent
+      </a>
+      <div class="nav-links">
+        <a href="#home">Home</a>
+        <a href="#about">About</a>
+        <a href="#discover">Discover</a>
+        <a href="#shop">Shop</a>
+        <a href="#contact">Contact</a>
+        <button class="dark-toggle" aria-label="Toggle dark mode">
+          <!-- Day Mode SVG -->
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="day-mode">
+            <path d="M12 17C14.7614 17 17 14.7614 17 12C17 9.23858 14.7614 7 12 7C9.23858 7 7 9.23858 7 12C7 14.7614 9.23858 17 12 17Z" fill="currentColor"/>
+            <path d="M12 3.5V2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M12 22V20.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M3.5 12H2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M22 12H20.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M5.5 5.5L4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M19.5 19.5L18.5 18.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M5.5 18.5L4.5 19.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M19.5 4.5L18.5 5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          
+          <!-- Night Mode SVG -->
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="night-mode">
+            <path d="M21 12.79C20.8427 14.4922 20.2039 16.1144 19.1582 17.4668C18.1126 18.8192 16.7035 19.8458 15.0957 20.4265C13.4879 21.0073 11.7479 21.1181 10.0795 20.7461C8.41113 20.3741 6.88428 19.5345 5.67494 18.3251C4.4656 17.1158 3.62594 15.5889 3.25391 13.9205C2.88188 12.2521 2.99274 10.5121 3.57348 8.9043C4.15422 7.29651 5.18085 5.88737 6.53324 4.84175C7.88562 3.79614 9.50782 3.15731 11.21 3C10.2134 4.34827 9.73387 6.00945 9.85856 7.68141C9.98324 9.35338 10.7039 10.9251 11.8894 12.1106C13.0749 13.2961 14.6466 14.0168 16.3186 14.1414C17.9906 14.2661 19.6517 13.7866 21 12.79Z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+  
+  <!-- Ambient Audio Toggle -->
+  <div class="ambient-audio-toggle">
+    <button aria-label="Toggle ambient sound">
+      <!-- Sound On SVG -->
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="sound-on">
+        <path d="M14.47 3.12C14.3 3.04 14.11 3 13.93 3C13.75 3 13.56 3.04 13.39 3.12L7.34 6H4C3.44772 6 3 6.44772 3 7V17C3 17.5523 3.44772 18 4 18H7.34L13.39 20.88C13.56 20.96 13.75 21 13.93 21C14.11 21 14.3 20.96 14.47 20.88C14.64 20.79 14.78 20.67 14.88 20.51C14.98 20.35 15.03 20.18 15.03 20V4C15.03 3.82 14.98 3.65 14.88 3.49C14.78 3.33 14.64 3.21 14.47 3.12Z" fill="currentColor"/>
+        <path d="M19.07 7.93C18.68 7.54 18.05 7.54 17.66 7.93C17.27 8.32 17.27 8.95 17.66 9.34C18.44 10.12 18.44 11.38 17.66 12.16C17.27 12.55 17.27 13.18 17.66 13.57C17.85 13.76 18.1 13.86 18.36 13.86C18.62 13.86 18.87 13.76 19.07 13.57C20.63 12.01 20.63 9.49 19.07 7.93Z" fill="currentColor"/>
+        <path d="M22.54 4.46C22.15 4.07 21.52 4.07 21.13 4.46C20.74 4.85 20.74 5.48 21.13 5.87C23.47 8.21 23.47 12.29 21.13 14.63C20.74 15.02 20.74 15.65 21.13 16.04C21.32 16.23 21.58 16.33 21.83 16.33C22.09 16.33 22.34 16.23 22.54 16.04C25.66 12.92 25.66 7.58 22.54 4.46Z" fill="currentColor"/>
+      </svg>
+
+      <!-- Sound Off SVG -->
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="sound-off">
+        <path d="M14.47 3.12C14.3 3.04 14.11 3 13.93 3C13.75 3 13.56 3.04 13.39 3.12L7.34 6H4C3.44772 6 3 6.44772 3 7V17C3 17.5523 3.44772 18 4 18H7.34L13.39 20.88C13.56 20.96 13.75 21 13.93 21C14.11 21 14.3 20.96 14.47 20.88C14.64 20.79 14.78 20.67 14.88 20.51C14.98 20.35 15.03 20.18 15.03 20V4C15.03 3.82 14.98 3.65 14.88 3.49C14.78 3.33 14.64 3.21 14.47 3.12Z" fill="currentColor"/>
+        <path d="M19.07 19.07C19.26 19.26 19.52 19.36 19.77 19.36C20.02 19.36 20.28 19.26 20.47 19.07C20.76 18.78 20.85 18.35 20.71 17.97L17.72 4.03C17.58 3.64 17.23 3.36 16.82 3.31C16.41 3.26 16.01 3.44 15.79 3.79C15.57 4.14 15.57 4.57 15.79 4.93L18.78 18.88C18.83 18.96 18.89 19.02 18.97 19.07H19.07Z" fill="currentColor"/>
+      </svg>
+    </button>
+  </div>
+  
+  <!-- Hero Section -->
+  <header id="home" class="hero">
+    <video class="hero-bg-video" autoplay muted loop playsinline>
+      <source src="assets/videos/essence.mp4" type="video/mp4">
+    </video>
+    <img class="hero-bg-fallback" src="assets/images/essence-fallback.jpg" alt="Aromatherapy oils and diffuser">
+    
+    <!-- Mist Effect SVGs -->
+    <svg class="mist-trails" width="100%" height="100%" viewBox="0 0 1440 800" preserveAspectRatio="none">
+      <path class="mist-path" d="M-100,250 C150,50 350,150 450,250 C550,350 650,100 750,200 C850,300 950,100 1050,200 C1150,300 1250,250 1350,150 C1450,50 1550,150 1650,250"></path>
+      <path class="mist-path2" d="M-100,500 C50,600 150,500 250,400 C350,300 450,500 550,400 C650,300 750,500 850,400 C950,300 1050,500 1150,400 C1250,300 1350,500 1450,400 C1550,300 1650,500 1750,400"></path>
+    </svg>
+    
+    <div class="hero-content">
+      <h1>Experience Sensory Perfection</h1>
+      <p>Our signature aromatherapy blends are crafted to elevate your mind, body, and space. Discover the power of natural scents for wellness and tranquility.</p>
+      <button class="cta-main">
+        <i class="fas fa-shopping-bag"></i>
+        Explore Signature Scents
+      </button>
+    </div>
+  </header>
+  
+  <!-- Discover Section with Symmetrical Grid -->
+  <section id="discover" class="discover-section">
+    <div class="container mx-auto px-4">
+      <h2>Discover Your Perfect Scent</h2>
+      <p class="text-center max-w-2xl mx-auto mb-10">Our expertly crafted aromatherapy blends are designed to enhance your wellness journey. Select your preferences to find your signature scent.</p>
+      
+      <div class="scent-grid">
+        <button class="scent-button">Relaxation</button>
+        <button class="scent-button">Energy</button>
+        <button class="scent-button">Focus</button>
+        <button class="scent-button">Sleep</button>
+        <button class="scent-button">Stress Relief</button>
+        <button class="scent-button">Mood Boost</button>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Shop Now Floating Button -->
+  <button class="shop-now">
+    <i class="fas fa-shopping-cart"></i>
+    Shop Now
+  </button>
+
+  <!-- Audio Element for Ambient Sound -->
+  <audio id="ambient-audio" loop>
+    <source src="assets/audio/ambient.mp3" type="audio/mpeg">
+  </audio>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Dark Mode Toggle
+      const darkToggle = document.querySelector('.dark-toggle');
+      
+      if (darkToggle) {
+        darkToggle.addEventListener('click', function() {
+          document.body.classList.toggle('dark');
+          // Save preference to localStorage
+          const isDark = document.body.classList.contains('dark');
+          localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
+        });
+        
+        // Check for saved preference or system preference
+        if (localStorage.getItem('darkMode') === 'enabled') {
+          document.body.classList.add('dark');
+        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches && !localStorage.getItem('darkMode')) {
+          document.body.classList.add('dark');
+        }
+      }
+      
+      // Sound Toggle
+      const soundToggle = document.querySelector('.ambient-audio-toggle button');
+      const soundOn = document.querySelector('.sound-on');
+      const soundOff = document.querySelector('.sound-off');
+      const ambientAudio = document.getElementById('ambient-audio');
+      
+      // Initial state
+      let isSoundPlaying = false;
+      soundOff.classList.add('active');
+      
+      if (soundToggle) {
+        soundToggle.addEventListener('click', function() {
+          if (isSoundPlaying) {
+            ambientAudio.pause();
+            soundOn.classList.remove('active');
+            soundOff.classList.add('active');
+          } else {
+            ambientAudio.play().catch(e => console.error('Audio playback failed:', e));
+            soundOn.classList.add('active');
+            soundOff.classList.remove('active');
+          }
+          isSoundPlaying = !isSoundPlaying;
+        });
+      }
+
+      // Video Background Fallback
+      const video = document.querySelector('.hero-bg-video');
+      const fallbackImg = document.querySelector('.hero-bg-fallback');
+      
+      if (video && fallbackImg) {
+        video.addEventListener('error', function() {
+          video.style.display = 'none';
+          fallbackImg.style.display = 'block';
+        });
+      }
+      
+      // Smooth Scroll for Navigation Links
+      document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+          e.preventDefault();
+          const target = document.querySelector(this.getAttribute('href'));
+          if (target) {
+            window.scrollTo({
+              top: target.offsetTop - 80,
+              behavior: 'smooth'
+            });
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>
