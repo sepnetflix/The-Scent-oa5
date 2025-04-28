@@ -1,0 +1,112 @@
+**Conclusion on `config.php`:** The file **contains all the necessary parameter definitions** required by the application, including payment (Stripe) and email (SMTP). You need to ensure the *values* for `DB_*`, `STRIPE_*`, and especially `SMTP_*` constants are correct for your environment.
+
+**3. SMTP Server Suggestion for Development (Ubuntu 24.04)**
+
+For local development where you primarily need to *see* the emails being sent rather than deliver them externally, **MailHog** is an excellent and simple solution. It acts as a fake SMTP server, catches all outgoing emails sent to it, and provides a web interface to view them.
+
+**Setting up MailHog (using Docker is often easiest):**
+
+1.  **Install Docker:** If you don't have Docker:
+    ```bash
+    sudo apt update
+    sudo apt install docker.io docker-compose -y
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    sudo usermod -aG docker $USER
+    newgrp docker # Apply group change without logout/login
+    ```
+2.  **Run MailHog Container:**
+    ```bash
+    docker run -d --name mailhog -p 1025:1025 -p 8025:8025 mailhog/mailhog
+    ```
+    *   `-d`: Run in detached mode (background).
+    *   `--name mailhog`: Give the container a name.
+    *   `-p 1025:1025`: Maps your machine's port 1025 to the container's SMTP port 1025.
+    *   `-p 8025:8025`: Maps your machine's port 8025 to the container's web UI port 8025.
+
+3.  **Configure `config.php` for MailHog:**
+    ```php
+    // Email Configuration (for MailHog development)
+    define('SMTP_HOST', 'localhost'); // Or '127.0.0.1'
+    define('SMTP_PORT', 1025);      // MailHog's default SMTP port
+    define('SMTP_USER', '');        // No authentication needed for MailHog
+    define('SMTP_PASS', '');        // No authentication needed for MailHog
+    define('SMTP_FROM', 'noreply@thescent.local'); // Use any from address
+    define('SMTP_FROM_NAME', 'The Scent (Dev)');
+    // Optional: Disable STARTTLS for MailHog if needed in EmailService.php
+    // In EmailService::initializeMailer():
+    // $this->mailer->SMTPAuth = false;
+    // $this->mailer->SMTPSecure = false; // or comment out SMTPSecure line
+    ```
+    *   **Important:** In `EmailService.php` within the `initializeMailer` method, you might need to disable authentication and encryption when using MailHog:
+        ```php
+        // Inside EmailService::initializeMailer() when using MailHog
+        // ...
+        $this->mailer->Host = SMTP_HOST;
+        // $this->mailer->SMTPAuth = true; // <-- Comment out or set to false
+        // $this->mailer->Username = SMTP_USER; // <-- Comment out or empty
+        // $this->mailer->Password = SMTP_PASS; // <-- Comment out or empty
+        // $this->mailer->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS; // <-- Comment out or set to false/''
+        $this->mailer->Port = SMTP_PORT;
+        // ...
+        ```
+
+4.  **Access MailHog Web UI:** Open your browser and go to `http://localhost:8025`. Emails sent by your application should appear here.
+
+This setup allows you to test email generation and content locally without needing real SMTP credentials or worrying about emails going to actual users during development.
+
+**Alternative:** **Mailtrap.io** offers a free tier specifically for development email testing. It works similarly but is a hosted service requiring an account.
+
+**4. User Creation SQL Script**
+
+**Important:** You need to generate password hashes first using PHP.
+
+**PHP Snippet to Generate Hashes:**
+
+```php
+<?php
+// --- GENERATE HASHES ---
+// Choose strong passwords for your users!
+$passwordUser = 'UserPassword123!'; // Replace with a strong password
+$passwordAdmin = 'AdminPassword123!'; // Replace with a strong password
+
+// Use PASSWORD_DEFAULT for the best available algorithm (currently BCRYPT)
+$hashUser = password_hash($passwordUser, PASSWORD_DEFAULT);
+$hashAdmin = password_hash($passwordAdmin, PASSWORD_DEFAULT);
+
+echo "User Hash: " . $hashUser . "\n";
+echo "Admin Hash: " . $hashAdmin . "\n";
+
+// --- Example Output (DO NOT USE THESE HASHES DIRECTLY) ---
+// User Hash: $2y$10$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+// Admin Hash: $2y$10$YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+?>
+```
+
+Run this PHP script (e.g., save as `hash_pass.php` and run `php hash_pass.php`). Copy the generated hash strings.
+
+**SQL Script (Replace placeholders with generated hashes):**
+
+```sql
+-- Ensure you are using the correct database
+USE the_scent;
+
+-- Create the 'user' role user
+INSERT INTO `users` (`name`, `email`, `password`, `role`, `created_at`)
+VALUES
+('Abc Def', 'abc@def.com', 'REPLACE_WITH_USER_HASH_GENERATED_BY_PHP', 'user', NOW());
+
+-- Create the 'admin' role user
+INSERT INTO `users` (`name`, `email`, `password`, `role`, `created_at`)
+VALUES
+('Scent Admin', 'webadmin@scent.com', 'REPLACE_WITH_ADMIN_HASH_GENERATED_BY_PHP', 'admin', NOW());
+
+```
+
+**Instructions:**
+
+1.  Run the PHP snippet to get the password hashes for your chosen passwords.
+2.  Replace `'REPLACE_WITH_USER_HASH_GENERATED_BY_PHP'` and `'REPLACE_WITH_ADMIN_HASH_GENERATED_BY_PHP'` in the SQL script with the actual hashes you generated.
+3.  Execute the modified SQL script against your `the_scent` database.
+
+This will create the two users with securely hashed passwords. Remember to fix the `EmailService::logEmail` database column issue to allow registration to complete successfully.

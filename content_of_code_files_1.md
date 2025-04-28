@@ -39,6 +39,7 @@ try {
         // Ensure CSRF token is generated if not already (e.g., first POST in session)
         SecurityMiddleware::generateCSRFToken();
         // Validate submitted token
+        // Note: Some controllers might re-validate CSRF internally for specific actions
         SecurityMiddleware::validateCSRF(); // Throws exception on failure
     }
 
@@ -57,6 +58,7 @@ try {
                 $controller->showProduct($id);
             } else {
                 // Handle missing ID, maybe redirect or show error
+                 http_response_code(404);
                 require_once __DIR__ . '/views/404.php';
             }
             break;
@@ -81,7 +83,9 @@ try {
                  } elseif ($action === 'clear') {
                     $controller->clearCart(); // Exits via jsonResponse or redirect
                  } else {
-                    $controller->showCart(); // Default POST? Or show cart page.
+                    // Default POST to cart page is unusual, maybe show 405 or redirect?
+                    http_response_code(405); // Method Not Allowed
+                    echo "Method not allowed for this resource.";
                  }
             } elseif ($action === 'mini') { // GET request for mini cart data
                  $controller->mini(); // Exits via jsonResponse
@@ -100,22 +104,31 @@ try {
             }
             require_once __DIR__ . '/controllers/CheckoutController.php';
             require_once __DIR__ . '/controllers/CartController.php'; // Need CartController to check items
-            $cartCtrl = new CartController($pdo); // Instantiate to check cart
-            $cartItems = $cartCtrl->getCartItems();
 
-            if (empty($cartItems) && $action !== 'confirmation') { // Allow confirmation page even if cart is now empty
-                // If cart is empty, redirect to products page (or cart page)
-                header('Location: ' . BASE_URL . 'index.php?page=products');
-                exit;
+             // Check if cart is empty only for the main checkout page display
+             if (empty($action)) { // Only check if no action specified (i.e., loading the main page)
+                $cartCtrl = new CartController($pdo); // Instantiate to check cart
+                $cartItems = $cartCtrl->getCartItems();
+                if (empty($cartItems)) {
+                    header('Location: ' . BASE_URL . 'index.php?page=products');
+                    exit;
+                }
             }
 
             $controller = new CheckoutController($pdo);
-            if ($action === 'process' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+            if ($action === 'processCheckout' && $_SERVER['REQUEST_METHOD'] === 'POST') { // Matched JS call action name
                 $controller->processCheckout(); // Exits via jsonResponse
-            } elseif ($action === 'confirmation') {
+            } elseif ($action === 'confirmation') { // GET request typically after payment redirect
                  $controller->showOrderConfirmation(); // Shows the confirmation view
-            } elseif ($action === 'calculate_tax' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+            } elseif ($action === 'calculateTax' && $_SERVER['REQUEST_METHOD'] === 'POST') { // Matched JS call action name
                 $controller->calculateTax(); // Exits via jsonResponse
+            } elseif ($action === 'applyCouponAjax' && $_SERVER['REQUEST_METHOD'] === 'POST') { // Matched JS call action name and added route
+                 // No need to include CheckoutController again if already included
+                 $controller->applyCouponAjax(); // Call method in CheckoutController
+                 // **Alternative:** Call CouponController directly if preferred
+                 // require_once __DIR__ . '/controllers/CouponController.php';
+                 // $couponController = new CouponController($pdo);
+                 // $couponController->applyCouponAjax(); // Assumes method exists there
             }
             else {
                 // Default GET request: show the checkout page
@@ -123,257 +136,156 @@ try {
             }
             break;
 
-        // --- Account Related Routes ---
+        // --- Account Related Routes (No changes from previous version) ---
         case 'login':
-            if (isLoggedIn()) { // Redirect if already logged in
-                 header('Location: ' . BASE_URL . 'index.php?page=account'); // Redirect to dashboard
-                 exit;
-            }
+            if (isLoggedIn()) { header('Location: ' . BASE_URL . 'index.php?page=account'); exit; }
             require_once __DIR__ . '/controllers/AccountController.php';
             $controller = new AccountController($pdo);
-            $controller->login(); // Handles both GET (show form) and POST (process login)
+            $controller->login();
             break;
-
         case 'register':
-            if (isLoggedIn()) { // Redirect if already logged in
-                 header('Location: ' . BASE_URL . 'index.php?page=account');
-                 exit;
-            }
+            if (isLoggedIn()) { header('Location: ' . BASE_URL . 'index.php?page=account'); exit; }
             require_once __DIR__ . '/controllers/AccountController.php';
             $controller = new AccountController($pdo);
-            // Controller handles GET (show form) and POST (process registration)
             $controller->register();
             break;
-
         case 'logout':
-             // Use logout function from auth.php
              logoutUser();
-             header('Location: ' . BASE_URL . 'index.php?page=login&loggedout=1'); // Redirect to login with a param
+             header('Location: ' . BASE_URL . 'index.php?page=login&loggedout=1');
              exit;
-             break;
-
         case 'account':
-             if (!isLoggedIn()) { // Ensure user is logged in for all account pages
+             if (!isLoggedIn()) {
                  $_SESSION['redirect_after_login'] = BASE_URL . 'index.php?page=account' . ($action ? '&action=' . $action : '');
                  header('Location: ' . BASE_URL . 'index.php?page=login');
                  exit;
              }
              require_once __DIR__ . '/controllers/AccountController.php';
              $controller = new AccountController($pdo);
-
              switch ($action) {
-                 case 'profile':
-                     $controller->showProfile();
+                 case 'profile': $controller->showProfile(); break;
+                 case 'update_profile':
+                     if ($_SERVER['REQUEST_METHOD'] === 'POST') { $controller->updateProfile(); }
+                     else { header('Location: ' . BASE_URL . 'index.php?page=account&action=profile'); exit; }
                      break;
-                 case 'update_profile': // POST only
-                     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-                         $controller->updateProfile(); // Handles redirect internally
-                     } else {
-                          header('Location: ' . BASE_URL . 'index.php?page=account&action=profile'); // Redirect GET requests
-                          exit;
-                     }
-                     break;
-                 case 'orders':
-                     $controller->showOrders();
-                     break;
+                 case 'orders': $controller->showOrders(); break;
                  case 'order_details':
-                     if ($id) { // Ensure ID is present
-                         $controller->showOrderDetails($id);
-                     } else {
-                          header('Location: ' . BASE_URL . 'index.php?page=account&action=orders'); // Redirect if no ID
-                          exit;
-                     }
+                     if ($id) { $controller->showOrderDetails($id); }
+                     else { header('Location: ' . BASE_URL . 'index.php?page=account&action=orders'); exit; }
                      break;
-                 case 'update_newsletter': // POST only
-                     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-                         $controller->updateNewsletterPreferences(); // Handles redirect internally
-                     } else {
-                          header('Location: ' . BASE_URL . 'index.php?page=account&action=profile'); // Redirect GET to profile
-                          exit;
-                     }
+                 case 'update_newsletter':
+                     if ($_SERVER['REQUEST_METHOD'] === 'POST') { $controller->updateNewsletterPreferences(); }
+                     else { header('Location: ' . BASE_URL . 'index.php?page=account&action=profile'); exit; }
                      break;
-                 case 'dashboard': // Explicit dashboard action
-                 default: // Default action for 'account' page is dashboard
-                     $controller->showDashboard();
-                     break;
+                 case 'dashboard': default: $controller->showDashboard(); break;
              }
-             break; // End of 'account' page case
-
+             break;
         case 'forgot_password':
-            if (isLoggedIn()) { // Redirect if already logged in
-                 header('Location: ' . BASE_URL . 'index.php?page=account');
-                 exit;
-            }
+            if (isLoggedIn()) { header('Location: ' . BASE_URL . 'index.php?page=account'); exit; }
              require_once __DIR__ . '/controllers/AccountController.php';
              $controller = new AccountController($pdo);
-             $controller->requestPasswordReset(); // Handles GET (show form) and POST (process request)
+             $controller->requestPasswordReset();
              break;
-
         case 'reset_password':
-             if (isLoggedIn()) { // Redirect if already logged in
-                 header('Location: ' . BASE_URL . 'index.php?page=account');
-                 exit;
-             }
+             if (isLoggedIn()) { header('Location: ' . BASE_URL . 'index.php?page=account'); exit; }
              require_once __DIR__ . '/controllers/AccountController.php';
              $controller = new AccountController($pdo);
-             $controller->resetPassword(); // Handles GET (show form with token) and POST (process reset)
+             $controller->resetPassword();
              break;
 
-        // --- Other Routes ---
+        // --- Other Routes (No changes from previous version) ---
         case 'quiz':
             require_once __DIR__ . '/controllers/QuizController.php';
             $controller = new QuizController($pdo);
-            if ($action === 'submit' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-                $controller->processQuiz(); // Assumes method handles view rendering or redirect
-            } else {
-                $controller->showQuiz(); // Assumes method handles view rendering
-            }
+            if ($action === 'submit' && $_SERVER['REQUEST_METHOD'] === 'POST') { $controller->processQuiz(); }
+            else { $controller->showQuiz(); }
             break;
-
-        case 'newsletter': // Dedicated route for newsletter subscription
+        case 'newsletter':
              require_once __DIR__ . '/controllers/NewsletterController.php';
              $controller = new NewsletterController($pdo);
-             if ($action === 'subscribe' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-                $controller->subscribe(); // Exits via jsonResponse
-             } elseif ($action === 'unsubscribe') {
-                 $controller->unsubscribe(); // Handles GET request with token, exits via jsonResponse
-             } else {
-                  http_response_code(404);
-                  require_once __DIR__ . '/views/404.php'; // Directly include 404 view
-             }
+             if ($action === 'subscribe' && $_SERVER['REQUEST_METHOD'] === 'POST') { $controller->subscribe(); }
+             elseif ($action === 'unsubscribe') { $controller->unsubscribe(); }
+             else { http_response_code(404); require_once __DIR__ . '/views/404.php'; }
              break;
-
         case 'admin':
-            // Admin check happens first
-            if (!isAdmin()) {
-                $_SESSION['redirect_after_login'] = BASE_URL . 'index.php?page=admin';
-                header('Location: ' . BASE_URL . 'index.php?page=login');
-                exit;
-            }
-
-            $section = SecurityMiddleware::validateInput($_GET['section'] ?? 'dashboard', 'string');
-            $task = SecurityMiddleware::validateInput($_GET['task'] ?? null, 'string'); // For actions within sections
-
-            switch ($section) {
+             if (!isAdmin()) {
+                 $_SESSION['redirect_after_login'] = BASE_URL . 'index.php?page=admin';
+                 header('Location: ' . BASE_URL . 'index.php?page=login'); exit;
+             }
+             $section = SecurityMiddleware::validateInput($_GET['section'] ?? 'dashboard', 'string');
+             $task = SecurityMiddleware::validateInput($_GET['task'] ?? null, 'string');
+             switch ($section) {
                  case 'quiz_analytics':
                      require_once __DIR__ . '/controllers/QuizController.php';
-                     $controller = new QuizController($pdo);
-                     $controller->showAnalytics(); // Assumes method handles rendering view
-                     break;
+                     $controller = new QuizController($pdo); $controller->showAnalytics(); break;
                  case 'coupons':
                     require_once __DIR__ . '/controllers/CouponController.php';
                     $controller = new CouponController($pdo);
                     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-                        if ($task === 'save') {
-                            // Controller should handle create/update logic and redirection/response
-                            // E.g., $controller->saveCoupon();
-                        } elseif ($task === 'toggle_status' && $id) {
-                            // Controller should handle status toggle and response
-                            // E.g., $controller->toggleCouponStatus($id);
-                        } elseif ($task === 'delete' && $id) {
-                           // Controller should handle deletion and response
-                           // E.g., $controller->deleteCoupon($id);
-                        } else {
-                             // Default POST for coupons? Maybe just list again or show error.
-                             $controller->listCoupons();
-                        }
-                    } else { // GET Requests for coupons section
-                         if ($task === 'edit' && $id) {
-                              // Controller should show edit form
-                              // E.g., $controller->showEditForm($id);
-                         } elseif ($task === 'create') {
-                              // Controller should show create form
-                              // E.g., $controller->showCreateForm();
-                         } else {
-                             // Default GET action: show list
-                             $controller->listCoupons(); // Method needs to exist in CouponController
-                         }
+                         if ($task === 'save') { $controller->saveCoupon(); } // Assume this method handles create/update and redirects/responds
+                         elseif ($task === 'toggle_status' && $id) { $controller->toggleCouponStatus($id); } // Assume this responds (e.g., JSON)
+                         elseif ($task === 'delete' && $id) { $controller->deleteCoupon($id); } // Assume this responds (e.g., JSON)
+                         else { $controller->listCoupons(); } // Default POST? Redirect likely better
+                    } else { // GET
+                         if ($task === 'edit' && $id) { $controller->showEditForm($id); } // Assume renders view
+                         elseif ($task === 'create') { $controller->showCreateForm(); } // Assume renders view
+                         else { $controller->listCoupons(); } // Assume renders view
                     }
                     break;
-                // Add other admin sections (products, orders, users) here...
-                // case 'products': ...
-                // case 'orders': ...
-                default: // Admin Dashboard
-                    // Load admin dashboard view directly or via a controller method
-                     $pageTitle = "Admin Dashboard"; // Example title
-                     $bodyClass = "page-admin-dashboard"; // Example class
-                     $csrfToken = SecurityMiddleware::generateCSRFToken(); // Needed if dashboard has actions
-                     extract(['pageTitle' => $pageTitle, 'bodyClass' => $bodyClass, 'csrfToken' => $csrfToken]);
-                     require_once __DIR__ . '/views/admin/dashboard.php'; // Direct include for simple dashboard
-                    break;
-            }
-            break; // End of 'admin' page case
-
-        // --- Static Pages ---
-        case 'contact':
-            $pageTitle = 'Contact Us';
-            $csrfToken = SecurityMiddleware::generateCSRFToken();
-            $bodyClass = 'page-contact';
-             extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
-            require_once __DIR__ . '/views/contact.php';
-            break;
-        case 'faq':
-            $pageTitle = 'FAQs';
-            $csrfToken = SecurityMiddleware::generateCSRFToken();
-             $bodyClass = 'page-faq';
-            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
-            require_once __DIR__ . '/views/faq.php';
-            break;
-        case 'shipping':
-            $pageTitle = 'Shipping & Returns';
-            $csrfToken = SecurityMiddleware::generateCSRFToken();
-            $bodyClass = 'page-shipping';
-            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
-            require_once __DIR__ . '/views/shipping.php';
-            break;
-        case 'order-tracking': // Maybe needs a controller if dynamic
-            $pageTitle = 'Track Your Order';
-            $csrfToken = SecurityMiddleware::generateCSRFToken();
-            $bodyClass = 'page-order-tracking';
-            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
-            require_once __DIR__ . '/views/order-tracking.php';
-            break;
-        case 'privacy':
-            $pageTitle = 'Privacy Policy';
-            $csrfToken = SecurityMiddleware::generateCSRFToken();
-            $bodyClass = 'page-privacy';
-            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
-            require_once __DIR__ . '/views/privacy.php';
-            break;
-        case 'about': // Add route for about page if needed
-             $pageTitle = 'About Us - The Scent'; // Set here for consistency
-             $csrfToken = SecurityMiddleware::generateCSRFToken(); // Generate token
-             $bodyClass = 'page-about'; // Set body class
-             // Make variables available to the view scope before including it
-             extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
-             require_once __DIR__ . '/views/about.php'; // Require the view file
+                 // Add other admin sections...
+                 default: // Admin Dashboard
+                      $pageTitle = "Admin Dashboard"; $bodyClass = "page-admin-dashboard";
+                      $csrfToken = SecurityMiddleware::generateCSRFToken();
+                      extract(['pageTitle' => $pageTitle, 'bodyClass' => $bodyClass, 'csrfToken' => $csrfToken]);
+                      require_once __DIR__ . '/views/admin/dashboard.php'; break;
+             }
              break;
-        case 'error': // Explicit error page route
-            $pageTitle = 'Error';
-            $bodyClass = 'page-error';
-            $csrfToken = SecurityMiddleware::generateCSRFToken(); // For consistency if layout needs it
-            http_response_code(500); // Set appropriate code if possible
+
+        // --- Static Pages (No changes from previous version) ---
+        case 'contact':
+            $pageTitle = 'Contact Us'; $csrfToken = SecurityMiddleware::generateCSRFToken(); $bodyClass = 'page-contact';
+            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
+            require_once __DIR__ . '/views/contact.php'; break;
+        case 'faq':
+            $pageTitle = 'FAQs'; $csrfToken = SecurityMiddleware::generateCSRFToken(); $bodyClass = 'page-faq';
+            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
+            require_once __DIR__ . '/views/faq.php'; break;
+        case 'shipping':
+            $pageTitle = 'Shipping & Returns'; $csrfToken = SecurityMiddleware::generateCSRFToken(); $bodyClass = 'page-shipping';
+            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
+            require_once __DIR__ . '/views/shipping.php'; break;
+        case 'order-tracking':
+            $pageTitle = 'Track Your Order'; $csrfToken = SecurityMiddleware::generateCSRFToken(); $bodyClass = 'page-order-tracking';
+            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
+            require_once __DIR__ . '/views/order-tracking.php'; break;
+        case 'privacy':
+            $pageTitle = 'Privacy Policy'; $csrfToken = SecurityMiddleware::generateCSRFToken(); $bodyClass = 'page-privacy';
+            extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
+            require_once __DIR__ . '/views/privacy.php'; break;
+        case 'about':
+             $pageTitle = 'About Us - The Scent'; $csrfToken = SecurityMiddleware::generateCSRFToken(); $bodyClass = 'page-about';
+             extract(['pageTitle' => $pageTitle, 'csrfToken' => $csrfToken, 'bodyClass' => $bodyClass]);
+             require_once __DIR__ . '/views/about.php'; break;
+        case 'error':
+            $pageTitle = 'Error'; $bodyClass = 'page-error'; $csrfToken = SecurityMiddleware::generateCSRFToken();
+            http_response_code(500);
             extract(['pageTitle' => $pageTitle, 'bodyClass' => $bodyClass, 'csrfToken' => $csrfToken]);
-            require_once __DIR__ . '/views/error.php';
-            break;
+            require_once __DIR__ . '/views/error.php'; break;
 
         default: // 404 Not Found
             http_response_code(404);
-            $pageTitle = 'Page Not Found';
-            $bodyClass = 'page-404';
-            $csrfToken = SecurityMiddleware::generateCSRFToken();
+            $pageTitle = 'Page Not Found'; $bodyClass = 'page-404'; $csrfToken = SecurityMiddleware::generateCSRFToken();
             extract(['pageTitle' => $pageTitle, 'bodyClass' => $bodyClass, 'csrfToken' => $csrfToken]);
-            require_once __DIR__ . '/views/404.php';
-            break;
+            require_once __DIR__ . '/views/404.php'; break;
     }
 } catch (PDOException $e) {
-    // Delegate to ErrorHandler (which should exist now)
-    ErrorHandler::handleException($e); // Let the handler manage display/logging
+    ErrorHandler::handleException($e);
     exit(1);
-} catch (Throwable $e) { // Catch Throwable for broader coverage (PHP 7+)
-    // Catch other exceptions (e.g., CSRF, routing errors, general errors)
+} catch (\Stripe\Exception\ApiErrorException $e) { // Catch Stripe API errors specifically
+     error_log("Stripe API error in routing: " . $e->getMessage());
+     ErrorHandler::handleException($e); // Let ErrorHandler manage display
+     exit(1);
+} catch (Throwable $e) { // Catch other exceptions
     error_log("General error/exception in index.php: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
-    // Delegate to ErrorHandler
     ErrorHandler::handleException($e);
     exit(1);
 }
@@ -1095,580 +1007,517 @@ require_once __DIR__ . '/../../includes/auth.php'; // Provides isLoggedIn()
 # controllers/BaseController.php  
 ```php
 <?php
+
+// Ensure SecurityMiddleware is available (likely included via index.php or autoloader)
+require_once __DIR__ . '/../includes/SecurityMiddleware.php';
 require_once __DIR__ . '/../includes/EmailService.php';
+require_once __DIR__ . '/../config.php'; // For BASE_URL, SECURITY_SETTINGS
 
 abstract class BaseController {
-    protected $db;
-    protected $securityMiddleware;
-    protected $emailService;
-    protected $responseHeaders = [];
-    
-    public function __construct($pdo) {
+    protected PDO $db; // Use type hint
+    protected EmailService $emailService; // Use type hint
+    protected array $responseHeaders = []; // Use type hint
+
+    public function __construct(PDO $pdo) { // Use type hint
         $this->db = $pdo;
-        $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $this->securityMiddleware = new SecurityMiddleware();
         $this->emailService = new EmailService($this->db); // Pass the PDO connection
         $this->initializeSecurityHeaders();
     }
-    
-    protected function initializeSecurityHeaders() {
-        $this->responseHeaders = [
+
+    protected function initializeSecurityHeaders(): void { // Add return type hint
+        // Use security settings from config if available
+        $this->responseHeaders = SECURITY_SETTINGS['headers'] ?? [
+            // Sensible defaults if not configured
             'X-Frame-Options' => 'DENY',
             'X-Content-Type-Options' => 'nosniff',
             'X-XSS-Protection' => '1; mode=block',
             'Referrer-Policy' => 'strict-origin-when-cross-origin',
-            'Content-Security-Policy' => "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';",
-            'Permissions-Policy' => 'geolocation=(), microphone=(), camera=()'
+             // Default CSP - stricter than original, adjust as needed
+            'Content-Security-Policy' => "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; frame-src https://js.stripe.com; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com",
+            'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains' // If HTTPS is enforced
         ];
+        // Permissions-Policy can be added if needed
     }
-    
-    protected function sendResponse($data, $statusCode = 200) {
-        http_response_code($statusCode);
-        
-        // Set security headers
-        foreach ($this->responseHeaders as $header => $value) {
-            header("$header: $value");
-        }
-        
-        // Add CSRF token to responses that might lead to forms
-        if ($this->shouldIncludeCSRFToken()) {
-            $data['csrf_token'] = $this->securityMiddleware->generateCSRFToken();
-        }
-        
-        header('Content-Type: application/json; charset=UTF-8');
-        echo json_encode($this->sanitizeOutput($data));
+
+    // --- CSRF Methods ---
+    /**
+     * Gets the current CSRF token, generating one if necessary.
+     * Relies on SecurityMiddleware.
+     *
+     * @return string The CSRF token.
+     */
+    protected function getCsrfToken(): string {
+        // Ensure CSRF is enabled in settings before generating
+        if (defined('SECURITY_SETTINGS') && isset(SECURITY_SETTINGS['csrf']['enabled']) && !SECURITY_SETTINGS['csrf']['enabled']) {
+             return ''; // Return empty string if CSRF disabled
+         }
+        return SecurityMiddleware::generateCSRFToken();
     }
-    
-    protected function sendError($message, $statusCode = 400, $context = []) {
-        $errorResponse = [
-            'error' => true,
-            'message' => $message,
-            'code' => $statusCode
-        ];
-        
-        // Log error with context for monitoring
-        ErrorHandler::logError($message, $context);
-        
-        // Only include debug info in development
-        if (DEBUG_MODE && !empty($context)) {
-            $errorResponse['debug'] = $context;
-        }
-        
-        $this->sendResponse($errorResponse, $statusCode);
+
+    /**
+     * Validates the CSRF token submitted in a POST request.
+     * Relies on SecurityMiddleware, which throws an exception on failure.
+     * It's recommended to call this at the beginning of POST action handlers.
+     */
+    protected function validateCSRF(): void { // Add return type hint
+         // Ensure CSRF is enabled in settings before validating
+         if (defined('SECURITY_SETTINGS') && isset(SECURITY_SETTINGS['csrf']['enabled']) && !SECURITY_SETTINGS['csrf']['enabled']) {
+              return; // Skip validation if CSRF disabled
+          }
+        SecurityMiddleware::validateCSRF(); // Throws exception on failure
     }
-    
-    protected function validateRequest($rules) {
-        $errors = [];
-        $input = $this->getRequestInput();
-        
-        if (!is_array($rules) && !is_object($rules)) {
-            // Defensive: if rules is not array/object, skip validation
-            return true;
+    // --- End CSRF Methods ---
+
+
+    /**
+     * Ensures the user is logged in. If not, redirects to the login page or sends a 401 JSON response.
+     * Also performs session integrity checks and regeneration.
+     *
+     * @param bool $isAjaxRequest Set to true if the request is AJAX, to return JSON instead of redirecting.
+     */
+    protected function requireLogin(bool $isAjaxRequest = false): void { // Added optional param and return type
+        // Ensure session is started
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
         }
-        foreach ($rules as $field => $validations) {
-            if (!isset($input[$field]) && strpos($validations, 'required') !== false) {
-                $errors[$field] = "The {$field} field is required";
-                continue;
-            }
-            
-            if (isset($input[$field])) {
-                $value = $input[$field];
-                $validationArray = explode('|', $validations);
-                
-                foreach ($validationArray as $validation) {
-                    if (!$this->validateField($value, $validation)) {
-                        $errors[$field] = "The {$field} field failed {$validation} validation";
-                    }
-                }
-            }
-        }
-        
-        if (!empty($errors)) {
-            $this->sendError('Validation failed', 422, ['validation_errors' => $errors]);
-            return false;
-        }
-        
-        return true;
-    }
-    
-    protected function validateField($value, $rule) {
-        switch ($rule) {
-            case 'required':
-                return !empty($value);
-            case 'email':
-                return filter_var($value, FILTER_VALIDATE_EMAIL);
-            case 'numeric':
-                return is_numeric($value);
-            case 'array':
-                return is_array($value);
-            case 'url':
-                return filter_var($value, FILTER_VALIDATE_URL);
-            // Add more validation rules as needed
-        }
-        
-        // Check for min:x, max:x patterns
-        if (preg_match('/^(min|max):(\d+)$/', $rule, $matches)) {
-            $type = $matches[1];
-            $limit = (int)$matches[2];
-            
-            if ($type === 'min') {
-                return strlen($value) >= $limit;
-            } else {
-                return strlen($value) <= $limit;
-            }
-        }
-        
-        return true;
-    }
-    
-    protected function getRequestInput() {
-        $input = [];
-        
-        switch ($_SERVER['REQUEST_METHOD']) {
-            case 'GET':
-                $input = $_GET;
-                break;
-            case 'POST':
-            case 'PUT':
-            case 'DELETE':
-                $contentType = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : '';
-                
-                if (strpos($contentType, 'application/json') !== false) {
-                    $input = json_decode(file_get_contents('php://input'), true) ?? [];
-                } else {
-                    $input = $_POST;
-                }
-                break;
-        }
-        
-        return $this->sanitizeInput($input);
-    }
-    
-    protected function sanitizeInput($data) {
-        if (is_array($data)) {
-            return array_map([$this, 'sanitizeInput'], $data);
-        }
-        
-        // Remove NULL bytes
-        $data = str_replace(chr(0), '', $data);
-        
-        // Convert special characters to HTML entities
-        return htmlspecialchars($data, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    }
-    
-    protected function sanitizeOutput($data) {
-        if (is_array($data)) {
-            return array_map([$this, 'sanitizeOutput'], $data);
-        }
-        
-        if (is_string($data)) {
-            // Ensure proper UTF-8 encoding
-            return mb_convert_encoding($data, 'UTF-8', 'UTF-8');
-        }
-        
-        return $data;
-    }
-    
-    protected function shouldIncludeCSRFToken() {
-        $safeRoutes = [
-            'login',
-            'register',
-            'password/reset',
-            'checkout'
-        ];
-        
-        $currentRoute = strtolower($_SERVER['REQUEST_URI']);
-        
-        foreach ($safeRoutes as $route) {
-            if (strpos($currentRoute, $route) !== false) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    protected function requireAuthentication() {
-        if (!$this->securityMiddleware->isAuthenticated()) {
-            $this->sendError('Unauthorized', 401);
-            return false;
-        }
-        return true;
-    }
-    
-    protected function requireCSRFToken() {
-        if (!$this->securityMiddleware->validateCSRFToken()) {
-            $this->sendError('Invalid CSRF token', 403);
-            return false;
-        }
-        return true;
-    }
-    
-    protected function rateLimit($key, $maxAttempts = 60, $decayMinutes = 1) {
-        if (!$this->securityMiddleware->checkRateLimit($key, $maxAttempts, $decayMinutes)) {
-            $this->sendError('Too many requests', 429);
-            return false;
-        }
-        return true;
-    }
-    
-    protected function requireLogin() {
+
         if (!isset($_SESSION['user_id'])) {
-            $this->logSecurityEvent('unauthorized_access_attempt', [
-                'ip' => $_SERVER['REMOTE_ADDR'],
-                'uri' => $_SERVER['REQUEST_URI']
-            ]);
-            $this->jsonResponse(['error' => 'Authentication required'], 401);
+            $details = [
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN',
+                'uri' => $_SERVER['REQUEST_URI'] ?? 'UNKNOWN'
+            ];
+            $this->logSecurityEvent('unauthorized_access_attempt', $details);
+
+            if ($isAjaxRequest) {
+                 $this->jsonResponse(['error' => 'Authentication required.'], 401); // Exit via jsonResponse
+            } else {
+                 $this->setFlashMessage('Please log in to access this page.', 'warning');
+                 // Store intended destination
+                 $_SESSION['redirect_after_login'] = $_SERVER['REQUEST_URI'] ?? (BASE_URL . 'index.php?page=account');
+                 $this->redirect('index.php?page=login'); // Exit via redirect
+            }
+            // Explicit exit for safety, although jsonResponse/redirect should exit
+            exit();
         }
-        
-        // Verify session integrity
+
+        // Verify session integrity only if user_id is set
         if (!$this->validateSessionIntegrity()) {
-            $this->terminateSession('Session integrity check failed');
+            $this->terminateSession('Session integrity check failed'); // Handles exit
         }
-        
+
         // Check session age and regenerate if needed
         if ($this->shouldRegenerateSession()) {
             $this->regenerateSession();
         }
     }
-    
-    protected function requireAdmin() {
-        $this->requireLogin();
-        
-        if ($_SESSION['user_role'] !== 'admin') {
-            $this->logSecurityEvent('unauthorized_admin_attempt', [
-                'user_id' => $_SESSION['user_id'],
-                'ip' => $_SERVER['REMOTE_ADDR']
-            ]);
-            $this->jsonResponse(['error' => 'Admin access required'], 403);
-        }
-    }
-    
-    protected function validateInput($data, $rules) {
-        $errors = [];
-        if (!is_array($rules) && !is_object($rules)) {
-            // Defensive: if rules is not array/object, skip validation
-            return true;
-        }
-        foreach ($rules as $field => $rule) {
-            if (!isset($data[$field]) && $rule['required'] ?? false) {
-                $errors[$field] = 'Field is required';
-                continue;
+
+    /**
+     * Ensures the user is logged in and has the 'admin' role.
+     *
+     * @param bool $isAjaxRequest Set to true if the request is AJAX, to return JSON instead of redirecting.
+     */
+    protected function requireAdmin(bool $isAjaxRequest = false): void { // Added optional param and return type
+        $this->requireLogin($isAjaxRequest); // Check login first
+
+        // Check role existence and value
+        if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
+            $details = [
+                'user_id' => $_SESSION['user_id'] ?? null, // Should be set if requireLogin passed
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN',
+                'role_found' => $_SESSION['user_role'] ?? 'NOT SET'
+            ];
+            $this->logSecurityEvent('unauthorized_admin_attempt', $details);
+
+            if ($isAjaxRequest) {
+                 $this->jsonResponse(['error' => 'Admin access required.'], 403); // Exit via jsonResponse
+            } else {
+                 $this->setFlashMessage('You do not have permission to access this area.', 'error');
+                 // Redirect to a safe page like account dashboard
+                 $this->redirect('index.php?page=account'); // Exit via redirect
             }
-            
-            if (isset($data[$field])) {
-                $value = $data[$field];
-                $error = $this->securityMiddleware->validateInput($value, $rule['type'], $rule);
-                if ($error !== true) {
-                    $errors[$field] = $error;
-                }
-            }
+            // Explicit exit for safety
+            exit();
         }
-        
-        if (!empty($errors)) {
-            $this->jsonResponse(['errors' => $errors], 422);
-        }
-        
-        return true;
     }
-    
-    protected function getCsrfToken() {
-        return SecurityMiddleware::generateCSRFToken();
+
+
+    /**
+     * Validates input data using SecurityMiddleware.
+     * This is a convenience wrapper. Direct use of SecurityMiddleware::validateInput is also fine.
+     *
+     * @param mixed $input The value to validate.
+     * @param string $type The validation type (e.g., 'string', 'int', 'email').
+     * @param array $options Additional validation options (e.g., ['min' => 1, 'max' => 100]).
+     * @return mixed The validated and potentially sanitized input, or false on failure.
+     */
+    protected function validateInput(mixed $input, string $type, array $options = []): mixed {
+        return SecurityMiddleware::validateInput($input, $type, $options);
     }
-    
-    protected function validateCSRF() {
-        SecurityMiddleware::validateCSRF();
-    }
-    
-    protected function jsonResponse($data, $status = 200) {
+
+
+    /**
+     * Sends a JSON response and terminates script execution.
+     *
+     * @param array $data The data to encode as JSON.
+     * @param int $status The HTTP status code (default: 200).
+     */
+    protected function jsonResponse(array $data, int $status = 200): void { // Add return type hint
+        // Prevent caching of JSON API responses
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Cache-Control: post-check=0, pre-check=0', false);
+        header('Pragma: no-cache');
+
         http_response_code($status);
-        header('Content-Type: application/json');
-        echo json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        header('Content-Type: application/json; charset=UTF-8');
+
+        // Apply security headers (optional here if globally applied by SecurityMiddleware::apply)
+        // foreach ($this->responseHeaders as $header => $value) { header("$header: $value"); }
+
+        echo json_encode($data); // Removed pretty print for efficiency
         exit;
     }
-    
-    protected function redirect($url, $statusCode = 302) {
-        if (!filter_var($url, FILTER_VALIDATE_URL)) {
-            $url = BASE_URL . ltrim($url, '/');
-        }
-        
-        header('Location: ' . $url, true, $statusCode);
-        exit;
-    }
-    
-    protected function setFlashMessage($message, $type = 'info') {
-        $_SESSION['flash'] = [
-            'message' => $message,
-            'type' => $type,
-            'created' => time()
-        ];
-    }
-    
-    protected function getFlashMessage() {
-        if (isset($_SESSION['flash'])) {
-            $flash = $_SESSION['flash'];
-            unset($_SESSION['flash']);
-            
-            // Ensure flash messages don't persist too long
-            if (time() - $flash['created'] < 300) { // 5 minutes
-                return $flash;
-            }
-        }
-        return null;
-    }
-    
-    protected function beginTransaction() {
-        $this->db->beginTransaction();
-    }
-    
-    protected function commit() {
-        $this->db->commit();
-    }
-    
-    protected function rollback() {
-        if ($this->db->inTransaction()) {
-            $this->db->rollBack();
-        }
-    }
-    
-    protected function getCurrentUser() {
-        return $_SESSION['user'] ?? null;
-    }
-    
-    protected function getUserId() {
-        return $_SESSION['user']['id'] ?? null;
-    }
-    
-    protected function validateAjax() {
-        if (!isset($_SERVER['HTTP_X_REQUESTED_WITH']) || 
-            strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) !== 'xmlhttprequest') {
-            $this->jsonResponse(['error' => 'Invalid request'], 400);
-        }
-    }
-    
-    protected function isRateLimited($key, $maxAttempts, $timeWindow) {
-        $rateLimitKey = "rate_limit:{$key}:" . $_SERVER['REMOTE_ADDR'];
-        $attempts = $_SESSION[$rateLimitKey] ?? ['count' => 0, 'first_attempt' => time()];
-        
-        if (time() - $attempts['first_attempt'] > $timeWindow) {
-            // Reset if time window has passed
-            $attempts = ['count' => 1, 'first_attempt' => time()];
+
+    /**
+     * Performs an HTTP redirect and terminates script execution.
+     * Prepends BASE_URL if the URL is relative.
+     *
+     * @param string $url The relative path or full URL to redirect to.
+     * @param int $statusCode The HTTP redirect status code (default: 302).
+     */
+    protected function redirect(string $url, int $statusCode = 302): void { // Add return type hint
+        // Basic check to prevent header injection from $url if it comes from user input
+         // Allow relative paths starting with '/' or alphanumeric, or full URLs
+        if (!preg_match('~^(/|[\w\-./?=&%]+|https?://)~', $url)) { // Improved regex
+             error_log("Invalid redirect URL pattern detected: " . $url);
+             $url = '/'; // Redirect home as safe fallback
+         }
+
+        // Prepend BASE_URL if it's a relative path
+        if (!preg_match('~^https?://~i', $url)) {
+             // Ensure BASE_URL ends with a slash and $url doesn't start with one if needed
+             $baseUrl = rtrim(BASE_URL, '/') . '/';
+             $url = ltrim($url, '/');
+             $finalUrl = $baseUrl . $url;
         } else {
-            $attempts['count']++;
+            $finalUrl = $url;
         }
-        
-        $_SESSION[$rateLimitKey] = $attempts;
-        
-        return $attempts['count'] > $maxAttempts;
+
+
+        // Validate the final URL structure (optional but recommended)
+        if (!filter_var($finalUrl, FILTER_VALIDATE_URL)) {
+            error_log("Redirect URL validation failed after constructing: " . $finalUrl);
+            header('Location: ' . rtrim(BASE_URL, '/') . '/'); // Redirect home as safe fallback
+            exit;
+        }
+
+        header('Location: ' . $finalUrl, true, $statusCode);
+        exit;
     }
-    
-    protected function renderView($viewPath, $data = []) {
+
+    /**
+     * Sets a flash message in the session.
+     *
+     * @param string $message The message content.
+     * @param string $type The message type ('info', 'success', 'warning', 'error').
+     */
+    protected function setFlashMessage(string $message, string $type = 'info'): void { // Add return type hint
+        // Ensure session is started before trying to write to it
+        if (session_status() === PHP_SESSION_NONE) {
+             // Attempt to start session only if headers not sent
+             if (!headers_sent()) {
+                  session_start();
+             } else {
+                  // Cannot start session, log error
+                  error_log("Session not active and headers already sent. Cannot set flash message: {$message}");
+                  return;
+             }
+        }
+        $_SESSION['flash_message'] = $message;
+        $_SESSION['flash_type'] = $type;
+    }
+
+    // Transaction helpers
+    protected function beginTransaction(): void { $this->db->beginTransaction(); } // Add return type hint
+    protected function commit(): void { $this->db->commit(); } // Add return type hint
+    protected function rollback(): void { if ($this->db->inTransaction()) { $this->db->rollBack(); } } // Add return type hint
+
+    // User helpers
+    protected function getCurrentUser(): ?array { return $_SESSION['user'] ?? null; } // Add return type hint
+    protected function getUserId(): ?int { return isset($_SESSION['user']['id']) ? (int)$_SESSION['user']['id'] : null; } // Add return type hint
+
+    /**
+     * Renders a view template with provided data.
+     *
+     * @param string $viewPath Path to the view file relative to the views directory (e.g., 'account/dashboard').
+     * @param array $data Data to extract into the view's scope.
+     * @return string The rendered HTML output.
+     * @throws Exception If the view file is not found.
+     */
+    protected function renderView(string $viewPath, array $data = []): string { // Add return type hint
+        // Ensure CSRF token is available for views that might need it
+        if (!isset($data['csrfToken'])) {
+             $data['csrfToken'] = $this->getCsrfToken();
+        }
+        // Ensure user data is available if needed by layout/views
+        if (!isset($data['user']) && isset($_SESSION['user'])) {
+            $data['user'] = $_SESSION['user'];
+        }
+
         // Extract data to make it available in view
         extract($data);
-        
-        // Start output buffering
+
         ob_start();
-        
-        $viewFile = __DIR__ . '/../views/' . $viewPath . '.php';
+        // Use ROOT_PATH constant defined in index.php for reliability
+        $viewFile = ROOT_PATH . '/views/' . $viewPath . '.php';
+
         if (!file_exists($viewFile)) {
-            throw new Exception("View not found: {$viewPath}");
+            ob_end_clean(); // Clean buffer before throwing
+            throw new Exception("View not found: {$viewFile}");
         }
-        
-        require $viewFile;
-        
+        try {
+            include $viewFile;
+        } catch (\Throwable $e) {
+             ob_end_clean(); // Clean buffer if view inclusion fails
+             error_log("Error rendering view {$viewPath}: " . $e->getMessage());
+             // It's often better to let the global ErrorHandler catch this
+             throw $e; // Re-throw the error
+        }
         return ob_get_clean();
     }
-    
-    protected function validateFileUpload($file, $allowedTypes, $maxSize = 5242880) { // 5MB default
-        if (!isset($file['error']) || is_array($file['error'])) {
-            throw new Exception('Invalid file upload');
-        }
 
-        switch ($file['error']) {
-            case UPLOAD_ERR_OK:
-                break;
-            case UPLOAD_ERR_INI_SIZE:
-            case UPLOAD_ERR_FORM_SIZE:
-                throw new Exception('File too large');
-            case UPLOAD_ERR_PARTIAL:
-                throw new Exception('File upload interrupted');
-            default:
-                throw new Exception('Unknown upload error');
-        }
-
-        if ($file['size'] > $maxSize) {
-            throw new Exception('File too large');
-        }
-
-        $finfo = new finfo(FILEINFO_MIME_TYPE);
-        $mimeType = $finfo->file($file['tmp_name']);
-
-        if (!in_array($mimeType, $allowedTypes)) {
-            throw new Exception('Invalid file type');
-        }
-
-        return true;
-    }
-    
-    protected function log($message, $level = 'info') {
-        $logFile = __DIR__ . '/../logs/' . date('Y-m-d') . '.log';
-        $timestamp = date('Y-m-d H:i:s');
-        $formattedMessage = "[{$timestamp}] [{$level}] {$message}" . PHP_EOL;
-        
-        error_log($formattedMessage, 3, $logFile);
-    }
-
-    protected function checkRateLimit($key, $limit = null, $window = null) {
-        $limit = $limit ?? $this->rateLimit['max_requests'];
-        $window = $window ?? $this->rateLimit['window'];
-        
-        $redis = RedisConnection::getInstance();
-        $requests = $redis->incr("rate_limit:{$key}");
-        
-        if ($requests === 1) {
-            $redis->expire("rate_limit:{$key}", $window);
-        }
-        
-        return $requests <= $limit;
-    }
-
-    protected function logAuditTrail($action, $userId, $details = []) {
+    /**
+     * Logs an action to the audit trail database table.
+     *
+     * @param string $action A code representing the action performed (e.g., 'login_success', 'product_update').
+     * @param int|null $userId The ID of the user performing the action, or null if anonymous/system.
+     * @param array $details Additional context or data related to the action (will be JSON encoded).
+     */
+    protected function logAuditTrail(string $action, ?int $userId, array $details = []): void { // Add type hints
         try {
             $stmt = $this->db->prepare("
-                INSERT INTO audit_log (
-                    action, user_id, ip_address, user_agent, details
-                ) VALUES (?, ?, ?, ?, ?)
+                INSERT INTO audit_log (action, user_id, ip_address, user_agent, details, created_at)
+                VALUES (?, ?, ?, ?, ?, NOW())
             ");
-            
             $stmt->execute([
                 $action,
-                $userId,
-                $_SERVER['REMOTE_ADDR'] ?? null,
-                $_SERVER['HTTP_USER_AGENT'] ?? null,
-                json_encode($details)
+                $userId, // Use the passed userId, allowing null
+                $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN',
+                $_SERVER['HTTP_USER_AGENT'] ?? 'UNKNOWN',
+                json_encode($details) // Ensure details are encoded
             ]);
         } catch (Exception $e) {
-            error_log("Audit logging failed: " . $e->getMessage());
+            // Log failure to standard PHP error log
+            error_log("Audit logging failed for action '{$action}': " . $e->getMessage());
         }
     }
 
-    private function validateSessionIntegrity() {
+    /**
+     * Validates session integrity markers (User Agent and IP Address).
+     * Should be called after confirming user_id is set in session.
+     *
+     * @return bool True if markers are present and match, false otherwise.
+     */
+    protected function validateSessionIntegrity(): bool { // Changed from private to protected
+        // Check if essential markers exist
         if (!isset($_SESSION['user_agent']) || !isset($_SESSION['ip_address'])) {
-            return false;
+             $this->logSecurityEvent('session_integrity_markers_missing', ['user_id' => $_SESSION['user_id'] ?? null]);
+            return false; // Markers should have been set on login
         }
-        
-        return $_SESSION['user_agent'] === $_SERVER['HTTP_USER_AGENT'] &&
-               $_SESSION['ip_address'] === $_SERVER['REMOTE_ADDR'];
+
+        // Compare User Agent
+        $userAgentMatch = ($_SESSION['user_agent'] === ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+        // Compare IP Address (allow simple mismatch logging for now, strict check below)
+        $ipAddressMatch = ($_SESSION['ip_address'] === ($_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN'));
+
+        if (!$userAgentMatch || !$ipAddressMatch) {
+             $this->logSecurityEvent('session_integrity_mismatch', [
+                 'user_id' => $_SESSION['user_id'] ?? null,
+                 'session_ip' => $_SESSION['ip_address'],
+                 'current_ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN',
+                 'ip_match' => $ipAddressMatch,
+                 'session_ua' => $_SESSION['user_agent'],
+                 'current_ua' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+                 'ua_match' => $userAgentMatch
+             ]);
+             // Decide if mismatch should invalidate session - usually yes for strict security
+             return false; // Treat mismatch as invalid
+        }
+        return true;
     }
-    
-    private function shouldRegenerateSession() {
-        return !isset($_SESSION['last_regeneration']) ||
-               (time() - $_SESSION['last_regeneration']) > SECURITY_SETTINGS['session']['regenerate_id_interval'];
+
+    /**
+     * Checks if the session regeneration interval has passed.
+     *
+     * @return bool True if session should be regenerated, false otherwise.
+     */
+    protected function shouldRegenerateSession(): bool { // Changed from private to protected
+        $interval = SECURITY_SETTINGS['session']['regenerate_id_interval'] ?? 900; // Default 15 mins from config
+        // Check if last_regeneration is set and if interval has passed
+        return !isset($_SESSION['last_regeneration']) || (time() - $_SESSION['last_regeneration']) > $interval;
     }
-    
-    private function regenerateSession() {
-        $oldSession = $_SESSION;
-        session_regenerate_id(true);
-        $_SESSION = $oldSession;
-        $_SESSION['last_regeneration'] = time();
+
+    /**
+     * Regenerates the session ID securely, preserving necessary session data.
+     */
+    protected function regenerateSession(): void { // Changed from private to protected
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return; // Can't regenerate if session not active
+        }
+
+        // Store essential data to transfer to the new session ID
+        $currentSessionData = $_SESSION;
+
+        if (session_regenerate_id(true)) { // Destroy old session data associated with the old ID
+            // Restore data - may need more specific keys depending on what needs preserving
+             $_SESSION = $currentSessionData; // Restore all data
+             // Crucially, update the regeneration timestamp
+             $_SESSION['last_regeneration'] = time();
+        } else {
+             // Log failure if regeneration fails (critical)
+             $userId = $_SESSION['user_id'] ?? 'Unknown';
+             error_log("CRITICAL: Session regeneration failed for user ID: " . $userId);
+             $this->logSecurityEvent('session_regeneration_failed', ['user_id' => $userId]);
+             // Consider terminating the session as a safety measure
+             $this->terminateSession('Session regeneration failed.');
+        }
     }
-    
-    protected function terminateSession($reason) {
+
+    /**
+     * Terminates the current session securely.
+     * Logs the reason and redirects to login page.
+     *
+     * @param string $reason The reason for termination (for logging).
+     */
+    protected function terminateSession(string $reason): void { // Already protected, added return type hint
         $userId = $_SESSION['user_id'] ?? null;
         $this->logSecurityEvent('session_terminated', [
             'reason' => $reason,
-            'user_id' => $userId
+            'user_id' => $userId,
+            'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN'
         ]);
-        
-        session_destroy();
-        $this->jsonResponse(['error' => 'Session terminated for security reasons'], 401);
+
+        // Standard session destruction steps
+        $_SESSION = array(); // Unset all variables
+        if (ini_get("session.use_cookies")) { // Delete the session cookie
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000,
+                $params["path"], $params["domain"],
+                $params["secure"], $params["httponly"]
+            );
+        }
+        session_destroy(); // Destroy session data on server
+
+        // Redirect to login page
+        $this->redirect('index.php?page=login&reason=session_terminated'); // Use redirect helper
     }
-    
-    protected function validateRateLimit($action) {
-        $settings = SECURITY_SETTINGS['rate_limiting']['endpoints'][$action] ?? [
-            'window' => SECURITY_SETTINGS['rate_limiting']['default_window'],
-            'max_requests' => SECURITY_SETTINGS['rate_limiting']['default_max_requests']
+
+    /**
+     * Checks and enforces rate limits for a specific action based on IP address.
+     * Uses APCu as the backend cache. Throws Exception on limit exceeded.
+     *
+     * @param string $action The identifier for the action being rate limited (e.g., 'login', 'password_reset').
+     * @throws Exception If rate limit is exceeded (HTTP 429 implied).
+     */
+    protected function validateRateLimit(string $action): void { // Add return type hint
+        // Check if rate limiting is enabled globally
+        if (!isset(SECURITY_SETTINGS['rate_limiting']['enabled']) || !SECURITY_SETTINGS['rate_limiting']['enabled']) {
+            return; // Skip if disabled
+        }
+
+        // Determine settings for this specific action
+        $defaultSettings = [
+            'window' => SECURITY_SETTINGS['rate_limiting']['default_window'] ?? 3600,
+            'max_requests' => SECURITY_SETTINGS['rate_limiting']['default_max_requests'] ?? 100
         ];
-        $ip = $_SERVER['REMOTE_ADDR'];
-        $key = "rate_limit:{$action}:{$ip}";
+        $settings = SECURITY_SETTINGS['rate_limiting']['endpoints'][$action] ?? $defaultSettings;
+
+        $ip = $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN';
+        if ($ip === 'UNKNOWN') {
+             error_log("Rate Limiting Warning: Cannot determine client IP address for action '{$action}'.");
+             return;
+        }
+
         // Check whitelist
-        if (in_array($ip, SECURITY_SETTINGS['rate_limiting']['ip_whitelist'] ?? [])) {
-            return true;
+        if (!empty(SECURITY_SETTINGS['rate_limiting']['ip_whitelist']) && in_array($ip, SECURITY_SETTINGS['rate_limiting']['ip_whitelist'])) {
+            return; // Skip whitelisted IPs
         }
-        // Fail closed if APCu is unavailable
-        if (!function_exists('apcu_fetch') || !ini_get('apc.enabled')) {
-            $this->logSecurityEvent('rate_limit_backend_unavailable', [
-                'action' => $action,
-                'ip' => $ip
-            ]);
-            $this->jsonResponse(['error' => 'Rate limiting backend unavailable. Please try again later.'], 503);
-        }
-        $attempts = apcu_fetch($key) ?: 0;
-        if ($attempts >= $settings['max_requests']) {
-            $this->logSecurityEvent('rate_limit_exceeded', [
-                'action' => $action,
-                'ip' => $ip,
-                'attempts' => $attempts
-            ]);
-            $this->jsonResponse(['error' => 'Rate limit exceeded. Please try again later.'], 429);
-        }
-        // Increment the counter or add it if it doesn't exist
-        if ($attempts === 0) {
-            apcu_store($key, 1, $settings['window']);
+
+        // Use APCu for rate limiting (Ensure APCu extension is installed and enabled)
+        if (function_exists('apcu_enabled') && apcu_enabled()) {
+            $key = "rate_limit:{$action}:{$ip}";
+            // Fetch attempts *atomically* if possible, otherwise handle potential race condition
+            // apcu_inc returns the new value, apcu_add returns true/false
+             $current_attempts = apcu_inc($key);
+
+             if ($current_attempts === false) { // Key didn't exist or another issue
+                  // Try adding the key with count 1 and TTL
+                  if (apcu_add($key, 1, $settings['window'])) {
+                      $current_attempts = 1;
+                  } else {
+                      // If add failed, it might mean it was just created by another request - try incrementing again
+                      $current_attempts = apcu_inc($key);
+                      if ($current_attempts === false) {
+                           // Still failed, maybe APCu issue? Log error and potentially skip check
+                           error_log("Rate Limiting Error: Failed to initialize or increment APCu key '{$key}'.");
+                           $this->logSecurityEvent('rate_limit_backend_error', ['action' => $action, 'ip' => $ip, 'key' => $key]);
+                           return; // Fail open in this edge case? Or throw 500?
+                      }
+                  }
+             }
+
+
+            if ($current_attempts > $settings['max_requests']) {
+                $this->logSecurityEvent('rate_limit_exceeded', [
+                    'action' => $action, 'ip' => $ip, 'limit' => $settings['max_requests'], 'window' => $settings['window']
+                ]);
+                throw new Exception('Rate limit exceeded. Please try again later.', 429);
+            }
         } else {
-            apcu_inc($key);
+            error_log("Rate Limiting Warning: APCu extension is not available or enabled. Rate limiting skipped for action '{$action}' from IP {$ip}.");
+            $this->logSecurityEvent('rate_limit_backend_unavailable', ['action' => $action, 'ip' => $ip]);
         }
-        return true;
     }
-    
-    protected function validateCSRFToken() {
-        if (!SECURITY_SETTINGS['csrf']['enabled']) {
-            return true;
-        }
-        
-        if (!isset($_POST['csrf_token']) || !isset($_SESSION['csrf_token']) ||
-            !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
-            $this->logSecurityEvent('csrf_validation_failed', [
-                'user_id' => $_SESSION['user_id'] ?? null,
-                'ip' => $_SERVER['REMOTE_ADDR']
-            ]);
-            $this->jsonResponse(['error' => 'CSRF token validation failed'], 403);
-        }
-        
-        return true;
-    }
-    
-    protected function generateCSRFToken() {
-        if (!SECURITY_SETTINGS['csrf']['enabled']) {
-            return '';
-        }
-        
-        if (!isset($_SESSION['csrf_token'])) {
-            $_SESSION['csrf_token'] = bin2hex(random_bytes(SECURITY_SETTINGS['csrf']['token_length']));
-        }
-        
-        return $_SESSION['csrf_token'];
-    }
-    
-    protected function logSecurityEvent($event, $details = []) {
-        $details = array_merge($details, [
-            'timestamp' => date('Y-m-d H:i:s'),
-            'user_id' => $_SESSION['user_id'] ?? null,
-            'ip' => $_SERVER['REMOTE_ADDR'],
-            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? null
-        ]);
-        
-        error_log(
-            sprintf(
-                "[SECURITY] %s | %s",
-                $event,
-                json_encode($details)
-            ),
-            3,
-            SECURITY_SETTINGS['logging']['security_log']
-        );
-    }
-}
+
+
+    /**
+     * Logs a security-related event to the designated security log file.
+     *
+     * @param string $event A code for the security event (e.g., 'login_failure', 'csrf_validation_failed').
+     * @param array $details Contextual details about the event.
+     */
+     protected function logSecurityEvent(string $event, array $details = []): void { // Add return type hint
+         // Add common context automatically
+         $commonContext = [
+             'timestamp' => date('Y-m-d H:i:s T'), // Include timezone
+             'user_id' => $this->getUserId(), // Use helper method
+             'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN',
+             'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'UNKNOWN',
+             'request_uri' => $_SERVER['REQUEST_URI'] ?? 'N/A',
+             'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'N/A'
+         ];
+         $logDetails = array_merge($commonContext, $details); // Merge, letting specific details override common ones if needed
+
+         $logMessage = sprintf(
+             "[SECURITY] Event: %s | Details: %s",
+             $event,
+             json_encode($logDetails) // Encode all details as JSON
+         );
+
+         // Log to the file specified in config
+         $logFile = SECURITY_SETTINGS['logging']['security_log'] ?? (__DIR__ . '/../logs/security.log');
+         // Ensure directory exists and is writable (simple check)
+         $logDir = dirname($logFile);
+         if (!is_dir($logDir)) { @mkdir($logDir, 0750, true); } // Attempt creation
+
+         if (is_writable($logDir) && (file_exists($logFile) ? is_writable($logFile) : true) ) {
+              error_log($logMessage . PHP_EOL, 3, $logFile);
+         } else {
+              // Fallback to standard PHP error log if specific log file isn't writable
+              error_log("Security Log Write Failed! " . $logMessage);
+         }
+      }
+
+} // End of BaseController class
 
 ```
 

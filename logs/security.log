@@ -1,8 +1,0 @@
-[SECURITY] login_failure | {"email":"abc@def.com","ip":"127.0.0.1","user_id":null,"timestamp":"2025-04-27 07:11:03","user_agent":"Mozilla\/5.0 (X11; Linux x86_64) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/135.0.0.0 Safari\/537.36"}[2025-04-27 07:12:26 UTC] [ERROR] Email sending failed (Exception): SMTP Error: Could not authenticate. | Mailer Error: SMTP Error: Could not authenticate. | Context: {
-    "ip": "127.0.0.1",
-    "user_id": null,
-    "to": "abc@def.com",
-    "subject": "Welcome to The Scent!",
-    "template": "welcome"
-}
-[SECURITY] register_failure | {"email":"abc@def.com","error":"An error occurred during registration. Please try again.","ip":"127.0.0.1","timestamp":"2025-04-27 07:12:26","user_id":null,"user_agent":"Mozilla\/5.0 (X11; Linux x86_64) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/135.0.0.0 Safari\/537.36"}

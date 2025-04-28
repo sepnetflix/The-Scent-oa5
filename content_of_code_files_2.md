@@ -6,25 +6,35 @@ require_once __DIR__ . '/../models/Product.php';
 require_once __DIR__ . '/../models/Cart.php';
 
 class CartController extends BaseController {
-    // Properties remain the same...
-    private $productModel;
-    private $cartModel = null;
-    private $isLoggedIn = false;
-    private $userId = null;
+    private Product $productModel; // Use type hint
+    private ?Cart $cartModel = null; // Allow null, use type hint
+    private bool $isLoggedIn = false; // Use type hint
+    private ?int $userId = null; // Allow null, use type hint
 
-    public function __construct($pdo) {
+    public function __construct(PDO $pdo) { // Use type hint
         parent::__construct($pdo);
         $this->productModel = new Product($pdo);
-        $this->userId = $_SESSION['user_id'] ?? null;
-        $this->isLoggedIn = $this->userId !== null;
+
+        // Ensure session is started before accessing $_SESSION
+        if (session_status() === PHP_SESSION_NONE) {
+             session_start();
+        }
+
+        // Check login status using BaseController method for consistency, if available, otherwise use session directly
+        // Assuming BaseController doesn't have an isActiveLogin check, use session directly
+        $this->userId = $_SESSION['user_id'] ?? null; // More direct check
+        $this->isLoggedIn = ($this->userId !== null); // Set boolean based on userId
+
         if ($this->isLoggedIn) {
+            // Ensure Cart model is loaded
+            if (!class_exists('Cart')) require_once __DIR__ . '/../models/Cart.php';
             $this->cartModel = new Cart($pdo, $this->userId);
         } else {
             $this->initCart(); // Ensures session cart exists for guests
         }
     }
 
-    private function initCart() {
+    private function initCart(): void { // Add return type hint
         if (!isset($_SESSION['cart'])) {
             $_SESSION['cart'] = [];
         }
@@ -34,8 +44,12 @@ class CartController extends BaseController {
          }
     }
 
-    // mergeSessionCartOnLogin remains unchanged
-    public static function mergeSessionCartOnLogin($pdo, $userId) {
+    // Static method called during login process in AccountController
+    public static function mergeSessionCartOnLogin(PDO $pdo, int $userId): void { // Added type hints
+        // Ensure session is started
+        if (session_status() === PHP_SESSION_NONE) {
+             session_start();
+        }
         if (!empty($_SESSION['cart'])) {
             // Ensure Cart model is loaded if called statically
             if (!class_exists('Cart')) {
@@ -43,84 +57,89 @@ class CartController extends BaseController {
             }
             $cartModel = new Cart($pdo, $userId);
             $cartModel->mergeSessionCart($_SESSION['cart']);
-            // After successful merge, update DB cart count? Potentially done by addItem/updateItem logic
         }
         // Always clear session cart after merging attempt
         $_SESSION['cart'] = [];
         $_SESSION['cart_count'] = 0; // Reset guest count
         // Optionally, immediately fetch and set the DB cart count in session here
-        // $_SESSION['cart_count'] = $cartModel->getCartCount(); // Assuming Cart model has getCartCount method
+        if (isset($cartModel) && method_exists($cartModel, 'getCartCount')) {
+             $_SESSION['cart_count'] = $cartModel->getCartCount();
+        }
     }
 
 
     public function showCart() {
         $cartItems = [];
-        $total = 0;
+        $total = 0.0; // Initialize as float
+        $cartCount = 0; // Initialize count
 
-        if ($this->isLoggedIn) {
+        if ($this->isLoggedIn && $this->cartModel) { // Check if cartModel is initialized
             // Fetch items for logged-in user
             $items = $this->cartModel->getItems();
             foreach ($items as $item) {
+                // Ensure required keys exist before calculation
+                $price = $item['price'] ?? 0;
+                $quantity = $item['quantity'] ?? 0;
+                $subtotal = $price * $quantity;
+
                 $cartItems[] = [
                     'product' => $item, // Assumes getItems joins product data
-                    'quantity' => $item['quantity'],
-                    'subtotal' => $item['price'] * $item['quantity']
+                    'quantity' => $quantity,
+                    'subtotal' => $subtotal
                 ];
-                $total += $item['price'] * $item['quantity'];
+                $total += $subtotal;
+                $cartCount += $quantity;
             }
-            // Update session count for logged-in user (optional, but good for consistency)
-             $_SESSION['cart_count'] = array_reduce($items, fn($sum, $item) => $sum + $item['quantity'], 0);
+            // Update session count for logged-in user for consistency
+             $_SESSION['cart_count'] = $cartCount;
         } else {
             // Fetch items for guest from session
             $this->initCart(); // Ensure session cart array exists
             foreach ($_SESSION['cart'] as $productId => $quantity) {
                 $product = $this->productModel->getById($productId);
                 if ($product) {
+                     $price = $product['price'] ?? 0;
+                     $subtotal = $price * $quantity;
                     $cartItems[] = [
                         'product' => $product,
                         'quantity' => $quantity,
-                        'subtotal' => $product['price'] * $quantity
+                        'subtotal' => $subtotal
                     ];
-                    $total += $product['price'] * $quantity;
+                    $total += $subtotal;
+                    $cartCount += $quantity;
                 } else {
                     // Product might have been deleted, remove from session cart
                     unset($_SESSION['cart'][$productId]);
                 }
             }
              // Update session count for guest
-             $_SESSION['cart_count'] = array_sum($_SESSION['cart']);
+             $_SESSION['cart_count'] = $cartCount;
         }
 
         // Prepare data for the view
-        $csrfToken = $this->generateCSRFToken();
-        $bodyClass = 'page-cart'; // Define body class
-        $pageTitle = 'Your Shopping Cart'; // Define page title
+        // --- FIX APPLIED HERE ---
+        $csrfToken = $this->getCsrfToken(); // Use the correct BaseController method
+        // --- END FIX ---
+        $bodyClass = 'page-cart';
+        $pageTitle = 'Your Shopping Cart';
 
-        // Make variables available to the view file
-        // Since using require_once, define variables directly in this scope
-        extract([
+        // Use renderView helper from BaseController
+        echo $this->renderView('cart', [
             'cartItems' => $cartItems,
             'total' => $total,
             'csrfToken' => $csrfToken,
             'bodyClass' => $bodyClass,
             'pageTitle' => $pageTitle
         ]);
-
-        // Load the view file
-        require_once __DIR__ . '/../views/cart.php';
-        // No return needed after require_once for a full page view
     }
 
 
     // --- AJAX Methods ---
-    // addToCart, updateCart, removeFromCart, clearCart (POST), mini
-    // These methods use jsonResponse and don't need modification for this specific requirement.
 
-    // Example: addToCart - remains unchanged
     public function addToCart() {
-        $this->validateCSRF(); // Ensures POST has valid form CSRF
-        $productId = $this->validateInput($_POST['product_id'] ?? null, 'int');
-        $quantity = (int)$this->validateInput($_POST['quantity'] ?? 1, 'int');
+        $this->validateCSRF(); // Use BaseController method
+        $productId = $this->validateInput($_POST['product_id'] ?? null, 'int'); // Use BaseController helper
+        $quantity = (int)$this->validateInput($_POST['quantity'] ?? 1, 'int'); // Use BaseController helper
 
         if (!$productId || $quantity < 1) {
             return $this->jsonResponse(['success' => false, 'message' => 'Invalid product or quantity'], 400);
@@ -130,25 +149,27 @@ class CartController extends BaseController {
             return $this->jsonResponse(['success' => false, 'message' => 'Product not found'], 404);
         }
 
-        // Calculate current quantity in cart to check against stock
         $currentQuantityInCart = 0;
-        if ($this->isLoggedIn) {
-            $existingItem = $this->cartModel->getItem($productId); // Assuming Cart model has getItem($productId)
-            if ($existingItem) {
-                $currentQuantityInCart = $existingItem['quantity'];
-            }
+        if ($this->isLoggedIn && $this->cartModel) {
+             // Assuming Cart model has getItem($productId) or similar logic within getItems()
+             $items = $this->cartModel->getItems();
+             foreach ($items as $item) {
+                 if ($item['product_id'] == $productId) {
+                      $currentQuantityInCart = $item['quantity'];
+                      break;
+                 }
+             }
         } else {
             $this->initCart();
             $currentQuantityInCart = $_SESSION['cart'][$productId] ?? 0;
         }
         $requestedTotalQuantity = $currentQuantityInCart + $quantity;
 
-
         // Check stock availability *before* adding
         if (!$this->productModel->isInStock($productId, $requestedTotalQuantity)) {
             $stockInfo = $this->productModel->checkStock($productId);
             $stockStatus = 'out_of_stock';
-            $availableStock = $stockInfo ? max(0, $stockInfo['stock_quantity']) : 0; // Get actual available stock
+            $availableStock = $stockInfo ? max(0, $stockInfo['stock_quantity']) : 0;
             $message = $availableStock > 0 ? "Only {$availableStock} left in stock." : "Insufficient stock.";
 
             return $this->jsonResponse([
@@ -156,91 +177,96 @@ class CartController extends BaseController {
                 'message' => $message,
                 'cart_count' => $this->getCartCount(),
                 'stock_status' => $stockStatus
-            ], 400); // Use 400 Bad Request for stock issues
+            ], 400);
         }
 
         // Add item
-        if ($this->isLoggedIn) {
+        $cartCount = 0;
+        if ($this->isLoggedIn && $this->cartModel) {
             $this->cartModel->addItem($productId, $quantity);
             $cartCount = $this->getCartCount(true); // Force DB count update
         } else {
-            // Session cart standardized to [productId => quantity]
+            $this->initCart();
             $_SESSION['cart'][$productId] = ($_SESSION['cart'][$productId] ?? 0) + $quantity;
             $cartCount = array_sum($_SESSION['cart']);
-            $_SESSION['cart_count'] = $cartCount; // Update session count
+            $_SESSION['cart_count'] = $cartCount;
         }
 
-        // Check stock status *after* adding (for button state feedback)
+        // Check stock status *after* adding
         $stockInfo = $this->productModel->checkStock($productId);
-        $stockStatus = 'in_stock'; // Default
+        $stockStatus = 'in_stock';
         if ($stockInfo) {
-            $remainingStock = $stockInfo['stock_quantity'] - ($this->isLoggedIn ? $this->cartModel->getItem($productId)['quantity'] : $_SESSION['cart'][$productId]);
-            if (!$stockInfo['backorder_allowed']) {
-                if ($remainingStock <= 0) {
-                    $stockStatus = 'out_of_stock';
-                } elseif ($stockInfo['low_stock_threshold'] && $remainingStock <= $stockInfo['low_stock_threshold']) {
-                    $stockStatus = 'low_stock';
-                }
-            }
+             $finalCartQuantity = 0;
+              if ($this->isLoggedIn && $this->cartModel) {
+                  $items = $this->cartModel->getItems();
+                  foreach ($items as $item) { if ($item['product_id'] == $productId) {$finalCartQuantity = $item['quantity']; break;} }
+              } else {
+                  $finalCartQuantity = $_SESSION['cart'][$productId] ?? 0;
+              }
+             $remainingStock = $stockInfo['stock_quantity'] - $finalCartQuantity;
+
+             if (!$stockInfo['backorder_allowed'] && $remainingStock <= 0) {
+                  $stockStatus = 'out_of_stock';
+             } elseif ($stockInfo['low_stock_threshold'] && $remainingStock <= $stockInfo['low_stock_threshold']) {
+                  $stockStatus = 'low_stock';
+             }
         } else {
-            // Should not happen if product exists, but handle defensively
             $stockStatus = 'unknown';
         }
 
-
-        $userId = $this->userId;
-        $this->logAuditTrail('cart_add', $userId, [
+        // Use BaseController logging helper
+        $this->logAuditTrail('cart_add', $this->userId, [
             'product_id' => $productId,
             'quantity' => $quantity,
-            'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+            'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN'
         ]);
 
         return $this->jsonResponse([
             'success' => true,
             'message' => htmlspecialchars($product['name']) . ' added to cart',
             'cart_count' => $cartCount,
-            'stock_status' => $stockStatus // Provide current stock status after add
+            'stock_status' => $stockStatus
         ]);
     }
 
-    // updateCart, removeFromCart, etc. remain largely the same...
-    // Ensure they correctly update/return cart_count and handle session vs DB logic
     public function updateCart() {
-        $this->validateCSRF();
+        $this->validateCSRF(); // Use BaseController method
         $updates = $_POST['updates'] ?? [];
         $stockErrors = [];
-        $cartCount = 0; // Initialize cart count
+        $cartCount = 0;
 
-        if ($this->isLoggedIn) {
+        if ($this->isLoggedIn && $this->cartModel) {
             foreach ($updates as $productId => $quantity) {
+                // Use BaseController validation helper
                 $productId = $this->validateInput($productId, 'int');
                 $quantity = (int)$this->validateInput($quantity, 'int');
-                if ($productId === false || $quantity === false) continue; // Skip invalid input
+                if ($productId === false || $quantity === false) continue;
 
                 if ($quantity > 0) {
                     if (!$this->productModel->isInStock($productId, $quantity)) {
                         $product = $this->productModel->getById($productId);
-                        $stockErrors[] = "{$product['name']} has insufficient stock";
-                        continue; // Skip update for this item
+                        // Use htmlspecialchars for output safety
+                        $stockErrors[] = htmlspecialchars($product['name'] ?? "Product ID {$productId}") . " has insufficient stock";
+                        continue;
                     }
                     $this->cartModel->updateItem($productId, $quantity);
                 } else {
                     $this->cartModel->removeItem($productId);
                 }
             }
-            $cartCount = $this->getCartCount(true); // Force DB count update
+            $cartCount = $this->getCartCount(true);
         } else {
             $this->initCart();
             foreach ($updates as $productId => $quantity) {
                  $productId = $this->validateInput($productId, 'int');
                  $quantity = (int)$this->validateInput($quantity, 'int');
-                 if ($productId === false || $quantity === false) continue; // Skip invalid input
+                 if ($productId === false || $quantity === false) continue;
 
                 if ($quantity > 0) {
                     if (!$this->productModel->isInStock($productId, $quantity)) {
                         $product = $this->productModel->getById($productId);
-                         $stockErrors[] = "{$product['name']} has insufficient stock";
-                        continue; // Skip update for this item
+                         $stockErrors[] = htmlspecialchars($product['name'] ?? "Product ID {$productId}") . " has insufficient stock";
+                        continue;
                     }
                     $_SESSION['cart'][$productId] = $quantity;
                 } else {
@@ -248,92 +274,99 @@ class CartController extends BaseController {
                 }
             }
             $cartCount = array_sum($_SESSION['cart']);
-            $_SESSION['cart_count'] = $cartCount; // Update session count
+            $_SESSION['cart_count'] = $cartCount;
         }
 
-        $userId = $this->userId;
-        $this->logAuditTrail('cart_update', $userId, [
-            'updates' => $updates, // Log the requested updates
-            'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+        // Use BaseController logging helper
+        $this->logAuditTrail('cart_update', $this->userId, [
+            'updates' => $updates,
+            'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN'
         ]);
 
         return $this->jsonResponse([
             'success' => empty($stockErrors),
             'message' => empty($stockErrors) ? 'Cart updated' : 'Some items have insufficient stock. Cart partially updated.',
-            'cart_count' => $cartCount, // Return updated count
+            'cart_count' => $cartCount,
             'errors' => $stockErrors
         ]);
     }
 
 
     public function removeFromCart() {
-        $this->validateCSRF();
-        $productId = $this->validateInput($_POST['product_id'] ?? null, 'int');
+        $this->validateCSRF(); // Use BaseController method
+        $productId = $this->validateInput($_POST['product_id'] ?? null, 'int'); // Use BaseController helper
         if ($productId === false) {
              return $this->jsonResponse(['success' => false, 'message' => 'Invalid product ID'], 400);
         }
 
-        $cartCount = 0; // Initialize
-        if ($this->isLoggedIn) {
+        $cartCount = 0;
+        if ($this->isLoggedIn && $this->cartModel) {
             $this->cartModel->removeItem($productId);
-            $cartCount = $this->getCartCount(true); // Force DB count update
+            $cartCount = $this->getCartCount(true);
         } else {
             $this->initCart();
-            if (!isset($_SESSION['cart'][$productId])) {
-                // Optional: return error if not found, or just proceed silently
-                // return $this->jsonResponse(['success' => false, 'message' => 'Product not found in cart'], 404);
-            }
             unset($_SESSION['cart'][$productId]);
             $cartCount = array_sum($_SESSION['cart']);
-            $_SESSION['cart_count'] = $cartCount; // Update session count
+            $_SESSION['cart_count'] = $cartCount;
         }
 
-        $userId = $this->userId;
-        $this->logAuditTrail('cart_remove', $userId, [
+        // Use BaseController logging helper
+        $this->logAuditTrail('cart_remove', $this->userId, [
             'product_id' => $productId,
-            'ip' => $_SERVER['REMOTE_ADDR'] ?? null
+            'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN'
         ]);
 
         return $this->jsonResponse([
             'success' => true,
             'message' => 'Product removed from cart',
-            'cart_count' => $cartCount // Return updated count
+            'cart_count' => $cartCount
         ]);
     }
 
      public function clearCart() {
+        // Validate CSRF only if it's a POST request intended to clear via AJAX/Form
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->validateCSRF();
+        }
+
         $cartCount = 0;
-        if ($this->isLoggedIn) {
+        if ($this->isLoggedIn && $this->cartModel) {
             $this->cartModel->clearCart();
             // Count is implicitly 0
         } else {
+            $this->initCart(); // Ensure session exists before clearing
             $_SESSION['cart'] = [];
             $_SESSION['cart_count'] = 0;
             // Count is 0
         }
-         $userId = $this->userId;
-         $this->logAuditTrail('cart_clear', $userId, ['ip' => $_SERVER['REMOTE_ADDR'] ?? null]);
+         // Use BaseController logging helper
+         $this->logAuditTrail('cart_clear', $this->userId, ['ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN']);
 
+        // Respond based on request type
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $this->validateCSRF(); // Validate CSRF for POST request
             return $this->jsonResponse([
                 'success' => true,
                 'message' => 'Cart cleared',
                 'cart_count' => $cartCount
             ]);
         } else {
-             // For GET request (e.g., link click), redirect
+             // For GET request (e.g., link click), redirect using BaseController helper
              $this->setFlashMessage('Cart cleared successfully.', 'success');
-            $this->redirect('cart');
+             $this->redirect('index.php?page=cart'); // Redirect to cart page
         }
     }
 
-     // Helper to get cart count consistently
-     private function getCartCount($forceDbCheck = false) {
-         if ($this->isLoggedIn) {
+     /**
+      * Helper to get cart count consistently.
+      * @param bool $forceDbCheck Force fetching count from DB for logged-in users.
+      * @return int
+      */
+     private function getCartCount(bool $forceDbCheck = false): int {
+         if ($this->isLoggedIn && $this->cartModel) {
              // Optimization: Use session count if available and not forcing DB check
              if (!$forceDbCheck && isset($_SESSION['cart_count'])) {
-                 return $_SESSION['cart_count'];
+                 // Ensure the session count is numeric before returning
+                 return is_numeric($_SESSION['cart_count']) ? (int)$_SESSION['cart_count'] : 0;
              }
              // Fetch count from DB (Assuming Cart model has this method)
              $count = $this->cartModel->getCartCount() ?? 0; // Requires getCartCount in Cart model
@@ -351,85 +384,92 @@ class CartController extends BaseController {
      // Mini cart AJAX endpoint
      public function mini() {
          $items = [];
-         $subtotal = 0;
-         $cartCount = 0; // Get current count
+         $subtotal = 0.0; // Use float
+         $cartCount = 0;
 
-         if ($this->isLoggedIn) {
-             $cartItems = $this->cartModel->getItems(); // Assumes getItems joins products
+         if ($this->isLoggedIn && $this->cartModel) {
+             $cartItems = $this->cartModel->getItems();
              foreach ($cartItems as $item) {
-                 // Construct item data exactly as expected by JS
+                 $price = $item['price'] ?? 0;
+                 $quantity = $item['quantity'] ?? 0;
                  $items[] = [
-                     'product' => [
-                         'id' => $item['product_id'], // Use product_id from cart_items table join
-                         'name' => $item['name'],
-                         'image' => $item['image'], // Assuming image is directly on product row
-                         'price' => $item['price']
+                     'product' => [ // Nest product data under 'product' key as expected by JS
+                         'id' => $item['product_id'] ?? $item['id'], // Use correct ID key
+                         'name' => $item['name'] ?? 'Unknown',
+                         'image' => $item['image'] ?? '/images/placeholder.jpg',
+                         'price' => $price
                      ],
-                     'quantity' => $item['quantity']
+                     'quantity' => $quantity
                  ];
-                 $subtotal += $item['price'] * $item['quantity'];
+                 $subtotal += $price * $quantity;
              }
-             $cartCount = $this->getCartCount(true); // Force DB check for accuracy
+             $cartCount = $this->getCartCount(true); // Force DB check
          } else {
              $this->initCart();
              foreach ($_SESSION['cart'] as $productId => $quantity) {
                  $product = $this->productModel->getById($productId);
                  if ($product) {
+                      $price = $product['price'] ?? 0;
                      $items[] = [
                          'product' => [
                              'id' => $product['id'],
-                             'name' => $product['name'],
-                             'image' => $product['image'],
-                             'price' => $product['price']
+                             'name' => $product['name'] ?? 'Unknown',
+                             'image' => $product['image'] ?? '/images/placeholder.jpg',
+                             'price' => $price
                          ],
                          'quantity' => $quantity
                      ];
-                     $subtotal += $product['price'] * $quantity;
+                     $subtotal += $price * $quantity;
                  }
              }
-             $cartCount = $this->getCartCount(); // Get session count
+             $cartCount = $this->getCartCount();
          }
 
-         // Always return success true, even if empty, but indicate via items array
          return $this->jsonResponse([
-             'success' => true, // Indicate successful fetch
+             'success' => true,
              'items' => $items,
-             'subtotal' => $subtotal,
-             'cart_count' => $cartCount // Include count for header update if needed
+             'subtotal' => number_format($subtotal, 2), // Format for display consistency
+             'cart_count' => $cartCount
          ]);
      }
 
 
-    // validateCartStock and getCartItems remain largely the same
-     public function validateCartStock() {
+     // validateCartStock and getCartItems remain largely the same, ensure validation is correct
+     // Made public as used by CheckoutController potentially
+     public function validateCartStock(): array {
          $errors = [];
-         $cart = $this->isLoggedIn ? $this->cartModel->getItems() : ($_SESSION['cart'] ?? []);
-         if ($this->isLoggedIn) {
-             foreach ($cart as $item) {
-                 if (!$this->productModel->isInStock($item['product_id'], $item['quantity'])) {
-                     $errors[] = "{$item['name']} has insufficient stock";
-                 }
-             }
-         } else {
-             foreach ($cart as $productId => $quantity) {
-                 if (!$this->productModel->isInStock($productId, $quantity)) {
-                     $product = $this->productModel->getById($productId);
-                     $errors[] = ($product ? $product['name'] : "Product ID {$productId}") . " has insufficient stock";
-                 }
+         $cart = $this->getCartItemsInternal(); // Use internal helper
+
+         if (empty($cart)) {
+              return []; // Not an error if cart is empty
+         }
+
+         foreach ($cart as $item) {
+             // Use $item['product']['id'] and $item['quantity']
+             if (!$this->productModel->isInStock($item['product']['id'], $item['quantity'])) {
+                 $errors[] = htmlspecialchars($item['product']['name'] ?? "Product ID {$item['product']['id']}") . " has insufficient stock";
              }
          }
          return $errors;
      }
 
-     public function getCartItems() {
+      // Made public as used by CheckoutController
+     public function getCartItems(): array {
+         return $this->getCartItemsInternal(); // Use internal helper
+     }
+
+     // Internal helper to avoid code duplication between validateCartStock and getCartItems
+     private function getCartItemsInternal(): array {
          $cartItems = [];
-         if ($this->isLoggedIn) {
+         if ($this->isLoggedIn && $this->cartModel) {
              $items = $this->cartModel->getItems();
              foreach ($items as $item) {
+                 $price = $item['price'] ?? 0;
+                 $quantity = $item['quantity'] ?? 0;
                  $cartItems[] = [
-                     'product' => $item,
-                     'quantity' => $item['quantity'],
-                     'subtotal' => $item['price'] * $item['quantity']
+                     'product' => $item, // Assume getItems returns joined product data
+                     'quantity' => $quantity,
+                     'subtotal' => $price * $quantity
                  ];
              }
          } else {
@@ -437,10 +477,11 @@ class CartController extends BaseController {
              foreach ($_SESSION['cart'] as $productId => $quantity) {
                  $product = $this->productModel->getById($productId);
                  if ($product) {
+                      $price = $product['price'] ?? 0;
                      $cartItems[] = [
                          'product' => $product,
                          'quantity' => $quantity,
-                         'subtotal' => $product['price'] * $quantity
+                         'subtotal' => $price * $quantity
                      ];
                  }
              }
@@ -448,12 +489,7 @@ class CartController extends BaseController {
          return $cartItems;
      }
 
-
 } // End of CartController class
-
-// Assume Cart model needs methods:
-// getItem($productId)
-// getCartCount()
 
 ```
 

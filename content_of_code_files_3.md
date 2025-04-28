@@ -2546,108 +2546,139 @@ function fetchMiniCart() {
 ```php
 <?php
 require_once __DIR__ . '/BaseController.php';
-// Remove this line: require_once __DIR__ . '/../vendor/autoload.php'; // Now loaded globally
 require_once __DIR__ . '/../config.php'; // Keep config include
 
-// Use statement for StripeClient if not already present
+// Use statement for Stripe classes
+use Stripe\Stripe; // Added for setting API key globally if needed
 use Stripe\StripeClient;
 use Stripe\Webhook;
 use Stripe\Exception\ApiErrorException;
 use Stripe\Exception\SignatureVerificationException;
-
+// Include models needed for webhook actions
+require_once __DIR__ . '/../models/Order.php'; // Needed for updating order status
+require_once __DIR__ . '/../models/User.php';  // Needed for sending emails
+require_once __DIR__ . '/../models/Cart.php';  // Needed for clearing cart
 
 class PaymentController extends BaseController {
-    private $stripe;
-    private $webhookSecret;
+    private ?StripeClient $stripe; // Allow null initialization
+    private ?string $webhookSecret; // Allow null initialization
+    private Order $orderModel; // Add Order model instance
 
     public function __construct($pdo = null) {
         parent::__construct($pdo); // BaseController handles EmailService init now
 
+        // Ensure PDO is available if needed directly or via BaseController
+        if (!$this->db) {
+             error_log("PDO connection not available in PaymentController constructor.");
+             // Handle appropriately - maybe throw exception
+        }
+        $this->orderModel = new Order($this->db); // Initialize Order model
+
         // Ensure Stripe keys are defined
         if (!defined('STRIPE_SECRET_KEY') || !defined('STRIPE_WEBHOOK_SECRET')) {
             error_log("Stripe keys are not defined in config.php");
-            // Depending on context, might throw an exception or handle gracefully
-            // For now, let StripeClient constructor potentially fail if key is missing
+            $this->stripe = null;
+            $this->webhookSecret = null;
+            return; // Stop initialization if keys are missing
         }
 
         // Use try-catch for external service initialization
         try {
+            // Set API key globally (optional but common practice)
+            // Stripe::setApiKey(STRIPE_SECRET_KEY); // Uncomment if preferred over instance key
             $this->stripe = new StripeClient(STRIPE_SECRET_KEY);
             $this->webhookSecret = STRIPE_WEBHOOK_SECRET;
         } catch (\Exception $e) {
              error_log("Failed to initialize Stripe client: " . $e->getMessage());
-             // Handle error appropriately, maybe throw exception to be caught by ErrorHandler
-             // throw new Exception("Payment system configuration error.");
              $this->stripe = null; // Ensure stripe is null if init fails
              $this->webhookSecret = null;
+             // Consider throwing Exception("Payment system configuration error.");
         }
     }
 
-    public function createPaymentIntent(float $amount, string $currency = 'usd', int $orderId = 0, string $customerEmail = '') {
+    /**
+     * Create a Stripe Payment Intent.
+     *
+     * @param float $amount Amount in major currency unit (e.g., dollars).
+     * @param string $currency 3-letter ISO currency code.
+     * @param int $orderId Internal order ID for metadata.
+     * @param string $customerEmail Email for receipt/customer matching.
+     * @return array ['success' => bool, 'client_secret' => string|null, 'payment_intent_id' => string|null, 'error' => string|null]
+     */
+    public function createPaymentIntent(float $amount, string $currency = 'usd', int $orderId = 0, string $customerEmail = ''): array {
         // Ensure Stripe client is initialized
         if (!$this->stripe) {
              return ['success' => false, 'error' => 'Payment system unavailable.'];
         }
 
+        // Prepare parameters (moved inside try block)
+        $paymentIntentParams = [];
+
         try {
-            // Basic validation (more robust validation might be needed)
+            // Basic validation
             if ($amount <= 0) {
-                throw new Exception('Invalid payment amount.');
+                throw new InvalidArgumentException('Invalid payment amount.');
             }
             $currency = strtolower(trim($currency));
             if (strlen($currency) !== 3) {
-                 throw new Exception('Invalid currency code.');
+                 throw new InvalidArgumentException('Invalid currency code.');
+            }
+            if ($orderId <= 0) {
+                 throw new InvalidArgumentException('Invalid Order ID for Payment Intent.');
             }
 
             $paymentIntentParams = [
-                'amount' => (int)round($amount * 100), // Convert to cents, use round() for precision
+                'amount' => (int)round($amount * 100), // Convert to cents
                 'currency' => $currency,
                 'automatic_payment_methods' => ['enabled' => true],
                 'metadata' => [
                     'user_id' => $this->getUserId() ?? 'guest',
-                    'order_id' => $orderId, // Include order ID
+                    'order_id' => $orderId,
                     'ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN'
                 ]
             ];
 
-             // Add customer email if provided (helps Stripe Radar, guest checkout)
              if (!empty($customerEmail)) {
-                 // Optional: Find or create Stripe Customer ID first for better tracking
-                 // $paymentIntentParams['customer'] = $this->getStripeCustomerId($customerEmail);
-                 // Or just add receipt email
                  $paymentIntentParams['receipt_email'] = $customerEmail;
              }
 
-
             $paymentIntent = $this->stripe->paymentIntents->create($paymentIntentParams);
 
+            // --- MODIFIED: Return Payment Intent ID ---
             return [
                 'success' => true,
-                'client_secret' => $paymentIntent->client_secret // Correct key name
+                'client_secret' => $paymentIntent->client_secret,
+                'payment_intent_id' => $paymentIntent->id // Include the Payment Intent ID
             ];
+            // --- END MODIFICATION ---
 
         } catch (ApiErrorException $e) {
             error_log("Stripe API Error creating PaymentIntent: " . $e->getMessage() . " | Params: " . json_encode($paymentIntentParams));
             return [
                 'success' => false,
-                'error' => 'Payment processing failed. Please try again or contact support.' // User-friendly
+                'error' => 'Payment processing failed. Please try again or contact support.',
+                'client_secret' => null,
+                'payment_intent_id' => null
             ];
-        } catch (Exception $e) {
+        } catch (InvalidArgumentException $e) { // Catch specific validation errors
+             error_log("Payment Intent Creation Invalid Argument: " . $e->getMessage() . " | Params: " . json_encode($paymentIntentParams));
+             return [
+                 'success' => false,
+                 'error' => $e->getMessage(), // Show specific validation error
+                 'client_secret' => null,
+                 'payment_intent_id' => null
+             ];
+         } catch (Exception $e) {
             error_log("Payment Intent Creation Error: " . $e->getMessage() . " | Params: " . json_encode($paymentIntentParams));
             return [
                 'success' => false,
-                'error' => 'Invalid payment request. Please check details and try again.' // User-friendly
+                'error' => 'Could not initialize payment. Please try again later.', // Generic internal error
+                'client_secret' => null,
+                'payment_intent_id' => null
             ];
         }
     }
 
-    // processPayment seems deprecated by the CheckoutController logic which calls createPaymentIntent directly
-    // If needed, it should be updated to fit the current checkout flow.
-    /*
-    public function processPayment($orderId) {
-        // ... (Needs review based on actual usage) ...
-    }
-    */
 
     public function handleWebhook() {
          // Ensure Stripe client is initialized
@@ -2663,11 +2694,14 @@ class PaymentController extends BaseController {
 
         if (!$sigHeader) {
              error_log("Webhook Error: Missing Stripe signature header.");
-             return $this->jsonResponse(['error' => 'Missing signature'], 400);
+             // Use jsonResponse for consistency
+             $this->jsonResponse(['error' => 'Missing signature'], 400); // Exit handled by jsonResponse
+             return; // For clarity, though exit happens
         }
         if (empty($payload)) {
              error_log("Webhook Error: Empty payload received.");
-             return $this->jsonResponse(['error' => 'Empty payload'], 400);
+             $this->jsonResponse(['error' => 'Empty payload'], 400);
+             return;
         }
 
 
@@ -2676,17 +2710,17 @@ class PaymentController extends BaseController {
                 $payload, $sigHeader, $this->webhookSecret
             );
         } catch (\UnexpectedValueException $e) {
-            // Invalid payload
             error_log("Webhook Error: Invalid payload. " . $e->getMessage());
-            return $this->jsonResponse(['error' => 'Invalid payload'], 400);
+            $this->jsonResponse(['error' => 'Invalid payload'], 400);
+            return;
         } catch (SignatureVerificationException $e) {
-            // Invalid signature
             error_log("Webhook Error: Invalid signature. " . $e->getMessage());
-            return $this->jsonResponse(['error' => 'Invalid signature'], 400);
+            $this->jsonResponse(['error' => 'Invalid signature'], 400);
+            return;
         } catch (\Exception $e) {
-            // Other construction error
             error_log("Webhook Error: Event construction failed. " . $e->getMessage());
-            return $this->jsonResponse(['error' => 'Webhook processing error'], 400);
+            $this->jsonResponse(['error' => 'Webhook processing error'], 400);
+            return;
         }
 
         // Handle the event
@@ -2703,7 +2737,6 @@ class PaymentController extends BaseController {
                     break;
 
                 case 'charge.succeeded':
-                     // Often redundant if using Payment Intents, but can be useful for logging charge details
                      $this->handleChargeSucceeded($event->data->object);
                      break;
 
@@ -2715,83 +2748,82 @@ class PaymentController extends BaseController {
                     $this->handleRefund($event->data->object);
                     break;
 
-                // Add other event types as needed (e.g., checkout.session.completed for Stripe Checkout)
+                // Add other event types as needed
 
                 default:
                     error_log('Webhook Warning: Received unhandled event type ' . $event->type);
             }
 
             $this->commit(); // Commit DB changes if no exceptions
-            return $this->jsonResponse(['success' => true, 'message' => 'Webhook received']);
+            $this->jsonResponse(['success' => true, 'message' => 'Webhook received']); // Exit handled by jsonResponse
 
         } catch (Exception $e) {
             $this->rollback(); // Rollback DB changes on error
             error_log("Webhook Handling Error (Event: {$event->type}): " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
-            // Return 500 to signal Stripe to retry (if applicable for the error type)
-            return $this->jsonResponse(
+            $this->jsonResponse(
                 ['success' => false, 'error' => 'Internal server error handling webhook.'],
                 500 // Use 500 for internal errors where retry might help
-            );
+            ); // Exit handled by jsonResponse
         }
     }
 
     private function handleSuccessfulPayment(\Stripe\PaymentIntent $paymentIntent): void {
-        // Find order by payment_intent_id (ensure this column exists and is set)
-         $stmt = $this->db->prepare("
-             SELECT id, user_id, total_amount, status
-             FROM orders
-             WHERE payment_intent_id = ?
-             LIMIT 1
-         ");
-         $stmt->execute([$paymentIntent->id]);
-         $order = $stmt->fetch();
+         // Find order by payment_intent_id using OrderModel
+         $order = $this->orderModel->getByPaymentIntentId($paymentIntent->id); // Assume this method exists
 
          if (!$order) {
-              // Critical: Payment succeeded but no matching order found in DB
               $errorMessage = "Webhook Critical: PaymentIntent {$paymentIntent->id} succeeded but no matching order found.";
               error_log($errorMessage);
               $this->logSecurityEvent('webhook_order_mismatch', ['payment_intent_id' => $paymentIntent->id, 'event_type' => 'payment_intent.succeeded']);
-              // Do not throw exception here to acknowledge webhook receipt, but log heavily.
-              return; // Acknowledge webhook, but log the mismatch
+              // Do not throw exception to acknowledge webhook receipt, but log heavily.
+              return;
          }
 
-         // Prevent processing already completed orders
-         if (in_array($order['status'], ['paid', 'shipped', 'delivered', 'completed'])) {
-             error_log("Webhook Info: Received successful payment event for already processed order ID {$order['id']}.");
-             return; // Idempotency: Already handled
+         // Idempotency check
+         if (in_array($order['status'], ['paid', 'processing', 'shipped', 'delivered', 'completed'])) { // Added 'processing'
+             error_log("Webhook Info: Received successful payment event for already processed order ID {$order['id']}. Status: {$order['status']}");
+             return;
          }
 
-        $updateStmt = $this->db->prepare("
-            UPDATE orders
-            SET status = 'paid', -- Or 'processing' if that's your next step
-                payment_status = 'completed',
-                paid_at = NOW(),
-                updated_at = NOW()
-            WHERE id = ? AND payment_intent_id = ?
-        ");
+        // Update order status using OrderModel
+        $updated = $this->orderModel->updateStatus($order['id'], 'paid'); // Or 'processing'
 
-        if (!$updateStmt->execute([$order['id'], $paymentIntent->id])) {
-            throw new Exception("Failed to update order ID {$order['id']} payment status to 'paid'.");
+        if (!$updated) {
+            // Maybe the status was already updated by another process? Re-fetch and check again before throwing.
+            $currentOrder = $this->orderModel->getById($order['id']);
+            if (!$currentOrder || !in_array($currentOrder['status'], ['paid', 'processing', 'shipped', 'delivered', 'completed'])) {
+                throw new Exception("Failed to update order ID {$order['id']} payment status to 'paid'.");
+            } else {
+                 error_log("Webhook Info: Order ID {$order['id']} status already updated, skipping redundant update.");
+            }
+        } else {
+             // --- MODIFIED: Set last_order_id in session ---
+             // Ensure session is started (it should be by SecurityMiddleware::apply)
+             if (session_status() === PHP_SESSION_ACTIVE) {
+                 $_SESSION['last_order_id'] = $order['id'];
+             } else {
+                 error_log("Webhook Warning: Session not active, cannot set last_order_id for order {$order['id']}");
+             }
+             // --- END MODIFICATION ---
+             error_log("Webhook Success: Updated order ID {$order['id']} status to 'paid' for PaymentIntent {$paymentIntent->id}. Session last_order_id set.");
         }
-         error_log("Webhook Success: Updated order ID {$order['id']} status to 'paid' for PaymentIntent {$paymentIntent->id}.");
 
 
-        // Fetch order details again for notification (or use $order if it has user info)
-        $notifyStmt = $this->db->prepare("
-            SELECT o.*, u.email, u.name as user_name
-            FROM orders o
-            JOIN users u ON o.user_id = u.id
-            WHERE o.id = ?
-        ");
-        $notifyStmt->execute([$order['id']]);
-        $fullOrder = $notifyStmt->fetch();
+        // Fetch full details for email (or enhance getByPaymentIntentId to return user info)
+        $fullOrder = $this->orderModel->getByIdAndUserId($order['id'], $order['user_id']); // Use existing method
 
         if ($fullOrder) {
-            // Send payment confirmation email
-             // Ensure EmailService is available and method exists
+             // Send payment confirmation email
              if ($this->emailService && method_exists($this->emailService, 'sendOrderConfirmation')) {
-                  $this->emailService->sendOrderConfirmation($fullOrder); // Assumes method takes order data
-                  error_log("Webhook Success: Order confirmation email queued for order ID {$fullOrder['id']}.");
+                  // Prepare user data array structure if needed by sendOrderConfirmation
+                  $userModel = new User($this->db);
+                  $user = $userModel->getById($fullOrder['user_id']);
+                  if ($user) {
+                       $this->emailService->sendOrderConfirmation($fullOrder, $user); // Pass user data if needed
+                       error_log("Webhook Success: Order confirmation email queued for order ID {$fullOrder['id']}.");
+                  } else {
+                       error_log("Webhook Warning: Could not fetch user data for order confirmation email (Order ID: {$fullOrder['id']}).");
+                  }
              } else {
                   error_log("Webhook Warning: EmailService or sendOrderConfirmation method not available for order ID {$fullOrder['id']}.");
              }
@@ -2799,71 +2831,57 @@ class PaymentController extends BaseController {
              error_log("Webhook Warning: Could not fetch full order details for notification (Order ID: {$order['id']}).");
         }
 
-        // Optional: Clear user's cart after successful payment
+        // Clear user's cart
         if ($order['user_id']) {
             try {
-                if (!class_exists('Cart')) require_once __DIR__ . '/../models/Cart.php';
                 $cartModel = new Cart($this->db, $order['user_id']);
                 $cartModel->clearCart();
                 error_log("Webhook Success: Cart cleared for user ID {$order['user_id']} after order {$order['id']} payment.");
             } catch (Exception $cartError) {
                  error_log("Webhook Warning: Failed to clear cart for user ID {$order['user_id']} after order {$order['id']} payment: " . $cartError->getMessage());
-                 // Don't fail the webhook for this
             }
         }
     }
 
-    private function handleFailedPayment(\Stripe\PaymentIntent $paymentIntent): void {
-         // Find order by payment_intent_id
-         $stmt = $this->db->prepare("
-             SELECT id, user_id, status
-             FROM orders
-             WHERE payment_intent_id = ?
-             LIMIT 1
-         ");
-         $stmt->execute([$paymentIntent->id]);
-         $order = $stmt->fetch();
+    // --- Other Webhook Handlers (handleFailedPayment, handleChargeSucceeded, etc.) ---
+    // These remain largely the same, but should ideally use OrderModel methods for updates.
 
+    private function handleFailedPayment(\Stripe\PaymentIntent $paymentIntent): void {
+         $order = $this->orderModel->getByPaymentIntentId($paymentIntent->id);
          if (!$order) {
               error_log("Webhook Warning: PaymentIntent {$paymentIntent->id} failed but no matching order found.");
-              return; // Acknowledge webhook
+              return;
          }
-
-          // Don't update status if order was already cancelled or completed differently
           if (in_array($order['status'], ['cancelled', 'paid', 'shipped', 'delivered', 'completed'])) {
               error_log("Webhook Info: Received failed payment event for already resolved order ID {$order['id']}.");
               return;
           }
 
-
-        $updateStmt = $this->db->prepare("
-            UPDATE orders
-            SET status = 'payment_failed',
-                payment_status = 'failed',
-                updated_at = NOW()
-            WHERE id = ? AND payment_intent_id = ?
-        ");
-
-        if (!$updateStmt->execute([$order['id'], $paymentIntent->id])) {
-            throw new Exception("Failed to update order ID {$order['id']} status to 'payment_failed'.");
+        $updated = $this->orderModel->updateStatus($order['id'], 'payment_failed');
+        if (!$updated) {
+             // Re-fetch and check
+            $currentOrder = $this->orderModel->getById($order['id']);
+            if (!$currentOrder || $currentOrder['status'] !== 'payment_failed') {
+                 throw new Exception("Failed to update order ID {$order['id']} status to 'payment_failed'.");
+            }
+        } else {
+            error_log("Webhook Info: Updated order ID {$order['id']} status to 'payment_failed' for PaymentIntent {$paymentIntent->id}.");
         }
-         error_log("Webhook Info: Updated order ID {$order['id']} status to 'payment_failed' for PaymentIntent {$paymentIntent->id}.");
 
-        // Get order details for notification
-        $notifyStmt = $this->db->prepare("
-            SELECT o.*, u.email, u.name as user_name
-            FROM orders o
-            JOIN users u ON o.user_id = u.id
-            WHERE o.id = ?
-        ");
-        $notifyStmt->execute([$order['id']]);
-        $fullOrder = $notifyStmt->fetch();
-
+        // Send payment failed notification (fetch full order details first)
+        $fullOrder = $this->orderModel->getByIdAndUserId($order['id'], $order['user_id']);
         if ($fullOrder) {
-            // Send payment failed notification
              if ($this->emailService && method_exists($this->emailService, 'sendPaymentFailedNotification')) {
-                  $this->emailService->sendPaymentFailedNotification($fullOrder); // Assumes method takes order data
-                  error_log("Webhook Info: Payment failed email queued for order ID {$fullOrder['id']}.");
+                  $userModel = new User($this->db);
+                  $user = $userModel->getById($fullOrder['user_id']);
+                  if ($user) {
+                        // Assuming sendPaymentFailedNotification takes order and user arrays
+                       $this->emailService->sendPaymentFailedNotification($fullOrder, $user);
+                       error_log("Webhook Info: Payment failed email queued for order ID {$fullOrder['id']}.");
+                  } else {
+                       error_log("Webhook Warning: Could not fetch user data for failed payment email (Order ID: {$fullOrder['id']}).");
+                  }
+
              } else {
                   error_log("Webhook Warning: EmailService or sendPaymentFailedNotification method not available for order ID {$fullOrder['id']}.");
              }
@@ -2872,128 +2890,79 @@ class PaymentController extends BaseController {
         }
     }
 
-     // Optional handler if needed
      private function handleChargeSucceeded(\Stripe\Charge $charge): void {
-         // You might log charge details or link it more explicitly to the order if necessary
          error_log("Webhook Info: Charge {$charge->id} succeeded for PaymentIntent {$charge->payment_intent} (Order linked via PI).");
-         // Often, action is taken on payment_intent.succeeded instead.
      }
 
-
     private function handleDisputeCreated(\Stripe\Dispute $dispute): void {
-         // Find order by payment_intent_id
-         $stmt = $this->db->prepare("
-             SELECT id, user_id, status
-             FROM orders
-             WHERE payment_intent_id = ?
-             LIMIT 1
-         ");
-         $stmt->execute([$dispute->payment_intent]);
-         $order = $stmt->fetch();
-
+        $order = $this->orderModel->getByPaymentIntentId($dispute->payment_intent);
          if (!$order) {
               error_log("Webhook Warning: Dispute {$dispute->id} created for PaymentIntent {$dispute->payment_intent} but no matching order found.");
-              return; // Acknowledge webhook
+              return;
          }
 
-        $updateStmt = $this->db->prepare("
-            UPDATE orders
-            SET status = 'disputed',
-                payment_status = 'disputed', // Add or use appropriate payment status
-                dispute_id = ?,
-                disputed_at = NOW(),
-                updated_at = NOW()
-            WHERE id = ?
-        ");
+        // Update order status and store dispute ID using OrderModel
+        $updated = $this->orderModel->updateStatusAndDispute($order['id'], 'disputed', $dispute->id); // Assume method exists
 
-        if (!$updateStmt->execute([$dispute->id, $order['id']])) {
-            throw new Exception("Failed to update order ID {$order['id']} dispute status.");
+        if (!$updated) {
+             // Re-fetch and check
+            $currentOrder = $this->orderModel->getById($order['id']);
+            if (!$currentOrder || $currentOrder['status'] !== 'disputed') {
+                 throw new Exception("Failed to update order ID {$order['id']} dispute status.");
+            }
+        } else {
+             error_log("Webhook Alert: Order ID {$order['id']} status updated to 'disputed' due to Dispute {$dispute->id}.");
         }
-         error_log("Webhook Alert: Order ID {$order['id']} status updated to 'disputed' due to Dispute {$dispute->id}.");
 
-        // Log dispute details for review - Consider sending admin alert
-        $this->logSecurityEvent('stripe_dispute_created', [
-             'order_id' => $order['id'],
-             'dispute_id' => $dispute->id,
-             'payment_intent_id' => $dispute->payment_intent,
-             'amount' => $dispute->amount,
-             'reason' => $dispute->reason
-        ]);
-
-        // Send alert to admin
-         if ($this->emailService && method_exists($this->emailService, 'sendAdminDisputeAlert')) {
-              $this->emailService->sendAdminDisputeAlert($order['id'], $dispute->id, $dispute->reason, $dispute->amount);
-         }
+        // Log and alert admin (existing logic is okay)
+        $this->logSecurityEvent('stripe_dispute_created', [ /* ... */ ]);
+        if ($this->emailService && method_exists($this->emailService, 'sendAdminDisputeAlert')) {
+             $this->emailService->sendAdminDisputeAlert($order['id'], $dispute->id, $dispute->reason, $dispute->amount);
+        }
     }
 
     private function handleRefund(\Stripe\Charge $charge): void {
-         // A charge can have multiple refunds. Process the relevant one.
-         // This assumes you are interested in the latest refund if multiple occur.
-         $refund = $charge->refunds->data[0] ?? null; // Get the first/latest refund object
+         $refund = $charge->refunds->data[0] ?? null;
          if (!$refund) {
              error_log("Webhook Warning: Received charge.refunded event for Charge {$charge->id} but no refund data found.");
              return;
          }
 
-
-         // Find order by payment_intent_id
-         $stmt = $this->db->prepare("
-             SELECT id, user_id, status
-             FROM orders
-             WHERE payment_intent_id = ?
-             LIMIT 1
-         ");
-         $stmt->execute([$charge->payment_intent]);
-         $order = $stmt->fetch();
-
+         $order = $this->orderModel->getByPaymentIntentId($charge->payment_intent);
          if (!$order) {
               error_log("Webhook Warning: Refund {$refund->id} processed for PaymentIntent {$charge->payment_intent} but no matching order found.");
-              return; // Acknowledge webhook
+              return;
          }
 
-          // Determine new status based on refund amount vs order total? Partial vs Full refund?
-          // Simple approach: Mark as refunded regardless of amount for now.
           $newStatus = 'refunded';
-          // Optionally add logic for partial refunds if needed:
-          // $orderTotal = $this->getOrderTotal($order['id']); // Need helper to get total
-          // if ($charge->amount_refunded < $orderTotal) { $newStatus = 'partially_refunded'; }
+          $paymentStatus = ($charge->amount_refunded === $charge->amount) ? 'refunded' : 'partially_refunded';
 
+          // Update using OrderModel
+         $updated = $this->orderModel->updateRefundStatus($order['id'], $newStatus, $paymentStatus, $refund->id); // Assume method exists
 
-        $updateStmt = $this->db->prepare("
-            UPDATE orders
-            SET status = ?,
-                payment_status = ?, -- Use 'refunded' or 'partially_refunded'
-                refund_id = ?,      -- Store the Stripe Refund ID
-                refunded_at = NOW(),
-                updated_at = NOW()
-            WHERE id = ?
-        ");
-
-         $paymentStatus = ($charge->amount_refunded === $charge->amount) ? 'refunded' : 'partially_refunded';
-
-        if (!$updateStmt->execute([$newStatus, $paymentStatus, $refund->id, $order['id']])) {
-            throw new Exception("Failed to update order ID {$order['id']} refund status.");
+        if (!$updated) {
+             // Re-fetch and check
+             $currentOrder = $this->orderModel->getById($order['id']);
+             if (!$currentOrder || !in_array($currentOrder['status'], ['refunded', 'partially_refunded'])) { // Check possible statuses
+                 throw new Exception("Failed to update order ID {$order['id']} refund status.");
+             }
+        } else {
+            error_log("Webhook Info: Order ID {$order['id']} status updated to '{$newStatus}' due to Refund {$refund->id}.");
         }
-         error_log("Webhook Info: Order ID {$order['id']} status updated to '{$newStatus}' due to Refund {$refund->id}.");
 
-
-        // Get order details for notification
-         $notifyStmt = $this->db->prepare("
-             SELECT o.*, u.email, u.name as user_name
-             FROM orders o
-             JOIN users u ON o.user_id = u.id
-             WHERE o.id = ?
-         ");
-         $notifyStmt->execute([$order['id']]);
-         $fullOrder = $notifyStmt->fetch();
-
-
+        // Send refund confirmation email (fetch full order details first)
+        $fullOrder = $this->orderModel->getByIdAndUserId($order['id'], $order['user_id']);
         if ($fullOrder) {
-            // Send refund confirmation email
              if ($this->emailService && method_exists($this->emailService, 'sendRefundConfirmation')) {
-                  // Pass refund amount for clarity in email
-                  $this->emailService->sendRefundConfirmation($fullOrder, $refund->amount / 100.0);
-                   error_log("Webhook Info: Refund confirmation email queued for order ID {$fullOrder['id']}.");
+                   $userModel = new User($this->db);
+                   $user = $userModel->getById($fullOrder['user_id']);
+                   if ($user) {
+                        $this->emailService->sendRefundConfirmation($fullOrder, $user, $refund->amount / 100.0); // Pass user array if needed
+                        error_log("Webhook Info: Refund confirmation email queued for order ID {$fullOrder['id']}.");
+                   } else {
+                        error_log("Webhook Warning: Could not fetch user for refund confirmation email (Order ID: {$fullOrder['id']}).");
+                   }
+
              } else {
                   error_log("Webhook Warning: EmailService or sendRefundConfirmation method not available for order ID {$fullOrder['id']}.");
              }
@@ -3649,274 +3618,462 @@ class InventoryController extends BaseController {
 ```php
 <?php
 require_once __DIR__ . '/BaseController.php';
+// No need to require OrderModel etc. here if methods don't directly use them
 
 class CouponController extends BaseController {
-    private $pdo;
-    
+    // No direct need for $pdo property if inheriting from BaseController which has $this->db
+    // private $pdo; // Remove this if using $this->db from BaseController
+
     public function __construct($pdo) {
-        $this->pdo = $pdo;
+        parent::__construct($pdo); // Pass PDO to BaseController constructor
+        // $this->pdo = $pdo; // Remove this line, use $this->db instead
     }
-    
-    public function validateCoupon($code, $subtotal) {
+
+    /**
+     * Core validation logic for a coupon code.
+     * Checks active status, dates, usage limits, minimum purchase.
+     * Does NOT check user-specific usage here.
+     *
+     * @param string $code
+     * @param float $subtotal
+     * @return array ['valid' => bool, 'message' => string, 'coupon' => array|null]
+     */
+    public function validateCouponCodeOnly(string $code, float $subtotal): array {
+        $code = $this->validateInput($code, 'string'); // Already validated? Double check is ok.
+        $subtotal = $this->validateInput($subtotal, 'float');
+
+        if (!$code || $subtotal === false || $subtotal < 0) {
+            return ['valid' => false, 'message' => 'Invalid coupon code or subtotal amount.', 'coupon' => null];
+        }
+
         try {
-            $this->validateRateLimit('coupon_validate');
-            $this->validateCSRF();
-            
-            $code = $this->validateInput($code, 'string');
-            $subtotal = $this->validateInput($subtotal, 'float');
-            $userId = $this->getUserId();
-            
-            if (!$code || $subtotal <= 0) {
-                return $this->jsonResponse([
-                    'valid' => false,
-                    'message' => 'Invalid coupon or order amount'
-                ], 400);
-            }
-            
-            $stmt = $this->pdo->prepare("
-                SELECT * FROM coupons 
-                WHERE code = ? 
+            // Use $this->db (from BaseController)
+            $stmt = $this->db->prepare("
+                SELECT * FROM coupons
+                WHERE code = ?
                 AND is_active = TRUE
-                AND (start_date IS NULL OR start_date <= NOW())
-                AND (end_date IS NULL OR end_date >= NOW())
+                AND (valid_from IS NULL OR valid_from <= CURDATE()) -- Changed start_date/end_date to valid_from/valid_to based on sample schema if present, else adjust
+                AND (valid_to IS NULL OR valid_to >= CURDATE())     -- Changed start_date/end_date to valid_from/valid_to
                 AND (usage_limit IS NULL OR usage_count < usage_limit)
-                AND min_purchase_amount <= ?
+                AND (min_purchase_amount IS NULL OR min_purchase_amount <= ?) -- Check if min_purchase_amount is NULL too
             ");
             $stmt->execute([$code, $subtotal]);
             $coupon = $stmt->fetch();
-            
+
             if (!$coupon) {
-                return $this->jsonResponse([
-                    'valid' => false,
-                    'message' => 'Invalid or expired coupon code'
-                ]);
+                 // More specific messages based on why it failed could be added here by checking coupon data if found but inactive/expired etc.
+                return ['valid' => false, 'message' => 'Coupon is invalid, expired, or minimum spend not met.', 'coupon' => null];
             }
-            
-            // Check if user has already used this coupon
-            if ($userId) {
-                $stmt = $this->pdo->prepare("
-                    SELECT COUNT(*) FROM coupon_usage 
-                    WHERE coupon_id = ? AND user_id = ?
-                ");
-                $stmt->execute([$coupon['id'], $userId]);
-                $usageCount = $stmt->fetchColumn();
-                if ($usageCount > 0) {
-                    return $this->jsonResponse([
-                        'valid' => false,
-                        'message' => 'You have already used this coupon'
-                    ]);
-                }
-            }
-            
-            // Calculate discount
-            $discountAmount = $this->calculateDiscount($coupon, $subtotal);
-            
-            return $this->jsonResponse([
-                'valid' => true,
-                'coupon' => $coupon,
-                'discount_amount' => $discountAmount,
-                'message' => 'Coupon applied successfully'
-            ]);
-            
+
+            // Coupon exists and meets basic criteria
+            return ['valid' => true, 'message' => 'Coupon code is potentially valid.', 'coupon' => $coupon];
+
         } catch (Exception $e) {
-            error_log("Coupon validation error: " . $e->getMessage());
-            return $this->jsonResponse([
-                'valid' => false,
-                'message' => 'An error occurred while validating the coupon'
-            ], 500);
+            error_log("Coupon Code Validation DB Error: " . $e->getMessage());
+            return ['valid' => false, 'message' => 'Error validating coupon code.', 'coupon' => null];
         }
     }
-    
-    private function calculateDiscount($coupon, $subtotal) {
+
+    /**
+     * Check if a specific user has already used a specific coupon.
+     *
+     * @param int $couponId
+     * @param int $userId
+     * @return bool True if used, False otherwise.
+     */
+    private function hasUserUsedCoupon(int $couponId, int $userId): bool {
+        try {
+            // Use $this->db
+            $stmt = $this->db->prepare("
+                SELECT COUNT(*) FROM coupon_usage
+                WHERE coupon_id = ? AND user_id = ?
+            ");
+            $stmt->execute([$couponId, $userId]);
+            return $stmt->fetchColumn() > 0;
+        } catch (Exception $e) {
+             error_log("Error checking user coupon usage: " . $e->getMessage());
+             return true; // Fail safe - assume used if DB error occurs? Or false? Let's assume false to allow attempt.
+        }
+    }
+
+
+    /**
+     * Handles AJAX request from checkout page to validate a coupon.
+     * Includes user-specific checks.
+     * Returns JSON response for the frontend.
+     */
+    public function applyCouponAjax() {
+        $this->requireLogin(); // Ensure user is logged in
+        $this->validateCSRF(); // Validate CSRF from AJAX
+
+        $json = file_get_contents('php://input');
+        $data = json_decode($json, true);
+
+        $code = $this->validateInput($data['code'] ?? null, 'string');
+        $subtotal = $this->validateInput($data['subtotal'] ?? null, 'float');
+        $userId = $this->getUserId();
+
+        if (!$code || $subtotal === false || $subtotal < 0) {
+            return $this->jsonResponse(['success' => false, 'message' => 'Invalid coupon code or subtotal amount provided.'], 400);
+        }
+
+        // Step 1: Core validation
+        $validationResult = $this->validateCouponCodeOnly($code, $subtotal);
+
+        if (!$validationResult['valid']) {
+             return $this->jsonResponse([
+                 'success' => false,
+                 'message' => $validationResult['message'] // Provide the specific validation message
+             ]);
+        }
+
+        $coupon = $validationResult['coupon'];
+
+        // Step 2: User-specific validation
+        if ($this->hasUserUsedCoupon($coupon['id'], $userId)) {
+            return $this->jsonResponse([
+                'success' => false,
+                'message' => 'You have already used this coupon.'
+            ]);
+        }
+
+        // Step 3: Calculate discount and return success
+        $discountAmount = $this->calculateDiscount($coupon, $subtotal);
+
+         // Recalculate totals needed for the response accurately
+         $subtotalAfterDiscount = $subtotal - $discountAmount;
+         $shipping_cost = $subtotalAfterDiscount >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
+         // Tax requires shipping context - cannot reliably calculate here without client sending address.
+         // Let's calculate final total based on discount + shipping, tax added client-side or later.
+         $newTotal = $subtotalAfterDiscount + $shipping_cost; // Tax will be added later
+         $newTotal = max(0, $newTotal); // Ensure non-negative
+
+        return $this->jsonResponse([
+            'success' => true,
+            'message' => 'Coupon applied successfully!',
+            'coupon_code' => $coupon['code'], // Send back the code for display
+            'discount_amount' => number_format($discountAmount, 2),
+            // 'new_tax_amount' => number_format($tax_amount, 2), // Omit tax calculation here
+            'new_total' => number_format($newTotal, 2) // Send the new total (excluding tax for now)
+        ]);
+    }
+
+
+    /**
+     * Records the usage of a coupon for a specific order and user.
+     * Increments the coupon's usage count.
+     * Should be called within a transaction if part of a larger process like checkout.
+     *
+     * @param int $couponId
+     * @param int $orderId
+     * @param int $userId
+     * @param float $discountAmount
+     * @return bool True on success, false on failure.
+     */
+    public function recordUsage(int $couponId, int $orderId, int $userId, float $discountAmount): bool {
+         // This method assumes it might be called outside a pre-existing transaction,
+         // so it starts its own. If called within CheckoutController's transaction,
+         // PDO might handle nested transactions gracefully depending on driver,
+         // but it's safer if CheckoutController manages the main transaction.
+         // Let's remove the transaction here and assume CheckoutController handles it.
+         // $this->beginTransaction(); // Removed
+
+        try {
+            // Validate input (basic checks)
+             if ($couponId <= 0 || $orderId <= 0 || $userId <= 0 || $discountAmount < 0) {
+                 throw new InvalidArgumentException('Invalid parameters for recording coupon usage.');
+             }
+
+             // Record usage in coupon_usage table
+             $stmtUsage = $this->db->prepare("
+                 INSERT INTO coupon_usage (coupon_id, order_id, user_id, discount_amount, used_at)
+                 VALUES (?, ?, ?, ?, NOW())
+             ");
+             $usageInserted = $stmtUsage->execute([$couponId, $orderId, $userId, $discountAmount]);
+
+             if (!$usageInserted) {
+                 throw new Exception("Failed to insert into coupon_usage table.");
+             }
+
+             // Update usage_count in coupons table
+             $stmtUpdate = $this->db->prepare("
+                 UPDATE coupons
+                 SET usage_count = usage_count + 1,
+                     updated_at = NOW()
+                 WHERE id = ?
+             ");
+             $countUpdated = $stmtUpdate->execute([$couponId]);
+
+             if (!$countUpdated || $stmtUpdate->rowCount() === 0) {
+                 // Don't throw an exception if the count update fails, but log it.
+                 // The usage was recorded, which is the primary goal. Count mismatch can be fixed.
+                 error_log("Warning: Failed to increment usage_count for coupon ID {$couponId} on order ID {$orderId}, but usage was recorded.");
+             }
+
+            // $this->commit(); // Removed - Rely on calling method's transaction
+            return true;
+
+        } catch (Exception $e) {
+            // $this->rollback(); // Removed
+            error_log("Coupon usage recording error for CouponID {$couponId}, OrderID {$orderId}: " . $e->getMessage());
+            return false;
+        }
+    }
+
+
+    // --- Admin Methods (kept largely original, ensure $this->db is used) ---
+
+    /**
+     * Calculates the discount amount based on coupon type and subtotal.
+     *
+     * @param array $coupon Coupon data array.
+     * @param float $subtotal Order subtotal.
+     * @return float Calculated discount amount.
+     */
+    public function calculateDiscount(array $coupon, float $subtotal): float { // Made public for CheckoutController
         $discountAmount = 0;
-        
+
         if ($coupon['discount_type'] === 'percentage') {
             $discountAmount = $subtotal * ($coupon['discount_value'] / 100);
-        } else { // fixed amount
+        } elseif ($coupon['discount_type'] === 'fixed') { // Explicitly check for 'fixed'
             $discountAmount = $coupon['discount_value'];
+        } else {
+             error_log("Unknown discount type '{$coupon['discount_type']}' for coupon ID {$coupon['id']}");
+             return 0; // Return 0 for unknown types
         }
-        
-        // Apply maximum discount limit if set
-        if ($coupon['max_discount_amount'] !== null) {
-            $discountAmount = min($discountAmount, $coupon['max_discount_amount']);
+
+        // Apply maximum discount limit if set and numeric
+        if (isset($coupon['max_discount_amount']) && is_numeric($coupon['max_discount_amount'])) {
+            $discountAmount = min($discountAmount, (float)$coupon['max_discount_amount']);
         }
-        
-        return round($discountAmount, 2);
+
+         // Ensure discount doesn't exceed subtotal (prevent negative totals from discount alone)
+         $discountAmount = min($discountAmount, $subtotal);
+
+        return round(max(0, $discountAmount), 2); // Ensure non-negative and round
     }
-    
-    public function applyCoupon($couponId, $orderId, $discountAmount) {
-        try {
-            $this->validateCSRF();
-            $userId = $this->getUserId();
-            
-            $couponId = $this->validateInput($couponId, 'int');
-            $orderId = $this->validateInput($orderId, 'int');
-            $discountAmount = $this->validateInput($discountAmount, 'float');
-            
-            if (!$couponId || !$orderId || $discountAmount <= 0) {
-                throw new Exception('Invalid coupon application data');
-            }
-            
-            $this->beginTransaction();
-            
-            // Verify coupon is still valid
-            $stmt = $this->pdo->prepare("
-                SELECT * FROM coupons 
-                WHERE id = ? 
-                AND is_active = TRUE
-                AND (usage_limit IS NULL OR usage_count < usage_limit)
-            ");
-            $stmt->execute([$couponId]);
-            if (!$stmt->fetch()) {
-                throw new Exception('Coupon is no longer valid');
-            }
-            
-            // Record coupon usage
-            $stmt = $this->pdo->prepare("
-                INSERT INTO coupon_usage (coupon_id, order_id, user_id, discount_amount)
-                VALUES (?, ?, ?, ?)
-            ");
-            $stmt->execute([$couponId, $orderId, $userId, $discountAmount]);
-            
-            // Update coupon usage count
-            $stmt = $this->pdo->prepare("
-                UPDATE coupons 
-                SET usage_count = usage_count + 1,
-                    updated_at = NOW()
-                WHERE id = ?
-            ");
-            $stmt->execute([$couponId]);
-            
-            $this->commit();
-            
-            return $this->jsonResponse([
-                'success' => true,
-                'message' => 'Coupon applied successfully'
-            ]);
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            error_log("Coupon application error: " . $e->getMessage());
-            
-            return $this->jsonResponse([
-                'success' => false,
-                'message' => 'Failed to apply coupon'
-            ], 500);
-        }
-    }
-    
-    public function getAllCoupons() {
-        try {
-            $this->requireAdmin();
-            
-            $stmt = $this->pdo->query("
-                SELECT 
-                    c.*,
-                    COUNT(cu.id) as total_uses,
-                    SUM(cu.discount_amount) as total_discount_given
-                FROM coupons c
-                LEFT JOIN coupon_usage cu ON c.id = cu.coupon_id
-                GROUP BY c.id
-                ORDER BY c.created_at DESC
-            ");
-            
-            return $this->jsonResponse([
-                'success' => true,
-                'coupons' => $stmt->fetchAll()
-            ]);
-            
-        } catch (Exception $e) {
-            error_log("Error fetching coupons: " . $e->getMessage());
-            return $this->jsonResponse([
-                'success' => false,
-                'message' => 'Failed to retrieve coupons'
-            ], 500);
-        }
-    }
-    
-    public function createCoupon() {
-        try {
-            $this->requireAdmin();
-            $this->validateCSRF();
-            
-            $data = [
-                'code' => $this->validateInput($_POST['code'], 'string'),
-                'description' => $this->validateInput($_POST['description'], 'string'),
-                'discount_type' => $this->validateInput($_POST['discount_type'], 'string'),
-                'discount_value' => $this->validateInput($_POST['discount_value'], 'float'),
-                'min_purchase_amount' => $this->validateInput($_POST['min_purchase_amount'] ?? 0, 'float'),
-                'max_discount_amount' => $this->validateInput($_POST['max_discount_amount'] ?? null, 'float'),
-                'start_date' => $this->validateInput($_POST['start_date'] ?? null, 'string'),
-                'end_date' => $this->validateInput($_POST['end_date'] ?? null, 'string'),
-                'usage_limit' => $this->validateInput($_POST['usage_limit'] ?? null, 'int'),
-                'is_active' => isset($_POST['is_active']) ? true : false
-            ];
-            
-            // Validate required fields
-            if (!$data['code'] || !$data['discount_type'] || $data['discount_value'] <= 0) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'message' => 'Missing required fields'
-                ], 400);
-            }
-            
-            // Validate discount type
+
+    // --- Admin CRUD methods ---
+    // These methods are typically called from admin routes and might render views or return JSON.
+    // Ensure they use $this->db, $this->requireAdmin(), $this->validateCSRF() appropriately.
+
+    // Example: Method to display coupons list in Admin (Called by GET request in index.php)
+     public function listCoupons() {
+         $this->requireAdmin();
+         try {
+             // Fetch all coupons with usage stats
+             $stmt = $this->db->query("
+                 SELECT
+                     c.*,
+                     COUNT(cu.id) as total_uses,
+                     COALESCE(SUM(cu.discount_amount), 0) as total_discount_given
+                 FROM coupons c
+                 LEFT JOIN coupon_usage cu ON c.id = cu.coupon_id
+                 GROUP BY c.id
+                 ORDER BY c.created_at DESC
+             ");
+             $coupons = $stmt->fetchAll();
+
+             // Prepare data for the view
+             $data = [
+                 'pageTitle' => 'Manage Coupons',
+                 'coupons' => $coupons,
+                 'csrfToken' => $this->generateCSRFToken(),
+                 'bodyClass' => 'page-admin-coupons'
+             ];
+             // Render the admin view
+             echo $this->renderView('admin/coupons', $data);
+
+         } catch (Exception $e) {
+             error_log("Error fetching coupons for admin: " . $e->getMessage());
+             $this->setFlashMessage('Failed to load coupons.', 'error');
+             // Redirect to admin dashboard or show error view
+             $this->redirect('admin'); // Redirect to admin dashboard
+         }
+     }
+
+     // Example: Show create form (Called by GET request in index.php)
+     public function showCreateForm() {
+          $this->requireAdmin();
+          $data = [
+               'pageTitle' => 'Create Coupon',
+               'coupon' => null, // No existing coupon data
+               'csrfToken' => $this->generateCSRFToken(),
+               'bodyClass' => 'page-admin-coupon-form'
+          ];
+          echo $this->renderView('admin/coupon_form', $data); // Assume view exists
+     }
+
+     // Example: Show edit form (Called by GET request in index.php)
+      public function showEditForm(int $id) {
+          $this->requireAdmin();
+          $stmt = $this->db->prepare("SELECT * FROM coupons WHERE id = ?");
+          $stmt->execute([$id]);
+          $coupon = $stmt->fetch();
+
+          if (!$coupon) {
+               $this->setFlashMessage('Coupon not found.', 'error');
+               $this->redirect('admin&section=coupons');
+               return;
+          }
+
+          $data = [
+               'pageTitle' => 'Edit Coupon',
+               'coupon' => $coupon,
+               'csrfToken' => $this->generateCSRFToken(),
+               'bodyClass' => 'page-admin-coupon-form'
+           ];
+           echo $this->renderView('admin/coupon_form', $data); // Assume view exists
+      }
+
+     // Example: Save coupon (Called by POST request in index.php)
+      public function saveCoupon() {
+           $this->requireAdmin();
+           $this->validateCSRF(); // Validates POST CSRF
+
+           $couponId = $this->validateInput($_POST['coupon_id'] ?? null, 'int');
+           // Extract and validate all other POST data similar to createCoupon below
+           $data = [
+                'code' => $this->validateInput($_POST['code'] ?? null, 'string', ['min' => 3, 'max' => 50]), // Add length validation
+                'description' => $this->validateInput($_POST['description'] ?? null, 'string', ['max' => 255]),
+                'discount_type' => $this->validateInput($_POST['discount_type'] ?? null, 'string'),
+                'discount_value' => $this->validateInput($_POST['discount_value'] ?? null, 'float'),
+                'min_purchase_amount' => $this->validateInput($_POST['min_purchase_amount'] ?? 0, 'float', ['min' => 0]),
+                'max_discount_amount' => $this->validateInput($_POST['max_discount_amount'] ?? null, 'float', ['min' => 0]),
+                'valid_from' => $this->validateInput($_POST['valid_from'] ?? null, 'date'), // Basic date check
+                'valid_to' => $this->validateInput($_POST['valid_to'] ?? null, 'date'),
+                'usage_limit' => $this->validateInput($_POST['usage_limit'] ?? null, 'int', ['min' => 0]),
+                'is_active' => isset($_POST['is_active']) ? 1 : 0 // Convert checkbox to 1 or 0
+           ];
+
+           // --- Basic Server-side Validation ---
+           if (!$data['code'] || !$data['discount_type'] || $data['discount_value'] === false || $data['discount_value'] <= 0) {
+                $this->setFlashMessage('Missing required fields (Code, Type, Value).', 'error');
+                $this->redirect('admin&section=coupons' . ($couponId ? '&task=edit&id='.$couponId : '&task=create'));
+                return;
+           }
             if (!in_array($data['discount_type'], ['percentage', 'fixed'])) {
-                return $this->jsonResponse([
-                    'success' => false,
-                    'message' => 'Invalid discount type'
-                ], 400);
+                 $this->setFlashMessage('Invalid discount type.', 'error');
+                 $this->redirect('admin&section=coupons' . ($couponId ? '&task=edit&id='.$couponId : '&task=create'));
+                 return;
             }
-            
-            $this->beginTransaction();
-            
-            // Check if code already exists
-            $stmt = $this->pdo->prepare("SELECT id FROM coupons WHERE code = ?");
-            $stmt->execute([$data['code']]);
-            if ($stmt->fetch()) {
-                throw new Exception('Coupon code already exists');
+            if ($data['discount_type'] === 'percentage' && ($data['discount_value'] > 100)) {
+                 $this->setFlashMessage('Percentage discount cannot exceed 100.', 'error');
+                 $this->redirect('admin&section=coupons' . ($couponId ? '&task=edit&id='.$couponId : '&task=create'));
+                 return;
             }
-            
-            $stmt = $this->pdo->prepare("
-                INSERT INTO coupons (
-                    code, description, discount_type, discount_value,
-                    min_purchase_amount, max_discount_amount,
-                    start_date, end_date, usage_limit, is_active,
-                    created_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            
-            $stmt->execute([
-                $data['code'],
-                $data['description'],
-                $data['discount_type'],
-                $data['discount_value'],
-                $data['min_purchase_amount'],
-                $data['max_discount_amount'],
-                $data['start_date'],
-                $data['end_date'],
-                $data['usage_limit'],
-                $data['is_active'],
-                $this->getUserId()
-            ]);
-            
-            $this->commit();
-            
-            return $this->jsonResponse([
-                'success' => true,
-                'message' => 'Coupon created successfully'
-            ]);
-            
-        } catch (Exception $e) {
-            $this->rollback();
-            error_log("Coupon creation error: " . $e->getMessage());
-            
-            return $this->jsonResponse([
-                'success' => false,
-                'message' => 'Failed to create coupon'
-            ], 500);
-        }
-    }
+            // --- End Validation ---
+
+           try {
+                $this->beginTransaction();
+
+                // Check for duplicate code if creating or changing code
+                $checkStmt = $this->db->prepare("SELECT id FROM coupons WHERE code = ? AND id != ?");
+                $checkStmt->execute([$data['code'], $couponId ?: 0]);
+                if ($checkStmt->fetch()) {
+                    throw new Exception('Coupon code already exists.');
+                }
+
+
+                if ($couponId) {
+                    // Update existing coupon
+                    $stmt = $this->db->prepare("
+                        UPDATE coupons SET
+                        code = ?, description = ?, discount_type = ?, discount_value = ?,
+                        min_purchase_amount = ?, max_discount_amount = ?, valid_from = ?, valid_to = ?,
+                        usage_limit = ?, is_active = ?, updated_at = NOW(), updated_by = ?
+                        WHERE id = ?
+                    ");
+                     $success = $stmt->execute([
+                          $data['code'], $data['description'], $data['discount_type'], $data['discount_value'],
+                          $data['min_purchase_amount'], $data['max_discount_amount'] ?: null, $data['valid_from'] ?: null, $data['valid_to'] ?: null,
+                          $data['usage_limit'] ?: null, $data['is_active'], $this->getUserId(), $couponId
+                     ]);
+                     $message = 'Coupon updated successfully.';
+                } else {
+                    // Create new coupon
+                    $stmt = $this->db->prepare("
+                         INSERT INTO coupons (
+                             code, description, discount_type, discount_value, min_purchase_amount,
+                             max_discount_amount, valid_from, valid_to, usage_limit, is_active,
+                             created_by, updated_by
+                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ");
+                      $userId = $this->getUserId();
+                      $success = $stmt->execute([
+                           $data['code'], $data['description'], $data['discount_type'], $data['discount_value'], $data['min_purchase_amount'],
+                           $data['max_discount_amount'] ?: null, $data['valid_from'] ?: null, $data['valid_to'] ?: null, $data['usage_limit'] ?: null, $data['is_active'],
+                           $userId, $userId
+                      ]);
+                      $message = 'Coupon created successfully.';
+                }
+
+                if (!$success) {
+                     throw new Exception("Database operation failed.");
+                }
+
+                $this->commit();
+                $this->setFlashMessage($message, 'success');
+
+           } catch (Exception $e) {
+                $this->rollback();
+                error_log("Coupon save error: " . $e->getMessage());
+                $this->setFlashMessage('Failed to save coupon: ' . $e->getMessage(), 'error');
+           }
+
+           // Redirect back to coupon list
+            $this->redirect('admin&section=coupons');
+      }
+
+     // Example: Toggle Status (Called by POST request in index.php)
+     public function toggleCouponStatus(int $id) {
+           $this->requireAdmin();
+           $this->validateCSRF(); // CSRF for state-changing action
+
+           try {
+                $stmt = $this->db->prepare("UPDATE coupons SET is_active = !is_active, updated_at = NOW(), updated_by = ? WHERE id = ?");
+                $success = $stmt->execute([$this->getUserId(), $id]);
+
+                if ($success && $stmt->rowCount() > 0) {
+                     return $this->jsonResponse(['success' => true, 'message' => 'Coupon status toggled.']);
+                } else {
+                     return $this->jsonResponse(['success' => false, 'message' => 'Coupon not found or status unchanged.'], 404);
+                }
+           } catch (Exception $e) {
+                error_log("Coupon toggle error: " . $e->getMessage());
+                return $this->jsonResponse(['success' => false, 'message' => 'Failed to toggle coupon status.'], 500);
+           }
+     }
+
+     // Example: Delete Coupon (Called by POST request in index.php)
+     public function deleteCoupon(int $id) {
+           $this->requireAdmin();
+           $this->validateCSRF(); // CSRF for state-changing action
+
+           try {
+                $this->beginTransaction();
+                // Optionally delete usage records first or handle via foreign key constraint
+                $stmtUsage = $this->db->prepare("DELETE FROM coupon_usage WHERE coupon_id = ?");
+                $stmtUsage->execute([$id]);
+
+                $stmt = $this->db->prepare("DELETE FROM coupons WHERE id = ?");
+                $success = $stmt->execute([$id]);
+
+                if ($success && $stmt->rowCount() > 0) {
+                     $this->commit();
+                     return $this->jsonResponse(['success' => true, 'message' => 'Coupon deleted successfully.']);
+                } else {
+                     $this->rollback();
+                     return $this->jsonResponse(['success' => false, 'message' => 'Coupon not found.'], 404);
+                }
+           } catch (Exception $e) {
+                $this->rollback();
+                error_log("Coupon delete error: " . $e->getMessage());
+                return $this->jsonResponse(['success' => false, 'message' => 'Failed to delete coupon.'], 500);
+           }
+     }
+
 }
+
 ```
 

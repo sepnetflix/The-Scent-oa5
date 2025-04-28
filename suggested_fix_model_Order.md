@@ -1,3 +1,125 @@
+Okay, let's update the `models/Order.php` model based on the requirements identified in the previous steps, ensuring we add the necessary methods and refine the existing ones.
+
+**Original `Order.php.txt` (for reference during diff):**
+```php
+<?php
+class Order {
+    private $pdo;
+
+    public function __construct($pdo) {
+        $this->pdo = $pdo;
+    }
+
+    public function create($data) {
+        $stmt = $this->pdo->prepare("
+            INSERT INTO orders (
+                user_id, total_amount, shipping_name, shipping_email,
+                shipping_address, shipping_city, shipping_state,
+                shipping_zip, shipping_country, status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+
+        $stmt->execute([
+            $data['user_id'],
+            $data['total_amount'], // Original used total_price, schema uses total_amount
+            $data['shipping_name'],
+            $data['shipping_email'],
+            $data['shipping_address'],
+            $data['shipping_city'],
+            $data['shipping_state'],
+            $data['shipping_zip'],
+            $data['shipping_country'],
+            'pending' // Hardcoded status
+        ]);
+
+        return $this->pdo->lastInsertId();
+    }
+
+    public function getById($id) {
+        $stmt = $this->pdo->prepare("
+            SELECT * FROM orders WHERE id = ?
+        ");
+        $stmt->execute([$id]);
+        return $stmt->fetch(); // Doesn't fetch items
+    }
+
+    public function getRecentByUserId($userId, $limit = 5) {
+        // Fetches items as concatenated string - okay for dashboard
+        $stmt = $this->pdo->prepare("
+            SELECT o.*,
+                   GROUP_CONCAT(CONCAT(oi.quantity, 'x ', p.name) SEPARATOR ', ') as items_summary
+            FROM orders o
+            JOIN order_items oi ON o.id = oi.order_id
+            JOIN products p ON oi.product_id = p.id
+            WHERE o.user_id = ?
+            GROUP BY o.id
+            ORDER BY o.created_at DESC
+            LIMIT ?
+        ");
+        // Bind limit as INT
+        $stmt->bindValue(1, $userId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    public function updateStatus($orderId, $status) {
+        // Missing updated_at
+        $stmt = $this->pdo->prepare("
+            UPDATE orders SET status = ? WHERE id = ?
+        ");
+        return $stmt->execute([$status, $orderId]);
+    }
+
+    // Renamed to updatePaymentIntentId
+    public function updatePaymentIntent($orderId, $paymentIntentId) {
+        // Missing updated_at
+        $stmt = $this->pdo->prepare("
+            UPDATE orders
+            SET payment_intent_id = ?
+            WHERE id = ?
+        ");
+        return $stmt->execute([$paymentIntentId, $orderId]);
+    }
+
+    // Separated status update from payment status update logic
+    public function updatePaymentStatus($orderId, $status, $stripeCustomerId = null) {
+        // Missing updated_at
+        $stmt = $this->pdo->prepare("
+            UPDATE orders
+            SET payment_status = ?,
+                paid_at = CASE WHEN ? = 'completed' THEN NOW() ELSE NULL END,
+                stripe_customer_id = COALESCE(?, stripe_customer_id)
+            WHERE id = ?
+        ");
+        return $stmt->execute([$status, $status, $stripeCustomerId, $orderId]);
+    }
+
+    // Renamed to getByPaymentIntentId
+    public function getByPaymentIntent($paymentIntentId) {
+        $stmt = $this->pdo->prepare("
+            SELECT * FROM orders WHERE payment_intent_id = ?
+        ");
+        $stmt->execute([$paymentIntentId]);
+        return $stmt->fetch(); // Doesn't fetch items
+    }
+
+    // --- Missing methods to be added ---
+    // getByIdAndUserId
+    // getAllByUserId
+    // getTotalOrdersByUserId
+    // updateStatusAndDispute
+    // updateRefundStatus
+    // updateTracking
+    // _fetchOrderItems helper
+}
+```
+
+---
+
+**Updated `models/Order.php`**
+
+```php
 <?php
 
 // Ensure Product model is available if needed for item details fetching
@@ -336,3 +458,73 @@ class Order {
     // Removed updatePaymentStatus as status updates are handled within updateStatus now.
     // public function updatePaymentStatus(...) { ... }
 }
+```
+
+---
+
+**Summary of Changes and Review:**
+
+1.  **`create(array $data)`:**
+    *   **Enhanced SQL:** The `INSERT` statement now includes columns for `subtotal`, `discount_amount`, `coupon_code`, `coupon_id`, `shipping_cost`, `tax_amount`, `payment_status`, `payment_intent_id`, and `updated_at`.
+    *   **Data Handling:** Uses named placeholders (`:placeholder`) for clarity and robustness. Retrieves values from the `$data` array passed by `CheckoutController`, providing defaults (like `null` or `0.00`) where appropriate.
+    *   **Status:** Uses `:status` placeholder, allowing the controller to specify the initial status (e.g., 'pending_payment').
+    *   **Return Value:** Returns `int|false` for better error checking.
+
+2.  **`getById(int $id)`:**
+    *   **Added Item Fetching:** Calls the new private helper `_fetchOrderItems($id)` and adds the result to the `$order['items']` key.
+    *   **Return Type:** Added `: ?array` hint.
+
+3.  **`getByIdAndUserId(int $orderId, int $userId)`:**
+    *   **Implemented:** Added this new method as required.
+    *   **Functionality:** Selects from `orders` based on `id` AND `user_id`.
+    *   **Added Item Fetching:** Calls `_fetchOrderItems($orderId)` and adds items.
+    *   **Return Type:** Added `: ?array` hint.
+
+4.  **`getRecentByUserId(int $userId, int $limit = 5)`:**
+    *   **Refined:** Renamed concatenated items column to `items_summary`. Changed separator to `<br>` for slightly better potential HTML rendering in a simple list. Used `bindValue` for parameters. Added `?: []` to return empty array instead of false if no orders found.
+    *   **Return Type:** Added `: array` hint.
+
+5.  **`getAllByUserId(int $userId, int $page = 1, int $perPage = 10)`:**
+    *   **Implemented:** Added this new method for paginated order history.
+    *   **Functionality:** Selects orders based on `user_id` with `LIMIT` and `OFFSET`.
+    *   **Added Item Fetching:** Iterates through fetched orders and calls `_fetchOrderItems` for each, adding items to `$order['items']`.
+    *   **Return Type:** Added `: array` hint.
+
+6.  **`getTotalOrdersByUserId(int $userId)`:**
+    *   **Implemented:** Added this new method for pagination count.
+    *   **Functionality:** Performs `COUNT(*)` for the user.
+    *   **Return Type:** Added `: int` hint.
+
+7.  **`updateStatus(int $orderId, string $status)`:**
+    *   **Enhanced:** Added `updated_at = NOW()`.
+    *   **Added Logic:** Includes conditional logic to update `payment_status` based on the main `$status`. Sets `paid_at = NOW()` when status becomes 'paid' or 'processing' for the first time using `COALESCE`.
+    *   **Return Type:** Added `: bool` hint.
+
+8.  **`updatePaymentIntentId(int $orderId, string $paymentIntentId)`:**
+    *   **Implemented (Renamed):** Replaced original `updatePaymentIntent`.
+    *   **Added:** `updated_at = NOW()`.
+    *   **Return Type:** Added `: bool` hint.
+
+9.  **`getByPaymentIntentId(string $paymentIntentId)`:**
+    *   **Implemented (Renamed):** Replaced original `getByPaymentIntent`.
+    *   **Functionality:** Selects order based on `payment_intent_id`. Does *not* fetch items by default (can be added if webhooks need item details).
+    *   **Return Type:** Added `: ?array` hint.
+
+10. **`updateStatusAndDispute(...)`, `updateRefundStatus(...)`, `updateTracking(...)`:**
+    *   **Implemented:** Added these new methods as required by `PaymentController` and `CheckoutController`.
+    *   **Functionality:** Perform specific `UPDATE` operations including setting `updated_at` and relevant status/timestamp fields (`disputed_at`, `refunded_at`).
+    *   **Return Type:** Added `: bool` hint.
+
+11. **`_fetchOrderItems(int $orderId)`:**
+    *   **Implemented:** Added this private helper method.
+    *   **Functionality:** Fetches all items for an order, joining with the `products` table to get essential details like name, SKU, and image URL.
+    *   **Return Type:** Added `: array` hint. Returns `[]` if no items.
+
+12. **Removed `updatePaymentStatus`:** This method's logic is now better integrated into `updateStatus` or specific handlers like `updateRefundStatus`.
+
+**Conclusion:**
+
+The updated `models/Order.php` now includes the necessary methods (`updatePaymentIntentId`, `getByPaymentIntentId`, `getByIdAndUserId`, `getAllByUserId`, `getTotalOrdersByUserId`, `updateStatusAndDispute`, `updateRefundStatus`, `updateTracking`) assumed by the previously refactored controllers. The `create` method has been significantly enhanced to store all relevant order details passed from `CheckoutController`. Existing methods have been refined to include item fetching where appropriate and ensure `updated_at` is consistently set. This version aligns well with the requirements of the checkout and payment handling logic.
+
+---
+https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%2211gLlqjm9P5onq6O3bP03zvYHMR1OL5Q6%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/11pHAnzuQujVYyhZSqtRs_-L1pupNj2Mw/view?usp=sharing, https://drive.google.com/file/d/1CqhbbX1wI4FejmRaQqt_LjVj6WPPFNFJ/view?usp=sharing, https://drive.google.com/file/d/1Jro_incgi67_rNrokpTMrYT5MfmT3_ZH/view?usp=sharing, https://drive.google.com/file/d/1LeGw2tBB2CMwMmutAWcrmzIyoQtV3UnU/view?usp=sharing, https://drive.google.com/file/d/1NUz2D4sugn1UnJsOXqrwmsU06WHZq3fR/view?usp=sharing, https://drive.google.com/file/d/1S3jeejXCwisQeyTKfG-7JboP93qjvH2a/view?usp=sharing, https://drive.google.com/file/d/1Uk01MipQX9kWQ5f4HZOI6TP8Fr4s9Pcw/view?usp=sharing, https://drive.google.com/file/d/1V26FOntpGfQ51xF-ciKW3tvB0V0D_Aml/view?usp=sharing, https://drive.google.com/file/d/1WvJwy5ATfaPyJu2bHDQeKw0lc5EviQI8/view?usp=sharing, https://drive.google.com/file/d/1aj7OFfCI5U6wcz1-PcCeRgaegP_8vkXS/view?usp=sharing, https://drive.google.com/file/d/1imW3TDAUBPz4ncXDYOiHdItw0-n4gW0f/view?usp=sharing, https://drive.google.com/file/d/1j_lF5-CNbPuX260HuoFwKOSwMs5m2AEY/view?usp=sharing, https://drive.google.com/file/d/1oWpHoVnF11ul_k05v0HNgtNEMpMOtb4h/view?usp=sharing, https://drive.google.com/file/d/1r7fvQrgps_6Rlr5SjmiOAWN7VK5QwzY6/view?usp=sharing, https://drive.google.com/file/d/1xbWNknkK86fxP2tjD9tY-PQOnP8dvw_m/view?usp=sharing

@@ -104,7 +104,7 @@ class EmailService {
         try {
             $stmt = $this->pdo->prepare("
                 INSERT INTO email_log
-                (user_id, email_type, to_email, subject, status, error_message, sent_at)
+                (user_id, email_type, recipient_email, subject, status, error_message, sent_at)
                 VALUES (?, ?, ?, ?, ?, ?, NOW())
             ");
             $stmt->execute([

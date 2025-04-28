@@ -7,11 +7,16 @@ require_once __DIR__ . '/../config.php'; // For BASE_URL, SECURITY_SETTINGS
 
 abstract class BaseController {
     protected PDO $db; // Use type hint
+    // Remove direct property if only static methods are used from SecurityMiddleware
+    // protected SecurityMiddleware $securityMiddleware;
     protected EmailService $emailService; // Use type hint
     protected array $responseHeaders = []; // Use type hint
 
     public function __construct(PDO $pdo) { // Use type hint
         $this->db = $pdo;
+        // Note: Setting ATTR_ERRMODE is usually done in db.php during connection setup
+        // $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        // $this->securityMiddleware = new SecurityMiddleware(); // Remove if only using static methods
         $this->emailService = new EmailService($this->db); // Pass the PDO connection
         $this->initializeSecurityHeaders();
     }
@@ -31,35 +36,44 @@ abstract class BaseController {
         // Permissions-Policy can be added if needed
     }
 
-    // --- CSRF Methods ---
-    /**
-     * Gets the current CSRF token, generating one if necessary.
-     * Relies on SecurityMiddleware.
-     *
-     * @return string The CSRF token.
-     */
-    protected function getCsrfToken(): string {
-        // Ensure CSRF is enabled in settings before generating
-        if (defined('SECURITY_SETTINGS') && isset(SECURITY_SETTINGS['csrf']['enabled']) && !SECURITY_SETTINGS['csrf']['enabled']) {
-             return ''; // Return empty string if CSRF disabled
-         }
-        return SecurityMiddleware::generateCSRFToken();
-    }
+    // Deprecating sendResponse/sendError in favor of jsonResponse/redirect for clarity
+    /*
+    protected function sendResponse($data, $statusCode = 200) { ... }
+    protected function sendError($message, $statusCode = 400, $context = []) { ... }
+    */
 
-    /**
-     * Validates the CSRF token submitted in a POST request.
-     * Relies on SecurityMiddleware, which throws an exception on failure.
-     * It's recommended to call this at the beginning of POST action handlers.
-     */
-    protected function validateCSRF(): void { // Add return type hint
-         // Ensure CSRF is enabled in settings before validating
-         if (defined('SECURITY_SETTINGS') && isset(SECURITY_SETTINGS['csrf']['enabled']) && !SECURITY_SETTINGS['csrf']['enabled']) {
-              return; // Skip validation if CSRF disabled
-          }
-        SecurityMiddleware::validateCSRF(); // Throws exception on failure
-    }
-    // --- End CSRF Methods ---
+    // Deprecating validateRequest/validateField in favor of using SecurityMiddleware::validateInput directly
+    /*
+    protected function validateRequest($rules) { ... }
+    protected function validateField($value, $rule) { ... }
+    */
 
+    // Deprecating getRequestInput in favor of direct access to $_GET, $_POST, file_get_contents('php://input')
+    /*
+    protected function getRequestInput() { ... }
+    */
+
+    // Deprecating sanitizeInput/sanitizeOutput in favor of direct htmlspecialchars() in views and SecurityMiddleware::validateInput
+    /*
+    protected function sanitizeInput($data) { ... }
+    protected function sanitizeOutput($data) { ... }
+    */
+
+    // Deprecating shouldIncludeCSRFToken - CSRF generation handled by generateCSRFToken, validation by validateCSRF
+    /*
+    protected function shouldIncludeCSRFToken() { ... }
+    */
+
+    // Deprecating requireAuthentication/requireCSRFToken - use requireLogin/validateCSRF
+    /*
+    protected function requireAuthentication() { ... }
+    protected function requireCSRFToken() { ... }
+    */
+
+    // Deprecating rateLimit - use validateRateLimit
+    /*
+    protected function rateLimit($key, $maxAttempts = 60, $decayMinutes = 1) { ... }
+    */
 
     /**
      * Ensures the user is logged in. If not, redirects to the login page or sends a 401 JSON response.
@@ -68,11 +82,6 @@ abstract class BaseController {
      * @param bool $isAjaxRequest Set to true if the request is AJAX, to return JSON instead of redirecting.
      */
     protected function requireLogin(bool $isAjaxRequest = false): void { // Added optional param and return type
-        // Ensure session is started
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-
         if (!isset($_SESSION['user_id'])) {
             $details = [
                 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN',
@@ -132,7 +141,6 @@ abstract class BaseController {
         }
     }
 
-
     /**
      * Validates input data using SecurityMiddleware.
      * This is a convenience wrapper. Direct use of SecurityMiddleware::validateInput is also fine.
@@ -146,6 +154,24 @@ abstract class BaseController {
         return SecurityMiddleware::validateInput($input, $type, $options);
     }
 
+    /**
+     * Gets the current CSRF token, generating one if necessary.
+     * Relies on SecurityMiddleware.
+     *
+     * @return string The CSRF token.
+     */
+    protected function getCsrfToken(): string {
+        return SecurityMiddleware::generateCSRFToken();
+    }
+
+    /**
+     * Validates the CSRF token submitted in a POST request.
+     * Relies on SecurityMiddleware, which throws an exception on failure.
+     * It's recommended to call this at the beginning of POST action handlers.
+     */
+    protected function validateCSRF(): void { // Add return type hint
+        SecurityMiddleware::validateCSRF(); // Throws exception on failure
+    }
 
     /**
      * Sends a JSON response and terminates script execution.
@@ -179,30 +205,24 @@ abstract class BaseController {
     protected function redirect(string $url, int $statusCode = 302): void { // Add return type hint
         // Basic check to prevent header injection from $url if it comes from user input
          // Allow relative paths starting with '/' or alphanumeric, or full URLs
-        if (!preg_match('~^(/|[\w\-./?=&%]+|https?://)~', $url)) { // Improved regex
-             error_log("Invalid redirect URL pattern detected: " . $url);
+        if (!preg_match('~^(/|[\w-]+.*|https?://)~', $url)) {
+             error_log("Invalid redirect URL detected: " . $url);
              $url = '/'; // Redirect home as safe fallback
          }
 
         // Prepend BASE_URL if it's a relative path
         if (!preg_match('~^https?://~i', $url)) {
-             // Ensure BASE_URL ends with a slash and $url doesn't start with one if needed
-             $baseUrl = rtrim(BASE_URL, '/') . '/';
-             $url = ltrim($url, '/');
-             $finalUrl = $baseUrl . $url;
-        } else {
-            $finalUrl = $url;
+            $url = rtrim(BASE_URL, '/') . '/' . ltrim($url, '/');
         }
 
-
         // Validate the final URL structure (optional but recommended)
-        if (!filter_var($finalUrl, FILTER_VALIDATE_URL)) {
-            error_log("Redirect URL validation failed after constructing: " . $finalUrl);
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            error_log("Redirect URL validation failed after constructing: " . $url);
             header('Location: ' . rtrim(BASE_URL, '/') . '/'); // Redirect home as safe fallback
             exit;
         }
 
-        header('Location: ' . $finalUrl, true, $statusCode);
+        header('Location: ' . $url, true, $statusCode);
         exit;
     }
 
@@ -214,7 +234,7 @@ abstract class BaseController {
      */
     protected function setFlashMessage(string $message, string $type = 'info'): void { // Add return type hint
         // Ensure session is started before trying to write to it
-        if (session_status() === PHP_SESSION_NONE) {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
              // Attempt to start session only if headers not sent
              if (!headers_sent()) {
                   session_start();
@@ -226,7 +246,10 @@ abstract class BaseController {
         }
         $_SESSION['flash_message'] = $message;
         $_SESSION['flash_type'] = $type;
+        // Removed 'created' timestamp as it wasn't used and complicates testing
     }
+
+    // Removed getFlashMessage - typically handled in header/view logic
 
     // Transaction helpers
     protected function beginTransaction(): void { $this->db->beginTransaction(); } // Add return type hint
@@ -236,6 +259,10 @@ abstract class BaseController {
     // User helpers
     protected function getCurrentUser(): ?array { return $_SESSION['user'] ?? null; } // Add return type hint
     protected function getUserId(): ?int { return isset($_SESSION['user']['id']) ? (int)$_SESSION['user']['id'] : null; } // Add return type hint
+
+    // Removed validateAjax - use header checks in specific controller actions if needed
+
+    // Removed isRateLimited - use validateRateLimit instead
 
     /**
      * Renders a view template with provided data.
@@ -277,6 +304,12 @@ abstract class BaseController {
         return ob_get_clean();
     }
 
+    // Removed validateFileUpload - use SecurityMiddleware::validateFileUpload directly or wrap if needed
+
+    // Removed log - use logAuditTrail or logSecurityEvent for specific purposes, or error_log for general debugging
+
+    // Removed checkRateLimit - use validateRateLimit instead
+
     /**
      * Logs an action to the audit trail database table.
      *
@@ -309,6 +342,7 @@ abstract class BaseController {
      *
      * @return bool True if markers are present and match, false otherwise.
      */
+     // --- VISIBILITY FIX APPLIED HERE ---
     protected function validateSessionIntegrity(): bool { // Changed from private to protected
         // Check if essential markers exist
         if (!isset($_SESSION['user_agent']) || !isset($_SESSION['ip_address'])) {
@@ -342,6 +376,7 @@ abstract class BaseController {
      *
      * @return bool True if session should be regenerated, false otherwise.
      */
+     // --- VISIBILITY FIX APPLIED HERE ---
     protected function shouldRegenerateSession(): bool { // Changed from private to protected
         $interval = SECURITY_SETTINGS['session']['regenerate_id_interval'] ?? 900; // Default 15 mins from config
         // Check if last_regeneration is set and if interval has passed
@@ -351,6 +386,7 @@ abstract class BaseController {
     /**
      * Regenerates the session ID securely, preserving necessary session data.
      */
+    // --- VISIBILITY FIX APPLIED HERE ---
     protected function regenerateSession(): void { // Changed from private to protected
         if (session_status() !== PHP_SESSION_ACTIVE) {
             return; // Can't regenerate if session not active
@@ -425,6 +461,7 @@ abstract class BaseController {
 
         $ip = $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN';
         if ($ip === 'UNKNOWN') {
+            // Cannot rate limit if IP is unknown, log maybe? Or allow? For now, allow but log warning.
              error_log("Rate Limiting Warning: Cannot determine client IP address for action '{$action}'.");
              return;
         }
@@ -437,39 +474,34 @@ abstract class BaseController {
         // Use APCu for rate limiting (Ensure APCu extension is installed and enabled)
         if (function_exists('apcu_enabled') && apcu_enabled()) {
             $key = "rate_limit:{$action}:{$ip}";
-            // Fetch attempts *atomically* if possible, otherwise handle potential race condition
-            // apcu_inc returns the new value, apcu_add returns true/false
-             $current_attempts = apcu_inc($key);
+            $attempts = apcu_fetch($key, $success);
 
-             if ($current_attempts === false) { // Key didn't exist or another issue
-                  // Try adding the key with count 1 and TTL
-                  if (apcu_add($key, 1, $settings['window'])) {
-                      $current_attempts = 1;
-                  } else {
-                      // If add failed, it might mean it was just created by another request - try incrementing again
-                      $current_attempts = apcu_inc($key);
-                      if ($current_attempts === false) {
-                           // Still failed, maybe APCu issue? Log error and potentially skip check
-                           error_log("Rate Limiting Error: Failed to initialize or increment APCu key '{$key}'.");
-                           $this->logSecurityEvent('rate_limit_backend_error', ['action' => $action, 'ip' => $ip, 'key' => $key]);
-                           return; // Fail open in this edge case? Or throw 500?
-                      }
-                  }
-             }
+            if (!$success) { // First attempt in the window
+                apcu_store($key, 1, $settings['window']); // Store count 1 with TTL
+                $attempts = 1;
+            } else {
+                $attempts = apcu_inc($key); // Increment if key exists
+            }
 
-
-            if ($current_attempts > $settings['max_requests']) {
+            if ($attempts > $settings['max_requests']) {
                 $this->logSecurityEvent('rate_limit_exceeded', [
                     'action' => $action, 'ip' => $ip, 'limit' => $settings['max_requests'], 'window' => $settings['window']
                 ]);
+                // Throw exception to be caught by index.php or specific controller
                 throw new Exception('Rate limit exceeded. Please try again later.', 429);
             }
         } else {
+            // APCu not available - Log a warning, behavior depends on desired security posture (fail open/closed)
+            // Failing open here for simplicity, but logging the event.
             error_log("Rate Limiting Warning: APCu extension is not available or enabled. Rate limiting skipped for action '{$action}' from IP {$ip}.");
             $this->logSecurityEvent('rate_limit_backend_unavailable', ['action' => $action, 'ip' => $ip]);
+            // To fail closed (more secure), uncomment the next line:
+            // throw new Exception('Rate limiting service unavailable. Please try again later.', 503);
         }
     }
 
+    // Removed validateCSRFToken - use validateCSRF
+    // Removed generateCSRFToken - use getCsrfToken
 
     /**
      * Logs a security-related event to the designated security log file.
