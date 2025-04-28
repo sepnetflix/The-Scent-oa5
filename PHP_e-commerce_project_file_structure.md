@@ -6,10 +6,10 @@ $ ls -l index.php css/style.css js/main.js particles.json .htaccess config.php i
 ```
 -rw-rw-r-- 1 pete pete       508 Apr 18 04:44 .htaccess
 -rwxr-xr-x 1 pete pete      3700 Apr 27 15:18 config.php
--rw-rw-r-- 1 pete pete     33978 Apr 27 08:35 controllers/AccountController.php
--rw-rw-r-- 1 pete pete     19024 Apr 27 11:13 controllers/BaseController.php
--rw-rw-r-- 1 pete pete     18837 Apr 26 09:32 controllers/CartController.php
--rw-rw-r-- 1 pete pete     26864 Apr 28 07:44 controllers/CheckoutController.php
+-rw-rw-r-- 1 pete pete     34039 Apr 28 11:39 controllers/AccountController.php
+-rw-rw-r-- 1 pete pete     23902 Apr 28 11:24 controllers/BaseController.php
+-rw-rw-r-- 1 pete pete     20312 Apr 28 13:13 controllers/CartController.php
+-rw-rw-r-- 1 pete pete     27657 Apr 28 19:00 controllers/CheckoutController.php
 -rw-rw-r-- 1 pete pete     21651 Apr 28 08:20 controllers/CouponController.php
 -rw-rw-r-- 1 pete pete     15243 Apr 27 09:34 controllers/InventoryController.php
 -rw-rw-r-- 1 pete pete     10374 Apr 27 09:34 controllers/NewsletterController.php
@@ -27,11 +27,11 @@ $ ls -l index.php css/style.css js/main.js particles.json .htaccess config.php i
 -rw-rw-r-- 1 pete pete       193 Apr 27 08:24 includes/reset_cache.php
 -rw-rw-r-- 1 pete pete     16253 Apr 28 08:25 index.php
 -rw-rw-r-- 1 pete pete     70516 Apr 26 08:24 js/main.js
--rw-rw-r-- 1 pete pete      2402 Apr 25 11:06 models/Cart.php
+-rw-rw-r-- 1 pete pete      7065 Apr 28 14:00 models/Cart.php
 -rw-rw-r-- 1 pete pete     13226 Apr 28 08:46 models/Order.php
 -rwxr-xr-x 1 pete www-data 11978 Apr 25 12:22 models/Product.php
 -rwxr-xr-x 1 pete www-data  9900 Apr 14 15:33 models/Quiz.php
--rwxr-xr-x 1 pete www-data  2067 Apr 27 08:42 models/User.php
+-rw-rw-r-- 1 pete pete      9792 Apr 28 19:19 models/User.php
 -rwxr-xr-x 1 pete pete      1401 Apr 18 04:53 particles.json
 -rw-rw-r-- 1 pete pete      1111 Apr 25 07:44 views/404.php
 -rw-rw-r-- 1 pete pete      6198 Apr 26 18:54 views/about.php

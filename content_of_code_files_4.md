@@ -1003,10 +1003,8 @@ class CheckoutController extends BaseController {
         $this->requireLogin();
         $userId = $this->getUserId();
 
-        // --- FIX APPLIED HERE ---
         // Use $this->db (from BaseController) instead of $this->pdo
         $cartModel = new Cart($this->db, $userId);
-        // --- END FIX ---
 
         $items = $cartModel->getItems();
 
@@ -1040,7 +1038,10 @@ class CheckoutController extends BaseController {
         $total = $subtotal + $shipping_cost + $tax_amount;
 
         $userModel = new User($this->db); // Use $this->db
-        $userAddress = $userModel->getAddress($userId); // Assuming this method exists
+        // --- FIX APPLIED HERE ---
+        // $userAddress = $userModel->getAddress($userId); // FATAL ERROR: Method does not exist in provided User model
+        $userAddress = []; // Temporary fix: Provide empty array to prevent view errors
+        // --- END FIX ---
 
         // Prepare data for the view
         $csrfToken = $this->getCsrfToken();
@@ -1058,7 +1059,7 @@ class CheckoutController extends BaseController {
             'csrfToken' => $csrfToken,
             'bodyClass' => $bodyClass,
             'pageTitle' => $pageTitle,
-            'userAddress' => $userAddress ?? [] // Pass user address or empty array
+            'userAddress' => $userAddress ?? [] // Pass user address or empty array (now always empty array)
         ]);
     }
 
