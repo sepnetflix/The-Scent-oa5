@@ -1,9 +1,11 @@
 <?php
-// views/layout/header.php (Updated with data-* attributes for JS config)
-
 require_once __DIR__ . '/../../includes/auth.php'; // Provides isLoggedIn()
 // It's assumed the controller rendering this view has already generated
 // and passed $csrfToken and $bodyClass variables into the view's scope.
+// Example in controller:
+// $csrfToken = $this->generateCSRFToken();
+// $bodyClass = 'page-whatever';
+// echo $this->renderView('view_name', compact('csrfToken', 'bodyClass', 'pageTitle', ...));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -43,11 +45,7 @@ require_once __DIR__ . '/../../includes/auth.php'; // Provides isLoggedIn()
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/css/style.css">
 </head>
-<body class="<?= isset($bodyClass) ? htmlspecialchars($bodyClass) : '' ?>"
-      data-base-url="<?= htmlspecialchars(BASE_URL ?? '/', ENT_QUOTES, 'UTF-8') ?>"
-      data-stripe-public-key="<?= htmlspecialchars(STRIPE_PUBLIC_KEY ?? '', ENT_QUOTES, 'UTF-8') ?>"
-      data-free-shipping-threshold="<?= htmlspecialchars(FREE_SHIPPING_THRESHOLD ?? '50', ENT_QUOTES, 'UTF-8') ?>"
-      data-base-shipping-cost="<?= htmlspecialchars(SHIPPING_COST ?? '5.99', ENT_QUOTES, 'UTF-8') ?>">
+<body class="<?= isset($bodyClass) ? htmlspecialchars($bodyClass) : '' ?>">
 
     <!-- Global CSRF Token Input for JavaScript AJAX Requests -->
     <input type="hidden" id="csrf-token-value" value="<?= isset($csrfToken) ? htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') : '' ?>">
@@ -75,10 +73,13 @@ require_once __DIR__ . '/../../includes/auth.php'; // Provides isLoggedIn()
                     <?php endif; ?>
                     <a href="index.php?page=cart" class="cart-link relative group" aria-label="Cart">
                         <i class="fas fa-shopping-bag"></i>
-                        <?php
+                        <?php // Calculate cart count based on session/DB depending on login state
                             $cartCount = 0;
-                            if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); } // Ensure session started
                             if (isLoggedIn()) {
+                                // If logged in, the count might be updated via AJAX later,
+                                // but we could fetch it initially if CartController is available here.
+                                // For simplicity, often rely on session or JS update.
+                                // Let's assume $_SESSION['cart_count'] is updated appropriately on cart actions.
                                 $cartCount = $_SESSION['cart_count'] ?? 0;
                             } else {
                                 $cartCount = isset($_SESSION['cart']) ? array_sum($_SESSION['cart']) : 0;
@@ -107,10 +108,13 @@ require_once __DIR__ . '/../../includes/auth.php'; // Provides isLoggedIn()
         <!-- Flash message display area (consider moving if needed, but often okay here) -->
         <?php if (isset($_SESSION['flash_message'])): ?>
             <script>
+                // Use the JS function immediately if available, or queue it
+                // This handles flash messages set by non-AJAX requests (like redirects)
                 document.addEventListener('DOMContentLoaded', function() {
                     if (typeof window.showFlashMessage === 'function') {
                         window.showFlashMessage(<?= json_encode($_SESSION['flash_message']) ?>, <?= json_encode($_SESSION['flash_type'] ?? 'info') ?>);
                     } else {
+                        // Fallback or queue if main.js loads later somehow
                         console.warn('showFlashMessage not ready for server-side flash.');
                     }
                 });
@@ -120,3 +124,4 @@ require_once __DIR__ . '/../../includes/auth.php'; // Provides isLoggedIn()
 
         <!-- Container for dynamically added flash messages by JS -->
         <div class="flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full space-y-2"></div>
+

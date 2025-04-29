@@ -1,0 +1,30 @@
+[2025-04-29 06:48:47 UTC] [WARNING] Potentially security-related exception caught | Context: {
+    "ip": "127.0.0.1",
+    "user_id": null,
+    "type": "Exception",
+    "message": "CSRF token validation failed",
+    "file": "/cdrom/project/The-Scent-oa5/includes/SecurityMiddleware.php",
+    "line": 276,
+    "trace": "#0 /cdrom/project/The-Scent-oa5/index.php(39): SecurityMiddleware::validateCSRF()\n#1 {main}",
+    "context": {
+        "url": "/index.php?page=login",
+        "method": "POST",
+        "ip": "127.0.0.1",
+        "timestamp": "2025-04-29 06:48:47 UTC"
+    }
+}
+[2025-04-29 06:48:47 UTC] [WARNING] Security-related error detected | Context: {
+    "ip": "127.0.0.1",
+    "user_id": null,
+    "type": "Exception",
+    "message": "CSRF token validation failed",
+    "file": "/cdrom/project/The-Scent-oa5/includes/SecurityMiddleware.php",
+    "line": 276,
+    "trace": "#0 /cdrom/project/The-Scent-oa5/index.php(39): SecurityMiddleware::validateCSRF()\n#1 {main}",
+    "context": {
+        "url": "/index.php?page=login",
+        "method": "POST",
+        "ip": "127.0.0.1",
+        "timestamp": "2025-04-29 06:48:47 UTC"
+    }
+}

@@ -5,45 +5,42 @@ define('ROOT_PATH', __DIR__);
 require_once __DIR__ . '/config.php'; // Defines BASE_URL, etc.
 
 // --- START: Added Composer Autoloader ---
-// Ensure the vendor directory exists (check after running 'composer install' or 'composer require')
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
     require_once __DIR__ . '/vendor/autoload.php';
 } else {
-    // Log a fatal error or display a message if Composer dependencies are missing
     error_log("FATAL ERROR: Composer autoloader not found. Run 'composer install'.");
-    // Optionally display a user-friendly error page if possible, but dependencies might be needed for that too.
     echo "Internal Server Error: Application dependencies are missing. Please contact support.";
-    exit(1); // Stop execution
+    exit(1);
 }
 // --- END: Added Composer Autoloader ---
 
 require_once __DIR__ . '/includes/db.php';
-require_once __DIR__ . '/includes/auth.php'; // Provides isLoggedIn(), isAdmin(), logoutUser()
+require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/SecurityMiddleware.php';
 require_once __DIR__ . '/includes/ErrorHandler.php';
 
-// Initialize error handling
 ErrorHandler::init();
-
-// Apply security middleware (handles session start, base headers)
 SecurityMiddleware::apply();
 
 try {
-    // Handle routing - Use SecurityMiddleware for validation
     $page = SecurityMiddleware::validateInput($_GET['page'] ?? 'home', 'string') ?: 'home';
-    $action = SecurityMiddleware::validateInput($_GET['action'] ?? null, 'string') ?: null; // Allow null action
-    $id = SecurityMiddleware::validateInput($_GET['id'] ?? null, 'int'); // Validate ID if present
+    $action = SecurityMiddleware::validateInput($_GET['action'] ?? null, 'string') ?: null;
+    $id = SecurityMiddleware::validateInput($_GET['id'] ?? null, 'int');
 
-    // Validate CSRF token for POST requests globally
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        // Ensure CSRF token is generated if not already (e.g., first POST in session)
-        SecurityMiddleware::generateCSRFToken();
-        // Validate submitted token
-        // Note: Some controllers might re-validate CSRF internally for specific actions
-        SecurityMiddleware::validateCSRF(); // Throws exception on failure
+    // --- Stripe Webhook Route (skip CSRF) ---
+    if ($page === 'payment' && $action === 'webhook' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        require_once __DIR__ . '/controllers/PaymentController.php';
+        $controller = new PaymentController($pdo);
+        $controller->handleWebhook(); // Handles Stripe POST, returns JSON
+        exit;
     }
 
-    // Route to appropriate controller/action
+    // --- CSRF validation for POST (skip for Stripe webhook) ---
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        SecurityMiddleware::generateCSRFToken();
+        SecurityMiddleware::validateCSRF();
+    }
+
     switch ($page) {
         case 'home':
             require_once __DIR__ . '/controllers/ProductController.php';
@@ -96,42 +93,35 @@ try {
             break;
 
         case 'checkout':
-             // Login check before proceeding
-            if (!isLoggedIn()) {
-                $_SESSION['redirect_after_login'] = BASE_URL . 'index.php?page=checkout'; // Store intended page
-                header('Location: ' . BASE_URL . 'index.php?page=login'); // Redirect to login
+            // Allow confirmation page check without login initially
+            if (!isLoggedIn() && $action !== 'confirmation') {
+                $_SESSION['redirect_after_login'] = BASE_URL . 'index.php?page=checkout' . ($action ? '&action=' . $action : '');
+                header('Location: ' . BASE_URL . 'index.php?page=login');
                 exit;
             }
             require_once __DIR__ . '/controllers/CheckoutController.php';
-            require_once __DIR__ . '/controllers/CartController.php'; // Need CartController to check items
-
-             // Check if cart is empty only for the main checkout page display
-             if (empty($action)) { // Only check if no action specified (i.e., loading the main page)
-                $cartCtrl = new CartController($pdo); // Instantiate to check cart
-                $cartItems = $cartCtrl->getCartItems();
-                if (empty($cartItems)) {
+            require_once __DIR__ . '/controllers/CartController.php';
+            // Only check cart for main page load
+            if (empty($action)) {
+                $cartCtrl = new CartController($pdo);
+                if (empty($cartCtrl->getCartItems())) {
+                    if (method_exists($cartCtrl, 'setFlashMessage')) {
+                        $cartCtrl->setFlashMessage('Your cart is empty.', 'info');
+                    }
                     header('Location: ' . BASE_URL . 'index.php?page=products');
                     exit;
                 }
             }
-
             $controller = new CheckoutController($pdo);
-            if ($action === 'processCheckout' && $_SERVER['REQUEST_METHOD'] === 'POST') { // Matched JS call action name
-                $controller->processCheckout(); // Exits via jsonResponse
-            } elseif ($action === 'confirmation') { // GET request typically after payment redirect
-                 $controller->showOrderConfirmation(); // Shows the confirmation view
-            } elseif ($action === 'calculateTax' && $_SERVER['REQUEST_METHOD'] === 'POST') { // Matched JS call action name
-                $controller->calculateTax(); // Exits via jsonResponse
-            } elseif ($action === 'applyCouponAjax' && $_SERVER['REQUEST_METHOD'] === 'POST') { // Matched JS call action name and added route
-                 // No need to include CheckoutController again if already included
-                 $controller->applyCouponAjax(); // Call method in CheckoutController
-                 // **Alternative:** Call CouponController directly if preferred
-                 // require_once __DIR__ . '/controllers/CouponController.php';
-                 // $couponController = new CouponController($pdo);
-                 // $couponController->applyCouponAjax(); // Assumes method exists there
-            }
-            else {
-                // Default GET request: show the checkout page
+            if ($action === 'processCheckout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+                $controller->processCheckout();
+            } elseif ($action === 'confirmation') {
+                $controller->showOrderConfirmation();
+            } elseif ($action === 'calculateTax' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+                $controller->calculateTax();
+            } elseif ($action === 'applyCouponAjax' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+                $controller->applyCouponAjax();
+            } else {
                 $controller->showCheckout();
             }
             break;
@@ -654,13 +644,11 @@ $delay = 0; // Initialize delay counter for animations
 # views/layout/header.php  
 ```php
 <?php
+// views/layout/header.php (Updated with data-* attributes for JS config)
+
 require_once __DIR__ . '/../../includes/auth.php'; // Provides isLoggedIn()
 // It's assumed the controller rendering this view has already generated
 // and passed $csrfToken and $bodyClass variables into the view's scope.
-// Example in controller:
-// $csrfToken = $this->generateCSRFToken();
-// $bodyClass = 'page-whatever';
-// echo $this->renderView('view_name', compact('csrfToken', 'bodyClass', 'pageTitle', ...));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -700,7 +688,11 @@ require_once __DIR__ . '/../../includes/auth.php'; // Provides isLoggedIn()
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/css/style.css">
 </head>
-<body class="<?= isset($bodyClass) ? htmlspecialchars($bodyClass) : '' ?>">
+<body class="<?= isset($bodyClass) ? htmlspecialchars($bodyClass) : '' ?>"
+      data-base-url="<?= htmlspecialchars(BASE_URL ?? '/', ENT_QUOTES, 'UTF-8') ?>"
+      data-stripe-public-key="<?= htmlspecialchars(STRIPE_PUBLIC_KEY ?? '', ENT_QUOTES, 'UTF-8') ?>"
+      data-free-shipping-threshold="<?= htmlspecialchars(FREE_SHIPPING_THRESHOLD ?? '50', ENT_QUOTES, 'UTF-8') ?>"
+      data-base-shipping-cost="<?= htmlspecialchars(SHIPPING_COST ?? '5.99', ENT_QUOTES, 'UTF-8') ?>">
 
     <!-- Global CSRF Token Input for JavaScript AJAX Requests -->
     <input type="hidden" id="csrf-token-value" value="<?= isset($csrfToken) ? htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') : '' ?>">
@@ -728,13 +720,10 @@ require_once __DIR__ . '/../../includes/auth.php'; // Provides isLoggedIn()
                     <?php endif; ?>
                     <a href="index.php?page=cart" class="cart-link relative group" aria-label="Cart">
                         <i class="fas fa-shopping-bag"></i>
-                        <?php // Calculate cart count based on session/DB depending on login state
+                        <?php
                             $cartCount = 0;
+                            if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); } // Ensure session started
                             if (isLoggedIn()) {
-                                // If logged in, the count might be updated via AJAX later,
-                                // but we could fetch it initially if CartController is available here.
-                                // For simplicity, often rely on session or JS update.
-                                // Let's assume $_SESSION['cart_count'] is updated appropriately on cart actions.
                                 $cartCount = $_SESSION['cart_count'] ?? 0;
                             } else {
                                 $cartCount = isset($_SESSION['cart']) ? array_sum($_SESSION['cart']) : 0;
@@ -763,13 +752,10 @@ require_once __DIR__ . '/../../includes/auth.php'; // Provides isLoggedIn()
         <!-- Flash message display area (consider moving if needed, but often okay here) -->
         <?php if (isset($_SESSION['flash_message'])): ?>
             <script>
-                // Use the JS function immediately if available, or queue it
-                // This handles flash messages set by non-AJAX requests (like redirects)
                 document.addEventListener('DOMContentLoaded', function() {
                     if (typeof window.showFlashMessage === 'function') {
                         window.showFlashMessage(<?= json_encode($_SESSION['flash_message']) ?>, <?= json_encode($_SESSION['flash_type'] ?? 'info') ?>);
                     } else {
-                        // Fallback or queue if main.js loads later somehow
                         console.warn('showFlashMessage not ready for server-side flash.');
                     }
                 });
@@ -779,7 +765,6 @@ require_once __DIR__ . '/../../includes/auth.php'; // Provides isLoggedIn()
 
         <!-- Container for dynamically added flash messages by JS -->
         <div class="flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full space-y-2"></div>
-
 
 ```
 
@@ -1524,6 +1509,8 @@ abstract class BaseController {
 # models/User.php  
 ```php
 <?php
+// models/User.php (Updated to implement getAddress)
+
 class User {
     private $pdo;
 
@@ -1611,22 +1598,32 @@ class User {
     }
 
     /**
-     * Placeholder method to get user address.
-     * Requires database schema changes (e.g., address fields in 'users' table or a separate 'user_addresses' table).
-     * Currently returns null as the schema doesn't support addresses.
+     * Gets the user's address details from the database.
+     * Uses the address columns added to the 'users' table.
      *
      * @param int $userId User ID.
-     * @return array|null Address data array or null if not implemented/found.
+     * @return array|null Address data array or null if user not found.
      */
     public function getAddress(int $userId): ?array {
-        // TODO: Implement address fetching logic once database schema supports it.
-        // Example (if fields were added to users table):
-        // $stmt = $this->pdo->prepare("SELECT address_line1, address_line2, city, state, postal_code, country FROM users WHERE id = ?");
-        // $stmt->execute([$userId]);
-        // return $stmt->fetch() ?: null;
+        // --- START FIX: Implement getAddress ---
+        try {
+            // Select the specific address columns from the users table
+            $sql = "SELECT address_line1, address_line2, city, state, postal_code, country
+                    FROM users
+                    WHERE id = ?";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$userId]);
+            $address = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        // Current placeholder:
-        return null;
+            // fetch() returns false if no row is found. Return null in that case.
+            return $address ?: null;
+
+        } catch (PDOException $e) {
+            // Log the error and return null if the query fails
+            error_log("Error fetching address for user ID {$userId}: " . $e->getMessage());
+            return null;
+        }
+        // --- END FIX ---
     }
 
     /**
@@ -1752,5 +1749,268 @@ class User {
 
 } // End of User class
 
+```
+
+# models/Quiz.php  
+```php
+<?php
+class Quiz {
+    private $pdo;
+    
+    public function __construct($pdo) {
+        $this->pdo = $pdo;
+    }
+    
+    public function getQuestions() {
+        return [
+            [
+                'id' => 'mood',
+                'question' => 'What are you looking for today?',
+                'options' => [
+                    'relaxation' => [
+                        'label' => 'Relaxation',
+                        'icon' => 'fa-spa',
+                        'description' => 'Find calm and peace in your daily routine'
+                    ],
+                    'energy' => [
+                        'label' => 'Energy',
+                        'icon' => 'fa-bolt',
+                        'description' => 'Boost your vitality and motivation'
+                    ],
+                    'focus' => [
+                        'label' => 'Focus',
+                        'icon' => 'fa-brain',
+                        'description' => 'Enhance concentration and clarity'
+                    ],
+                    'balance' => [
+                        'label' => 'Balance',
+                        'icon' => 'fa-yin-yang',
+                        'description' => 'Find harmony in body and mind'
+                    ]
+                ]
+            ]
+        ];
+    }
+    
+    public function getRecommendations($answers) {
+        try {
+            $moodEffectMap = [
+                'relaxation' => 'calming',
+                'energy' => 'energizing',
+                'focus' => 'focusing',
+                'balance' => 'balancing'
+            ];
+
+            $mood = $answers['mood'] ?? 'relaxation';
+            $moodEffect = $moodEffectMap[$mood] ?? 'calming';
+            
+            // Get matching products based on mood and attributes
+            $stmt = $this->pdo->prepare("
+                SELECT DISTINCT p.*, pa.mood_effect, pa.scent_type, pa.intensity_level
+                FROM products p
+                JOIN product_attributes pa ON p.id = pa.product_id
+                WHERE pa.mood_effect = ?
+                ORDER BY RAND()
+                LIMIT 3
+            ");
+            
+            $stmt->execute([$moodEffect]);
+            $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // If no exact matches, get featured products as fallback
+            if (empty($products)) {
+                $stmt = $this->pdo->prepare("
+                    SELECT DISTINCT p.*, pa.mood_effect, pa.scent_type, pa.intensity_level
+                    FROM products p
+                    JOIN product_attributes pa ON p.id = pa.product_id
+                    WHERE p.is_featured = 1
+                    ORDER BY RAND()
+                    LIMIT 3
+                ");
+                $stmt->execute();
+                $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+            
+            // Add scent descriptions
+            foreach ($products as &$product) {
+                $product['scent_description'] = $this->getScentDescription($product['scent_type']);
+                $product['mood_description'] = $this->getMoodDescription($product['mood_effect']);
+            }
+            
+            return $products;
+        } catch (PDOException $e) {
+            error_log("Error getting recommendations: " . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    public function saveQuizResult($userId, $email, $answers, $recommendations) {
+        try {
+            $stmt = $this->pdo->prepare("
+                INSERT INTO quiz_results 
+                (user_id, email, answers, recommendations, created_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ");
+            
+            return $stmt->execute([
+                $userId,
+                $email,
+                json_encode($answers),
+                json_encode($recommendations)
+            ]);
+        } catch (PDOException $e) {
+            error_log("Error saving quiz result: " . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    private function getScentDescription($scentType) {
+        $descriptions = [
+            'floral' => 'Delicate and romantic floral notes that bring peace and harmony',
+            'woody' => 'Rich, grounding woody scents that promote stability and strength',
+            'citrus' => 'Bright, uplifting citrus notes that energize and refresh',
+            'oriental' => 'Warm, exotic notes that create a sense of luxury and comfort',
+            'fresh' => 'Clean, crisp scents that invigorate and purify'
+        ];
+        
+        return $descriptions[$scentType] ?? '';
+    }
+    
+    private function getMoodDescription($moodEffect) {
+        $descriptions = [
+            'calming' => 'Perfect for relaxation and stress relief',
+            'energizing' => 'Ideal for boosting energy and motivation',
+            'focusing' => 'Helps improve concentration and mental clarity',
+            'balancing' => 'Promotes overall harmony and well-being'
+        ];
+        
+        return $descriptions[$moodEffect] ?? '';
+    }
+    
+    public function getAnalytics($timeRange = 30) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT 
+                    DATE(created_at) as date,
+                    COUNT(*) as total_quizzes,
+                    COUNT(DISTINCT user_id) as unique_users,
+                    COUNT(DISTINCT CASE WHEN user_id IS NOT NULL THEN user_id END) as registered_users,
+                    COUNT(DISTINCT CASE WHEN user_id IS NULL THEN email END) as guest_users
+                FROM quiz_results
+                WHERE created_at >= DATE_SUB(CURRENT_DATE, INTERVAL ? DAY)
+                GROUP BY DATE(created_at)
+                ORDER BY date DESC
+            ");
+            
+            $stmt->execute([$timeRange]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error getting quiz analytics: " . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    public function getPopularMoods($timeRange = 30) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT 
+                    JSON_UNQUOTE(JSON_EXTRACT(answers, '$.mood')) as mood,
+                    COUNT(*) as count
+                FROM quiz_results
+                WHERE created_at >= DATE_SUB(CURRENT_DATE, INTERVAL ? DAY)
+                GROUP BY mood
+                ORDER BY count DESC
+            ");
+            
+            $stmt->execute([$timeRange]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error getting popular moods: " . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    public function getPersonalizedRecommendations($userId, $limit = 3) {
+        try {
+            // Get user's previous quiz results
+            $stmt = $this->pdo->prepare("
+                SELECT answers, recommendations
+                FROM quiz_results
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                LIMIT 5
+            ");
+            
+            $stmt->execute([$userId]);
+            $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            if (empty($history)) {
+                // If no history, return featured products
+                $stmt = $this->pdo->prepare("
+                    SELECT p.*, pa.mood_effect, pa.scent_type
+                    FROM products p
+                    JOIN product_attributes pa ON p.id = pa.product_id
+                    WHERE p.is_featured = 1
+                    LIMIT ?
+                ");
+                $stmt->execute([$limit]);
+                return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+            
+            // Analyze preferences
+            $moodCounts = [];
+            $scentCounts = [];
+            foreach ($history as $result) {
+                $answers = json_decode($result['answers'], true);
+                $recommendations = json_decode($result['recommendations'], true);
+                
+                if (isset($answers['mood'])) {
+                    $moodCounts[$answers['mood']] = ($moodCounts[$answers['mood']] ?? 0) + 1;
+                }
+                
+                // Get scent types from recommended products
+                $stmt = $this->pdo->prepare("
+                    SELECT scent_type
+                    FROM product_attributes
+                    WHERE product_id IN (" . implode(',', $recommendations) . ")
+                ");
+                $stmt->execute();
+                $scents = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                
+                foreach ($scents as $scent) {
+                    $scentCounts[$scent] = ($scentCounts[$scent] ?? 0) + 1;
+                }
+            }
+            
+            // Get preferred mood and scent
+            arsort($moodCounts);
+            arsort($scentCounts);
+            $preferredMood = key($moodCounts);
+            $preferredScent = key($scentCounts);
+            
+            // Get personalized recommendations
+            $stmt = $this->pdo->prepare("
+                SELECT DISTINCT p.*, pa.mood_effect, pa.scent_type
+                FROM products p
+                JOIN product_attributes pa ON p.id = pa.product_id
+                WHERE (pa.mood_effect = ? OR pa.scent_type = ?)
+                AND p.id NOT IN (
+                    SELECT JSON_UNQUOTE(JSON_EXTRACT(recommendations, '$[*]'))
+                    FROM quiz_results
+                    WHERE user_id = ?
+                )
+                ORDER BY RAND()
+                LIMIT ?
+            ");
+            
+            $stmt->execute([$preferredMood, $preferredScent, $userId, $limit]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+        } catch (PDOException $e) {
+            error_log("Error getting personalized recommendations: " . $e->getMessage());
+            throw $e;
+        }
+    }
+}
 ```
 

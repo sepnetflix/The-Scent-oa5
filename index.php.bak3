@@ -3,42 +3,45 @@ define('ROOT_PATH', __DIR__);
 require_once __DIR__ . '/config.php'; // Defines BASE_URL, etc.
 
 // --- START: Added Composer Autoloader ---
+// Ensure the vendor directory exists (check after running 'composer install' or 'composer require')
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
     require_once __DIR__ . '/vendor/autoload.php';
 } else {
+    // Log a fatal error or display a message if Composer dependencies are missing
     error_log("FATAL ERROR: Composer autoloader not found. Run 'composer install'.");
+    // Optionally display a user-friendly error page if possible, but dependencies might be needed for that too.
     echo "Internal Server Error: Application dependencies are missing. Please contact support.";
-    exit(1);
+    exit(1); // Stop execution
 }
 // --- END: Added Composer Autoloader ---
 
 require_once __DIR__ . '/includes/db.php';
-require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/auth.php'; // Provides isLoggedIn(), isAdmin(), logoutUser()
 require_once __DIR__ . '/includes/SecurityMiddleware.php';
 require_once __DIR__ . '/includes/ErrorHandler.php';
 
+// Initialize error handling
 ErrorHandler::init();
+
+// Apply security middleware (handles session start, base headers)
 SecurityMiddleware::apply();
 
 try {
+    // Handle routing - Use SecurityMiddleware for validation
     $page = SecurityMiddleware::validateInput($_GET['page'] ?? 'home', 'string') ?: 'home';
-    $action = SecurityMiddleware::validateInput($_GET['action'] ?? null, 'string') ?: null;
-    $id = SecurityMiddleware::validateInput($_GET['id'] ?? null, 'int');
+    $action = SecurityMiddleware::validateInput($_GET['action'] ?? null, 'string') ?: null; // Allow null action
+    $id = SecurityMiddleware::validateInput($_GET['id'] ?? null, 'int'); // Validate ID if present
 
-    // --- Stripe Webhook Route (skip CSRF) ---
-    if ($page === 'payment' && $action === 'webhook' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        require_once __DIR__ . '/controllers/PaymentController.php';
-        $controller = new PaymentController($pdo);
-        $controller->handleWebhook(); // Handles Stripe POST, returns JSON
-        exit;
-    }
-
-    // --- CSRF validation for POST (skip for Stripe webhook) ---
+    // Validate CSRF token for POST requests globally
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        // Ensure CSRF token is generated if not already (e.g., first POST in session)
         SecurityMiddleware::generateCSRFToken();
-        SecurityMiddleware::validateCSRF();
+        // Validate submitted token
+        // Note: Some controllers might re-validate CSRF internally for specific actions
+        SecurityMiddleware::validateCSRF(); // Throws exception on failure
     }
 
+    // Route to appropriate controller/action
     switch ($page) {
         case 'home':
             require_once __DIR__ . '/controllers/ProductController.php';
@@ -91,35 +94,42 @@ try {
             break;
 
         case 'checkout':
-            // Allow confirmation page check without login initially
-            if (!isLoggedIn() && $action !== 'confirmation') {
-                $_SESSION['redirect_after_login'] = BASE_URL . 'index.php?page=checkout' . ($action ? '&action=' . $action : '');
-                header('Location: ' . BASE_URL . 'index.php?page=login');
+             // Login check before proceeding
+            if (!isLoggedIn()) {
+                $_SESSION['redirect_after_login'] = BASE_URL . 'index.php?page=checkout'; // Store intended page
+                header('Location: ' . BASE_URL . 'index.php?page=login'); // Redirect to login
                 exit;
             }
             require_once __DIR__ . '/controllers/CheckoutController.php';
-            require_once __DIR__ . '/controllers/CartController.php';
-            // Only check cart for main page load
-            if (empty($action)) {
-                $cartCtrl = new CartController($pdo);
-                if (empty($cartCtrl->getCartItems())) {
-                    if (method_exists($cartCtrl, 'setFlashMessage')) {
-                        $cartCtrl->setFlashMessage('Your cart is empty.', 'info');
-                    }
+            require_once __DIR__ . '/controllers/CartController.php'; // Need CartController to check items
+
+             // Check if cart is empty only for the main checkout page display
+             if (empty($action)) { // Only check if no action specified (i.e., loading the main page)
+                $cartCtrl = new CartController($pdo); // Instantiate to check cart
+                $cartItems = $cartCtrl->getCartItems();
+                if (empty($cartItems)) {
                     header('Location: ' . BASE_URL . 'index.php?page=products');
                     exit;
                 }
             }
+
             $controller = new CheckoutController($pdo);
-            if ($action === 'processCheckout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-                $controller->processCheckout();
-            } elseif ($action === 'confirmation') {
-                $controller->showOrderConfirmation();
-            } elseif ($action === 'calculateTax' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-                $controller->calculateTax();
-            } elseif ($action === 'applyCouponAjax' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-                $controller->applyCouponAjax();
-            } else {
+            if ($action === 'processCheckout' && $_SERVER['REQUEST_METHOD'] === 'POST') { // Matched JS call action name
+                $controller->processCheckout(); // Exits via jsonResponse
+            } elseif ($action === 'confirmation') { // GET request typically after payment redirect
+                 $controller->showOrderConfirmation(); // Shows the confirmation view
+            } elseif ($action === 'calculateTax' && $_SERVER['REQUEST_METHOD'] === 'POST') { // Matched JS call action name
+                $controller->calculateTax(); // Exits via jsonResponse
+            } elseif ($action === 'applyCouponAjax' && $_SERVER['REQUEST_METHOD'] === 'POST') { // Matched JS call action name and added route
+                 // No need to include CheckoutController again if already included
+                 $controller->applyCouponAjax(); // Call method in CheckoutController
+                 // **Alternative:** Call CouponController directly if preferred
+                 // require_once __DIR__ . '/controllers/CouponController.php';
+                 // $couponController = new CouponController($pdo);
+                 // $couponController->applyCouponAjax(); // Assumes method exists there
+            }
+            else {
+                // Default GET request: show the checkout page
                 $controller->showCheckout();
             }
             break;

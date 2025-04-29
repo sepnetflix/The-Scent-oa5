@@ -1,6 +1,4 @@
 <?php
-// models/User.php (Updated to implement getAddress)
-
 class User {
     private $pdo;
 
@@ -88,32 +86,22 @@ class User {
     }
 
     /**
-     * Gets the user's address details from the database.
-     * Uses the address columns added to the 'users' table.
+     * Placeholder method to get user address.
+     * Requires database schema changes (e.g., address fields in 'users' table or a separate 'user_addresses' table).
+     * Currently returns null as the schema doesn't support addresses.
      *
      * @param int $userId User ID.
-     * @return array|null Address data array or null if user not found.
+     * @return array|null Address data array or null if not implemented/found.
      */
     public function getAddress(int $userId): ?array {
-        // --- START FIX: Implement getAddress ---
-        try {
-            // Select the specific address columns from the users table
-            $sql = "SELECT address_line1, address_line2, city, state, postal_code, country
-                    FROM users
-                    WHERE id = ?";
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([$userId]);
-            $address = $stmt->fetch(PDO::FETCH_ASSOC);
+        // TODO: Implement address fetching logic once database schema supports it.
+        // Example (if fields were added to users table):
+        // $stmt = $this->pdo->prepare("SELECT address_line1, address_line2, city, state, postal_code, country FROM users WHERE id = ?");
+        // $stmt->execute([$userId]);
+        // return $stmt->fetch() ?: null;
 
-            // fetch() returns false if no row is found. Return null in that case.
-            return $address ?: null;
-
-        } catch (PDOException $e) {
-            // Log the error and return null if the query fails
-            error_log("Error fetching address for user ID {$userId}: " . $e->getMessage());
-            return null;
-        }
-        // --- END FIX ---
+        // Current placeholder:
+        return null;
     }
 
     /**

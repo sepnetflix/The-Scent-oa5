@@ -1,5 +1,7 @@
 // --- START OF FILE main.js ---
 
+// --- START OF UPDATED main.js ---
+
 // Mobile menu toggle
 window.addEventListener('DOMContentLoaded', function() {
     var menuToggle = document.querySelector('.mobile-menu-toggle');
@@ -842,7 +844,6 @@ function initRegisterPage() {
          const nameInput = form.querySelector('#name');
          const emailInput = form.querySelector('#email');
          const csrfTokenInput = document.getElementById('csrf-token-value'); // Global CSRF
-         const newsletterCheckbox = form.querySelector('input[name="newsletter_signup"]'); // <-- Select the checkbox
 
         if (!nameInput || !emailInput || !passwordInput || !confirmPasswordInput || !submitButton || !csrfTokenInput) {
             console.error("Register form elements missing.");
@@ -878,13 +879,6 @@ function initRegisterPage() {
         formData.append('password', password);
         formData.append('confirm_password', confirmPasswordInput.value); // Send confirmation for backend double check if needed
         formData.append('csrf_token', csrfToken);
-
-        // --- START: FIX FOR NEWSLETTER PREFERENCE ---
-        // Append newsletter_signup only if the checkbox exists and is checked
-        if (newsletterCheckbox && newsletterCheckbox.checked) {
-            formData.append('newsletter_signup', '1'); // Use '1' as the value
-        }
-        // --- END: FIX FOR NEWSLETTER PREFERENCE ---
 
 
         fetch('index.php?page=register', {
@@ -1391,355 +1385,7 @@ function initAdminCouponsPage() {
 }
 
 
-// --- Checkout Page Initialization (Updated) ---
-function initCheckoutPage() {
-    // console.log("Initializing Checkout Page");
-    const stripePublicKey = document.body.dataset.stripePublicKey; // Get PK from data attribute only
-    const checkoutForm = document.getElementById('checkoutForm');
-    const submitButton = document.getElementById('submit-button');
-    const spinner = document.getElementById('spinner');
-    const buttonText = document.getElementById('button-text');
-    const paymentElementContainer = document.getElementById('payment-element');
-    const paymentMessage = document.getElementById('payment-message');
-    const csrfToken = document.getElementById('csrf-token-value')?.value; // Use optional chaining
-    const couponCodeInput = document.getElementById('coupon_code');
-    const applyCouponButton = document.getElementById('apply-coupon');
-    const couponMessageEl = document.getElementById('coupon-message');
-    const discountRow = document.querySelector('.summary-row.discount');
-    const discountAmountEl = document.getElementById('discount-amount');
-    const appliedCouponCodeDisplay = document.getElementById('applied-coupon-code-display');
-    const appliedCouponHiddenInput = document.getElementById('applied_coupon_code');
-    const taxRateEl = document.getElementById('tax-rate');
-    const taxAmountEl = document.getElementById('tax-amount');
-    const shippingCountryEl = document.getElementById('shipping_country');
-    const shippingStateEl = document.getElementById('shipping_state');
-    const summarySubtotalEl = document.getElementById('summary-subtotal');
-    const summaryShippingEl = document.getElementById('summary-shipping');
-    const summaryTotalEl = document.getElementById('summary-total');
-    const freeShippingThreshold = parseFloat(document.body.dataset.freeShippingThreshold || '50'); // Get threshold from data attribute or fallback
-    const baseShippingCost = parseFloat(document.body.dataset.baseShippingCost || '5.99'); // Get base cost from data attribute or fallback
-
-    let elements;
-    let stripe;
-    let currentSubtotal = parseFloat(summarySubtotalEl?.textContent || '0');
-    let currentShippingCost = baseShippingCost; // Initial assumption
-    let currentTaxAmount = parseFloat(taxAmountEl?.textContent.replace('$', '') || '0');
-    let currentDiscountAmount = 0;
-
-    if (!stripePublicKey) {
-        showMessage("Stripe configuration error. Payment cannot proceed.");
-        setLoading(false, true); // Disable button permanently
-        return;
-    }
-    stripe = Stripe(stripePublicKey);
-
-    if (!checkoutForm || !submitButton || !paymentElementContainer || !csrfToken) {
-        console.error("Checkout form critical elements missing. Aborting initialization.");
-        showMessage("Checkout form error. Please refresh the page.", true);
-        return;
-    }
-
-    // --- Initialize Stripe Elements ---
-    const appearance = {
-         theme: 'stripe',
-         variables: {
-             colorPrimary: '#1A4D5A', colorBackground: '#ffffff', colorText: '#374151',
-             colorDanger: '#dc2626', fontFamily: 'Montserrat, sans-serif', borderRadius: '0.375rem'
-         }
-     };
-    elements = stripe.elements({ appearance });
-    const paymentElement = elements.create('payment');
-    paymentElement.mount('#payment-element');
-
-    // --- Helper Functions ---
-    function setLoading(isLoading, disablePermanently = false) {
-        if (!submitButton || !spinner || !buttonText) return;
-        if (isLoading) {
-            submitButton.disabled = true;
-            spinner.classList.remove('hidden');
-            buttonText.classList.add('hidden');
-        } else {
-            submitButton.disabled = disablePermanently;
-            spinner.classList.add('hidden');
-            buttonText.classList.remove('hidden');
-        }
-    }
-
-    function showMessage(message, isError = true) {
-        if (!paymentMessage) return;
-        paymentMessage.textContent = message;
-        paymentMessage.className = `payment-message text-center text-sm my-4 ${isError ? 'text-red-600' : 'text-green-600'}`;
-        paymentMessage.classList.remove('hidden');
-    }
-
-    function showCouponMessage(message, type) { // type = 'success', 'error', 'info'
-        if (!couponMessageEl) return;
-        couponMessageEl.textContent = message;
-        couponMessageEl.className = `coupon-message mt-2 text-sm ${
-            type === 'success' ? 'text-green-600' : (type === 'error' ? 'text-red-600' : 'text-gray-600')
-        }`;
-        couponMessageEl.classList.remove('hidden');
-    }
-
-    function updateOrderSummaryUI() {
-        if (!summarySubtotalEl || !discountRow || !discountAmountEl || !appliedCouponCodeDisplay || !summaryShippingEl || !taxAmountEl || !summaryTotalEl) return;
-
-        // Update subtotal (should reflect initial load)
-        summarySubtotalEl.textContent = parseFloat(currentSubtotal).toFixed(2);
-
-        // Update discount display
-        if (currentDiscountAmount > 0 && appliedCouponHiddenInput?.value) {
-            discountAmountEl.textContent = parseFloat(currentDiscountAmount).toFixed(2);
-            appliedCouponCodeDisplay.textContent = appliedCouponHiddenInput.value;
-            discountRow.classList.remove('hidden');
-        } else {
-            discountAmountEl.textContent = '0.00';
-            appliedCouponCodeDisplay.textContent = '';
-            discountRow.classList.add('hidden');
-        }
-
-         // Update shipping cost display (based on subtotal AFTER discount)
-         const subtotalAfterDiscount = Math.max(0, currentSubtotal - currentDiscountAmount);
-         currentShippingCost = subtotalAfterDiscount >= freeShippingThreshold ? 0 : baseShippingCost;
-         summaryShippingEl.innerHTML = currentShippingCost > 0 ? '$' + parseFloat(currentShippingCost).toFixed(2) : '<span class="text-green-600">FREE</span>';
-
-        // Update tax amount display (based on AJAX call result)
-        taxAmountEl.textContent = '$' + parseFloat(currentTaxAmount).toFixed(2);
-
-        // Update total
-        const grandTotal = subtotalAfterDiscount + currentShippingCost + currentTaxAmount;
-        summaryTotalEl.textContent = parseFloat(Math.max(0.50, grandTotal)).toFixed(2); // Ensure min $0.50 display if rounding down
-    }
-
-    // --- Tax Calculation ---
-    async function updateTax() {
-        const country = shippingCountryEl?.value;
-        const state = shippingStateEl?.value;
-
-        if (!country || !taxRateEl || !taxAmountEl) {
-            // Reset tax if no country selected or elements missing
-             if (taxRateEl) taxRateEl.textContent = 'N/A';
-             currentTaxAmount = 0;
-             updateOrderSummaryUI(); // Update total
-            return;
-        }
-
-        try {
-            taxAmountEl.textContent = '...'; // Loading indicator
-
-            // --- VERIFIED ENDPOINT ---
-            const response = await fetch('index.php?page=checkout&action=calculateTax', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json', 'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                 },
-                body: JSON.stringify({ country, state, subtotal: currentSubtotal, discount: currentDiscountAmount }) // Send current context if needed
-            });
-
-            if (!response.ok) throw new Error('Tax calculation failed');
-            const data = await response.json();
-
-            if (data.success) {
-                taxRateEl.textContent = data.tax_rate_formatted || 'N/A';
-                currentTaxAmount = parseFloat(data.tax_amount) || 0;
-            } else {
-                 console.warn("Tax calculation error:", data.error);
-                 taxRateEl.textContent = 'Error';
-                 currentTaxAmount = 0;
-            }
-        } catch (e) {
-            console.error('Error fetching tax:', e);
-            taxRateEl.textContent = 'Error';
-            currentTaxAmount = 0;
-        } finally {
-             updateOrderSummaryUI(); // Update totals after tax calculation attempt
-        }
-    }
-
-    if(shippingCountryEl) shippingCountryEl.addEventListener('change', updateTax);
-    if(shippingStateEl) shippingStateEl.addEventListener('input', updateTax); // Use input for faster response
-
-    // --- Coupon Application ---
-    if (applyCouponButton && couponCodeInput && appliedCouponHiddenInput) {
-        applyCouponButton.addEventListener('click', async function() {
-            const couponCode = couponCodeInput.value.trim();
-            if (!couponCode) {
-                showCouponMessage('Please enter a coupon code.', 'error'); return;
-            }
-
-            showCouponMessage('Applying...', 'info');
-            applyCouponButton.disabled = true;
-
-            try {
-                 // --- VERIFIED ENDPOINT ---
-                const response = await fetch('index.php?page=checkout&action=applyCouponAjax', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json', 'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: JSON.stringify({
-                        code: couponCode,
-                        subtotal: currentSubtotal, // Send current subtotal
-                        csrf_token: csrfToken // Send CSRF token
-                    })
-                });
-
-                 if (!response.ok) throw new Error(`Server error: ${response.status}`);
-                 const data = await response.json();
-
-                if (data.success) {
-                    showCouponMessage(data.message || 'Coupon applied!', 'success');
-                    currentDiscountAmount = parseFloat(data.discount_amount) || 0;
-                    appliedCouponHiddenInput.value = data.coupon_code || couponCode;
-                    // Re-calculate tax and update summary UI after applying discount
-                     updateTax(); // Triggers tax recalc and UI update
-                } else {
-                    showCouponMessage(data.message || 'Invalid coupon code.', 'error');
-                    currentDiscountAmount = 0; // Reset discount
-                    appliedCouponHiddenInput.value = ''; // Clear applied code
-                    updateTax(); // Re-calculate tax and update summary UI without discount
-                }
-            } catch (e) {
-                console.error('Coupon Apply Error:', e);
-                showCouponMessage('Failed to apply coupon. Please try again.', 'error');
-                currentDiscountAmount = 0;
-                appliedCouponHiddenInput.value = '';
-                updateTax(); // Re-calculate tax and update summary UI
-            } finally {
-                applyCouponButton.disabled = false;
-            }
-        });
-    } else {
-        console.warn("Coupon elements not found. Coupon functionality disabled.");
-    }
-
-
-    // --- Checkout Form Submission ---
-    submitButton.addEventListener('click', async function(e) {
-        setLoading(true);
-        showMessage(''); // Clear previous messages
-
-        // 1. Client-side validation
-        let isValid = true;
-        const requiredFields = ['shipping_name', 'shipping_email', 'shipping_address', 'shipping_city', 'shipping_state', 'shipping_zip', 'shipping_country'];
-        requiredFields.forEach(id => {
-            const input = document.getElementById(id);
-            if (!input || !input.value.trim()) {
-                isValid = false; input?.classList.add('input-error');
-            } else { input?.classList.remove('input-error'); }
-        });
-        if (!isValid) {
-            showMessage('Please fill in all required shipping fields.'); setLoading(false);
-            checkoutForm.querySelector('.input-error')?.focus();
-            checkoutForm.querySelector('.input-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            return;
-        }
-
-        // 2. Send checkout data to server -> create order, get clientSecret
-        let clientSecret = null;
-        let serverOrderId = null;
-        try {
-            const checkoutFormData = new FormData(checkoutForm); // Includes CSRF, applied coupon, shipping fields
-
-             // --- VERIFIED ENDPOINT ---
-            const response = await fetch('index.php?page=checkout&action=processCheckout', {
-                method: 'POST',
-                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                body: checkoutFormData
-            });
-            const data = await response.json();
-
-            if (response.ok && data.success && data.clientSecret && data.orderId) {
-                clientSecret = data.clientSecret;
-                serverOrderId = data.orderId; // Store the order ID if needed elsewhere
-            } else {
-                throw new Error(data.error || 'Failed to process order on server. Please try again.');
-            }
-        } catch (serverError) {
-            console.error('Server processing error:', serverError);
-            showMessage(serverError.message); setLoading(false); return; // Stop checkout
-        }
-
-        // 3. Confirm payment with Stripe using the obtained clientSecret
-        if (clientSecret) {
-            // --- VERIFIED RETURN URL ---
-            // Use BASE_URL defined in config.php (should be available globally or passed via data attribute)
-            const baseUrl = window.location.origin + (document.body.dataset.baseUrl || '/'); // Get base URL
-            const returnUrl = `${baseUrl}index.php?page=checkout&action=confirmation`;
-
-            const { error: stripeError, paymentIntent } = await stripe.confirmPayment({
-                elements,
-                clientSecret: clientSecret,
-                confirmParams: { return_url: returnUrl },
-                redirect: 'if_required' // Handles 3DS etc. Stripe redirects on success.
-            });
-
-            // If error occurs (e.g., card decline, network issue before redirect)
-            if (stripeError) {
-                 console.error("Stripe Error:", stripeError);
-                 showMessage(stripeError.message || "Payment failed. Please check your card details or try another method.");
-                 setLoading(false); // Re-enable button on failure
-                 // Optionally: Update order status on server to 'payment_failed' via another AJAX call if needed immediately
-            }
-        }
-    });
-
-    // Optional: Handle form reset or other UI interactions
-    checkoutForm.addEventListener('reset', function() {
-        setLoading(false); // Re-enable button if form is reset
-        showMessage(''); // Clear messages on form reset
-    });
-}
-
-
-// --- Admin Order Management Page ---
-function initAdminOrdersPage() {
-    // console.log("Initializing Admin Orders Page");
-    const ordersTable = document.getElementById('ordersTable');
-    const orderStatusSelects = document.querySelectorAll('.order-status-select');
-
-    function updateOrderStatus(orderId, status) {
-        fetch('index.php?page=admin&action=updateOrderStatus', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-```javascript
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: `order_id=${encodeURIComponent(orderId)}&status=${encodeURIComponent(status)}`
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showFlashMessage('Order status updated successfully.', 'success');
-            } else {
-                showFlashMessage('Failed to update order status. Please try again.', 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error updating order status:', error);
-            showFlashMessage('An error occurred while updating the order status.', 'error');
-        });
-    }
-
-    orderStatusSelects.forEach(select => {
-        select.addEventListener('change', function() {
-            const orderId = this.dataset.orderId;
-            const newStatus = this.value;
-            if (orderId && newStatus) {
-                updateOrderStatus(orderId, newStatus);
-            }
-        });
-    });
-
-    // Optional: Add more admin-specific functions and handlers as needed
-}
-
-
-// --- Page Initializer Dispatcher ---
-// Use the original dispatcher logic based on body class
+// --- Main DOMContentLoaded Listener ---
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize AOS globally
     if (typeof AOS !== 'undefined') {
@@ -1750,7 +1396,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const body = document.body;
-    // Map body class names to initializer functions
     const pageInitializers = {
         'page-home': initHomePage,
         'page-products': initProductsPage,
@@ -1764,8 +1409,6 @@ document.addEventListener('DOMContentLoaded', function() {
         'page-quiz-results': initQuizResultsPage,
         'page-admin-quiz-analytics': initAdminQuizAnalyticsPage,
         'page-admin-coupons': initAdminCouponsPage,
-        'page-checkout': initCheckoutPage, // Added checkout initializer
-        'page-admin-orders': initAdminOrdersPage, // Added admin orders initializer
          // Add other page classes and their init functions here
          // 'page-account-dashboard': initAccountDashboardPage, // Example if needed
          // 'page-account-profile': initAccountProfilePage, // Example if needed
@@ -1792,13 +1435,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 // --- Mini Cart AJAX Update Function ---
-// (Keep the original function)
 function fetchMiniCart() {
     const miniCartContent = document.getElementById('mini-cart-content');
     if (!miniCartContent) return;
 
     // Optional: Show a subtle loading state inside the dropdown
-    miniCartContent.innerHTML = '<div class="text-center p-4"><i class="fas fa-spinner fa-spin text-gray-400"></i></div>';
+    // miniCartContent.innerHTML = '<div class="text-center p-4"><i class="fas fa-spinner fa-spin text-gray-400"></i></div>';
 
     fetch('index.php?page=cart&action=mini', {
         method: 'GET',
@@ -1813,10 +1455,8 @@ function fetchMiniCart() {
         if (data.items && data.items.length > 0) {
             let html = '<ul class="divide-y divide-gray-200 max-h-60 overflow-y-auto">';
              data.items.forEach(item => {
-                 // Ensure item.product exists and has needed properties
-                 const productId = item.product?.id || '#'; // Fallback ID
                  const imageUrl = item.product?.image || '/images/placeholder.jpg';
-                 const productName = item.product?.name || 'Unknown Product';
+                 const productName = item.product?.name || 'Unknown';
                  const productPrice = parseFloat(item.product?.price || 0);
                  const quantity = parseInt(item.quantity || 0);
                  const lineTotal = productPrice * quantity;
@@ -1824,7 +1464,7 @@ function fetchMiniCart() {
                     <li class="flex items-center gap-3 py-3 px-1">
                          <img src="${imageUrl}" alt="${productName}" class="w-12 h-12 object-cover rounded border flex-shrink-0">
                          <div class="flex-1 min-w-0">
-                             <a href="index.php?page=product&id=${productId}" class="font-medium text-sm text-gray-800 hover:text-primary truncate block" title="${productName}">${productName}</a>
+                             <a href="index.php?page=product&id=${item.product?.id}" class="font-medium text-sm text-gray-800 hover:text-primary truncate block" title="${productName}">${productName}</a>
                              <div class="text-xs text-gray-500">Qty: ${quantity} &times; $${productPrice.toFixed(2)}</div>
                          </div>
                          <div class="text-sm font-semibold text-gray-700">$${lineTotal.toFixed(2)}</div>
@@ -1853,5 +1493,4 @@ function fetchMiniCart() {
     });
 }
 
-
-// --- END OF FILE main.js ---
+// --- END OF UPDATED main.js ---

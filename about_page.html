@@ -36,10 +36,14 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/css/style.css">
 </head>
-<body class="page-about bg-light">
+<body class="page-about bg-light"
+      data-base-url="/"
+      data-stripe-public-key="pk_test_your_stripe_public_key"
+      data-free-shipping-threshold="50"
+      data-base-shipping-cost="5.99">
 
     <!-- Global CSRF Token Input for JavaScript AJAX Requests -->
-    <input type="hidden" id="csrf-token-value" value="693eb8961a38197c236f0bb6f4b3cfd6876af9521c875142e1183195d50c438b">
+    <input type="hidden" id="csrf-token-value" value="cad19ad6226f716fd4d54f6be868b755da4818cc41b8283122fe5fa00386ab23">
 
     <header>
         <nav class="main-nav sample-header">
@@ -83,7 +87,6 @@
         
         <!-- Container for dynamically added flash messages by JS -->
         <div class="flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full space-y-2"></div>
-
 
 <section class="py-16 md:py-24 text-center bg-secondary/10 border-b border-gray-200" data-aos="fade-in">
     <div class="container mx-auto px-4">
@@ -212,7 +215,7 @@
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="693eb8961a38197c236f0bb6f4b3cfd6876af9521c875142e1183195d50c438b">
+                        <input type="hidden" name="csrf_token" value="cad19ad6226f716fd4d54f6be868b755da4818cc41b8283122fe5fa00386ab23">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>

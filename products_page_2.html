@@ -36,10 +36,14 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/css/style.css">
 </head>
-<body class="">
+<body class=""
+      data-base-url="/"
+      data-stripe-public-key="pk_test_your_stripe_public_key"
+      data-free-shipping-threshold="50"
+      data-base-shipping-cost="5.99">
 
     <!-- Global CSRF Token Input for JavaScript AJAX Requests -->
-    <input type="hidden" id="csrf-token-value" value="562c291d5e014030540265718ccc0fd725bed2b06e2811baa1aa2ee1bc831250">
+    <input type="hidden" id="csrf-token-value" value="01f707065e310f6cc59aef1fd7152bf64602f0f2799fa50dea89f37b0816d6e8">
 
     <header>
         <nav class="main-nav sample-header">
@@ -83,11 +87,10 @@
         
         <!-- Container for dynamically added flash messages by JS -->
         <div class="flash-message-container fixed top-5 right-5 z-[1100] max-w-sm w-full space-y-2"></div>
-
 <body class="page-products">
 
 <!-- Output CSRF token for JS (for AJAX add-to-cart) -->
-<input type="hidden" id="csrf-token-value" value="562c291d5e014030540265718ccc0fd725bed2b06e2811baa1aa2ee1bc831250">
+<input type="hidden" id="csrf-token-value" value="01f707065e310f6cc59aef1fd7152bf64602f0f2799fa50dea89f37b0816d6e8">
 
 <section class="products-section">
     <div class="container">
@@ -326,7 +329,7 @@
                     <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
                     <p><i class="fas fa-envelope"></i> hello@thescent.com</p>
                     <form id="newsletter-form-footer" class="newsletter-form" style="margin-top:1rem;">
-                        <input type="hidden" name="csrf_token" value="562c291d5e014030540265718ccc0fd725bed2b06e2811baa1aa2ee1bc831250">
+                        <input type="hidden" name="csrf_token" value="01f707065e310f6cc59aef1fd7152bf64602f0f2799fa50dea89f37b0816d6e8">
                         <input type="email" name="email" placeholder="Enter your email" required class="newsletter-input">
                         <button type="submit" class="btn btn-primary newsletter-btn">Subscribe</button>
                     </form>

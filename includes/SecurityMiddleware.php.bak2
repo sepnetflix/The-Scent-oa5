@@ -24,29 +24,12 @@ class SecurityMiddleware {
             session_start();
         }
         
-        // Regenerate session ID periodically (preserve session data, use config interval)
-        $regenerationInterval = defined('SECURITY_SETTINGS') && isset(SECURITY_SETTINGS['session']['regenerate_id_interval'])
-            ? (int)SECURITY_SETTINGS['session']['regenerate_id_interval']
-            : 900; // Default to 15 mins if not set
-
+        // Regenerate session ID periodically
         if (!isset($_SESSION['last_regeneration'])) {
             $_SESSION['last_regeneration'] = time();
-        } elseif (time() - $_SESSION['last_regeneration'] > $regenerationInterval) {
-            // Preserve session data before regenerating
-            $currentSessionData = $_SESSION;
-            if (session_regenerate_id(true)) {
-                // Restore the preserved data into the new session
-                $_SESSION = $currentSessionData;
-                $_SESSION['last_regeneration'] = time();
-            } else {
-                $userId = $_SESSION['user_id'] ?? 'Unknown';
-                error_log("CRITICAL: Session regeneration failed in SecurityMiddleware for user ID: " . $userId);
-                session_unset();
-                session_destroy();
-                // Optionally redirect to an error page or login page
-                // header('Location: /index.php?page=error&code=SESSION_REG_FAIL');
-                // exit;
-            }
+        } elseif (time() - $_SESSION['last_regeneration'] > 3600) {
+            session_regenerate_id(true);
+            $_SESSION['last_regeneration'] = time();
         }
 
         // Initialize encryption key

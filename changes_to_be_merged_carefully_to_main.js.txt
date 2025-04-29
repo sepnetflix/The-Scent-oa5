@@ -1,0 +1,388 @@
+// --- START OF FILE main.js ---
+// ... (Mobile menu, showFlashMessage, Add-to-Cart, Newsletter handlers - unchanged) ...
+
+// --- Page Specific Initializers ---
+
+function initHomePage() { /* ... unchanged ... */ }
+function initProductsPage() { /* ... unchanged ... */ }
+function initProductDetailPage() { /* ... unchanged ... */ }
+function initCartPage() { /* ... unchanged ... */ }
+function initLoginPage() { /* ... unchanged ... */ }
+function initRegisterPage() { /* ... unchanged ... */ }
+function initForgotPasswordPage() { /* ... unchanged ... */ }
+function initResetPasswordPage() { /* ... unchanged ... */ }
+function initQuizPage() { /* ... unchanged ... */ }
+function initQuizResultsPage() { /* ... unchanged ... */ }
+function initAdminQuizAnalyticsPage() { /* ... unchanged ... */ }
+function initAdminCouponsPage() { /* ... unchanged ... */ }
+
+// --- Checkout Page Initialization (Updated) ---
+function initCheckoutPage() {
+    // console.log("Initializing Checkout Page");
+    const stripePublicKey = document.body.dataset.stripePublicKey || '<?= defined('STRIPE_PUBLIC_KEY') ? STRIPE_PUBLIC_KEY : '' ?>'; // Get PK from data attribute or fallback
+    const checkoutForm = document.getElementById('checkoutForm');
+    const submitButton = document.getElementById('submit-button');
+    const spinner = document.getElementById('spinner');
+    const buttonText = document.getElementById('button-text');
+    const paymentElementContainer = document.getElementById('payment-element');
+    const paymentMessage = document.getElementById('payment-message');
+    const csrfToken = document.getElementById('csrf-token-value')?.value; // Use optional chaining
+    const couponCodeInput = document.getElementById('coupon_code');
+    const applyCouponButton = document.getElementById('apply-coupon');
+    const couponMessageEl = document.getElementById('coupon-message');
+    const discountRow = document.querySelector('.summary-row.discount');
+    const discountAmountEl = document.getElementById('discount-amount');
+    const appliedCouponCodeDisplay = document.getElementById('applied-coupon-code-display');
+    const appliedCouponHiddenInput = document.getElementById('applied_coupon_code');
+    const taxRateEl = document.getElementById('tax-rate');
+    const taxAmountEl = document.getElementById('tax-amount');
+    const shippingCountryEl = document.getElementById('shipping_country');
+    const shippingStateEl = document.getElementById('shipping_state');
+    const summarySubtotalEl = document.getElementById('summary-subtotal');
+    const summaryShippingEl = document.getElementById('summary-shipping');
+    const summaryTotalEl = document.getElementById('summary-total');
+    const freeShippingThreshold = parseFloat(document.body.dataset.freeShippingThreshold || '50'); // Get threshold from data attribute or fallback
+    const baseShippingCost = parseFloat(document.body.dataset.baseShippingCost || '5.99'); // Get base cost from data attribute or fallback
+
+    let elements;
+    let stripe;
+    let currentSubtotal = parseFloat(summarySubtotalEl?.textContent || '0');
+    let currentShippingCost = baseShippingCost; // Initial assumption
+    let currentTaxAmount = parseFloat(taxAmountEl?.textContent.replace('$', '') || '0');
+    let currentDiscountAmount = 0;
+
+    if (!stripePublicKey) {
+        showMessage("Stripe configuration error. Payment cannot proceed.");
+        setLoading(false, true); // Disable button permanently
+        return;
+    }
+    stripe = Stripe(stripePublicKey);
+
+    if (!checkoutForm || !submitButton || !paymentElementContainer || !csrfToken) {
+        console.error("Checkout form critical elements missing. Aborting initialization.");
+        showMessage("Checkout form error. Please refresh the page.", true);
+        return;
+    }
+
+    // --- Initialize Stripe Elements ---
+    const appearance = {
+         theme: 'stripe',
+         variables: {
+             colorPrimary: '#1A4D5A', colorBackground: '#ffffff', colorText: '#374151',
+             colorDanger: '#dc2626', fontFamily: 'Montserrat, sans-serif', borderRadius: '0.375rem'
+         }
+     };
+    elements = stripe.elements({ appearance });
+    const paymentElement = elements.create('payment');
+    paymentElement.mount('#payment-element');
+
+    // --- Helper Functions ---
+    function setLoading(isLoading, disablePermanently = false) {
+        if (!submitButton || !spinner || !buttonText) return;
+        if (isLoading) {
+            submitButton.disabled = true;
+            spinner.classList.remove('hidden');
+            buttonText.classList.add('hidden');
+        } else {
+            submitButton.disabled = disablePermanently;
+            spinner.classList.add('hidden');
+            buttonText.classList.remove('hidden');
+        }
+    }
+
+    function showMessage(message, isError = true) {
+        if (!paymentMessage) return;
+        paymentMessage.textContent = message;
+        paymentMessage.className = `payment-message text-center text-sm my-4 ${isError ? 'text-red-600' : 'text-green-600'}`;
+        paymentMessage.classList.remove('hidden');
+    }
+
+    function showCouponMessage(message, type) { // type = 'success', 'error', 'info'
+        if (!couponMessageEl) return;
+        couponMessageEl.textContent = message;
+        couponMessageEl.className = `coupon-message mt-2 text-sm ${
+            type === 'success' ? 'text-green-600' : (type === 'error' ? 'text-red-600' : 'text-gray-600')
+        }`;
+        couponMessageEl.classList.remove('hidden');
+    }
+
+    function updateOrderSummaryUI() {
+        if (!summarySubtotalEl || !discountRow || !discountAmountEl || !appliedCouponCodeDisplay || !summaryShippingEl || !taxAmountEl || !summaryTotalEl) return;
+
+        // Update subtotal (should reflect initial load)
+        summarySubtotalEl.textContent = parseFloat(currentSubtotal).toFixed(2);
+
+        // Update discount display
+        if (currentDiscountAmount > 0 && appliedCouponHiddenInput?.value) {
+            discountAmountEl.textContent = parseFloat(currentDiscountAmount).toFixed(2);
+            appliedCouponCodeDisplay.textContent = appliedCouponHiddenInput.value;
+            discountRow.classList.remove('hidden');
+        } else {
+            discountAmountEl.textContent = '0.00';
+            appliedCouponCodeDisplay.textContent = '';
+            discountRow.classList.add('hidden');
+        }
+
+         // Update shipping cost display (based on subtotal AFTER discount)
+         const subtotalAfterDiscount = Math.max(0, currentSubtotal - currentDiscountAmount);
+         currentShippingCost = subtotalAfterDiscount >= freeShippingThreshold ? 0 : baseShippingCost;
+         summaryShippingEl.innerHTML = currentShippingCost > 0 ? '$' + parseFloat(currentShippingCost).toFixed(2) : '<span class="text-green-600">FREE</span>';
+
+        // Update tax amount display (based on AJAX call result)
+        taxAmountEl.textContent = '$' + parseFloat(currentTaxAmount).toFixed(2);
+
+        // Update total
+        const grandTotal = subtotalAfterDiscount + currentShippingCost + currentTaxAmount;
+        summaryTotalEl.textContent = parseFloat(Math.max(0.50, grandTotal)).toFixed(2); // Ensure min $0.50 display if rounding down
+    }
+
+    // --- Tax Calculation ---
+    async function updateTax() {
+        const country = shippingCountryEl?.value;
+        const state = shippingStateEl?.value;
+
+        if (!country || !taxRateEl || !taxAmountEl) {
+            // Reset tax if no country selected or elements missing
+             if (taxRateEl) taxRateEl.textContent = 'N/A';
+             currentTaxAmount = 0;
+             updateOrderSummaryUI(); // Update total
+            return;
+        }
+
+        try {
+            taxAmountEl.textContent = '...'; // Loading indicator
+
+            // --- VERIFIED ENDPOINT ---
+            const response = await fetch('index.php?page=checkout&action=calculateTax', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json', 'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                 },
+                body: JSON.stringify({ country, state, subtotal: currentSubtotal, discount: currentDiscountAmount }) // Send current context if needed
+            });
+
+            if (!response.ok) throw new Error('Tax calculation failed');
+            const data = await response.json();
+
+            if (data.success) {
+                taxRateEl.textContent = data.tax_rate_formatted || 'N/A';
+                currentTaxAmount = parseFloat(data.tax_amount) || 0;
+            } else {
+                 console.warn("Tax calculation error:", data.error);
+                 taxRateEl.textContent = 'Error';
+                 currentTaxAmount = 0;
+            }
+        } catch (e) {
+            console.error('Error fetching tax:', e);
+            taxRateEl.textContent = 'Error';
+            currentTaxAmount = 0;
+        } finally {
+             updateOrderSummaryUI(); // Update totals after tax calculation attempt
+        }
+    }
+
+    if(shippingCountryEl) shippingCountryEl.addEventListener('change', updateTax);
+    if(shippingStateEl) shippingStateEl.addEventListener('input', updateTax); // Use input for faster response
+
+    // --- Coupon Application ---
+    if (applyCouponButton && couponCodeInput && appliedCouponHiddenInput) {
+        applyCouponButton.addEventListener('click', async function() {
+            const couponCode = couponCodeInput.value.trim();
+            if (!couponCode) {
+                showCouponMessage('Please enter a coupon code.', 'error'); return;
+            }
+
+            showCouponMessage('Applying...', 'info');
+            applyCouponButton.disabled = true;
+
+            try {
+                 // --- VERIFIED ENDPOINT ---
+                const response = await fetch('index.php?page=checkout&action=applyCouponAjax', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json', 'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        code: couponCode,
+                        subtotal: currentSubtotal, // Send current subtotal
+                        csrf_token: csrfToken // Send CSRF token
+                    })
+                });
+
+                 if (!response.ok) throw new Error(`Server error: ${response.status}`);
+                 const data = await response.json();
+
+                if (data.success) {
+                    showCouponMessage(data.message || 'Coupon applied!', 'success');
+                    currentDiscountAmount = parseFloat(data.discount_amount) || 0;
+                    appliedCouponHiddenInput.value = data.coupon_code || couponCode;
+                    // Re-calculate tax and update summary UI after applying discount
+                     updateTax(); // Triggers tax recalc and UI update
+                } else {
+                    showCouponMessage(data.message || 'Invalid coupon code.', 'error');
+                    currentDiscountAmount = 0; // Reset discount
+                    appliedCouponHiddenInput.value = ''; // Clear applied code
+                    updateTax(); // Re-calculate tax and update summary UI without discount
+                }
+            } catch (e) {
+                console.error('Coupon Apply Error:', e);
+                showCouponMessage('Failed to apply coupon. Please try again.', 'error');
+                currentDiscountAmount = 0;
+                appliedCouponHiddenInput.value = '';
+                updateTax(); // Re-calculate tax and update summary UI
+            } finally {
+                applyCouponButton.disabled = false;
+            }
+        });
+    } else {
+        console.warn("Coupon elements not found. Coupon functionality disabled.");
+    }
+
+
+    // --- Checkout Form Submission ---
+    submitButton.addEventListener('click', async function(e) {
+        setLoading(true);
+        showMessage(''); // Clear previous messages
+
+        // 1. Client-side validation
+        let isValid = true;
+        const requiredFields = ['shipping_name', 'shipping_email', 'shipping_address', 'shipping_city', 'shipping_state', 'shipping_zip', 'shipping_country'];
+        requiredFields.forEach(id => {
+            const input = document.getElementById(id);
+            if (!input || !input.value.trim()) {
+                isValid = false; input?.classList.add('input-error');
+            } else { input?.classList.remove('input-error'); }
+        });
+        if (!isValid) {
+            showMessage('Please fill in all required shipping fields.'); setLoading(false);
+            checkoutForm.querySelector('.input-error')?.focus();
+            checkoutForm.querySelector('.input-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        // 2. Send checkout data to server -> create order, get clientSecret
+        let clientSecret = null;
+        let serverOrderId = null;
+        try {
+            const checkoutFormData = new FormData(checkoutForm); // Includes CSRF, applied coupon, shipping fields
+
+             // --- VERIFIED ENDPOINT ---
+            const response = await fetch('index.php?page=checkout&action=processCheckout', {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: checkoutFormData
+            });
+            const data = await response.json();
+
+            if (response.ok && data.success && data.clientSecret && data.orderId) {
+                clientSecret = data.clientSecret;
+                serverOrderId = data.orderId; // Store the order ID if needed elsewhere
+            } else {
+                throw new Error(data.error || 'Failed to process order on server. Please try again.');
+            }
+        } catch (serverError) {
+            console.error('Server processing error:', serverError);
+            showMessage(serverError.message); setLoading(false); return; // Stop checkout
+        }
+
+        // 3. Confirm payment with Stripe using the obtained clientSecret
+        if (clientSecret) {
+            // --- VERIFIED RETURN URL ---
+            // Use BASE_URL defined in config.php (should be available globally or passed via data attribute)
+            const baseUrl = window.location.origin + (document.body.dataset.baseUrl || '/'); // Get base URL
+            const returnUrl = `${baseUrl}index.php?page=checkout&action=confirmation`;
+
+            const { error: stripeError, paymentIntent } = await stripe.confirmPayment({
+                elements,
+                clientSecret: clientSecret,
+                confirmParams: { return_url: returnUrl },
+                redirect: 'if_required' // Handles 3DS etc. Stripe redirects on success.
+            });
+
+            // If error occurs (e.g., card decline, network issue before redirect)
+            if (stripeError) {
+                 console.error("Stripe Error:", stripeError);
+                 showMessage(stripeError.message || "Payment failed. Please check your card details or try another method.");
+                 setLoading(false); // Re-enable button on failure
+                 // Optionally: Update order status on server to 'payment_failed' via another AJAX call if needed immediately
+            }
+            // If paymentIntent.status === 'succeeded' or 'processing', Stripe should handle the redirect.
+            // If it requires action, Stripe will handle that too.
+            // If we reach here without redirect and without error, it might be unexpected.
+            // Check paymentIntent.status if needed.
+            else if (paymentIntent && paymentIntent.status === 'requires_payment_method') {
+                 showMessage("Payment failed. Please try another payment method.");
+                 setLoading(false);
+            } else if (paymentIntent && paymentIntent.status === 'requires_confirmation') {
+                 showMessage("Please confirm your payment details."); // Should usually be handled by Stripe UI
+                 setLoading(false);
+            }
+             // No explicit success redirect needed here as Stripe handles it via return_url
+        } else {
+            showMessage('Failed to get payment details from server.'); setLoading(false);
+        }
+    });
+
+    // --- Initial UI Update ---
+    updateOrderSummaryUI(); // Calculate initial totals based on potentially pre-filled fields
+    if (shippingCountryEl?.value) { updateTax(); } // Trigger initial tax calculation if country is set
+
+}
+
+// --- Main DOMContentLoaded Listener (Update to include Checkout Init) ---
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof AOS !== 'undefined') { AOS.init({ duration: 800, offset: 120, once: true }); }
+    else { console.warn('AOS library not loaded.'); }
+
+    const body = document.body;
+    // --- Add Checkout Page Init ---
+    const pageInitializers = {
+        'page-home': initHomePage,
+        'page-products': initProductsPage,
+        'page-product-detail': initProductDetailPage,
+        'page-cart': initCartPage,
+        'page-login': initLoginPage,
+        'page-register': initRegisterPage,
+        'page-forgot-password': initForgotPasswordPage,
+        'page-reset-password': initResetPasswordPage,
+        'page-quiz': initQuizPage,
+        'page-quiz-results': initQuizResultsPage,
+        'page-admin-quiz-analytics': initAdminQuizAnalyticsPage,
+        'page-admin-coupons': initAdminCouponsPage,
+        'page-checkout': initCheckoutPage // Add checkout initializer
+    };
+
+    let initialized = false;
+    for (const pageClass in pageInitializers) {
+        if (body.classList.contains(pageClass)) {
+            // Pass necessary data via data attributes on body if needed
+            body.dataset.baseUrl = '<?= BASE_URL ?>';
+            body.dataset.stripePublicKey = '<?= STRIPE_PUBLIC_KEY ?>';
+            body.dataset.freeShippingThreshold = '<?= FREE_SHIPPING_THRESHOLD ?>';
+            body.dataset.baseShippingCost = '<?= SHIPPING_COST ?>';
+
+            pageInitializers[pageClass]();
+            initialized = true;
+            break;
+        }
+    }
+    if (document.getElementById('mini-cart-content') && typeof fetchMiniCart === 'function') {
+         fetchMiniCart();
+    }
+});
+
+
+// --- Mini Cart AJAX Update Function (unchanged) ---
+function fetchMiniCart() { /* ... unchanged ... */ }
+
+// --- Style definitions for loading/error states (unchanged) ---
+/*
+.spinner { ... }
+.hidden { ... }
+.place-order:disabled { ... }
+.input-error { ... }
+.form-input, .form-select, .form-textarea { ... }
+.form-input:focus, .form-select:focus, .form-textarea:focus { ... }
+*/

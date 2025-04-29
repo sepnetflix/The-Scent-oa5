@@ -968,25 +968,26 @@ class NewsletterController extends BaseController {
 # controllers/CheckoutController.php  
 ```php
 <?php
+// controllers/CheckoutController.php (Corrected - Restored updateOrderStatus, kept checkout flow updates)
+
 require_once __DIR__ . '/BaseController.php';
 require_once __DIR__ . '/../models/Product.php';
 require_once __DIR__ . '/../models/Order.php';
 require_once __DIR__ . '/../controllers/PaymentController.php';
 require_once __DIR__ . '/../controllers/InventoryController.php';
 require_once __DIR__ . '/../controllers/TaxController.php';
-require_once __DIR__ . '/../controllers/CouponController.php'; // Added for coupon validation
-// EmailService included via BaseController
+require_once __DIR__ . '/../controllers/CouponController.php';
 require_once __DIR__ . '/../models/Cart.php';
-require_once __DIR__ . '/../models/User.php'; // Needed for user details
+require_once __DIR__ . '/../models/User.php';
 
 class CheckoutController extends BaseController {
-    private Product $productModel; // Use type hint
-    private Order $orderModel; // Use type hint
-    private InventoryController $inventoryController; // Use type hint
-    private TaxController $taxController; // Use type hint
-    private PaymentController $paymentController; // Use type hint
-    private CouponController $couponController; // Use type hint
-    // private EmailService $emailService; // Inherited from BaseController
+    private Product $productModel;
+    private Order $orderModel;
+    private InventoryController $inventoryController;
+    private TaxController $taxController;
+    private PaymentController $paymentController;
+    private CouponController $couponController;
+    // EmailService is inherited from BaseController
 
     public function __construct($pdo) {
         parent::__construct($pdo);
@@ -994,61 +995,61 @@ class CheckoutController extends BaseController {
         $this->orderModel = new Order($pdo);
         $this->inventoryController = new InventoryController($pdo);
         $this->taxController = new TaxController($pdo);
-        $this->paymentController = new PaymentController($pdo); // Pass PDO if needed by PaymentController constructor
-        $this->couponController = new CouponController($pdo); // Instantiate CouponController
-        // $this->emailService is initialized in parent
+        $this->paymentController = new PaymentController($pdo);
+        $this->couponController = new CouponController($pdo);
     }
 
+    /**
+     * Display the checkout page.
+     * Pre-fills address if available.
+     * Calculates initial totals.
+     */
     public function showCheckout() {
         $this->requireLogin();
         $userId = $this->getUserId();
 
-        // Use $this->db (from BaseController) instead of $this->pdo
         $cartModel = new Cart($this->db, $userId);
-
         $items = $cartModel->getItems();
 
         if (empty($items)) {
              $this->setFlashMessage('Your cart is empty. Add some products before checking out.', 'info');
-            $this->redirect('index.php?page=products'); // Use BaseController redirect
-            return;
+             $this->redirect('index.php?page=products');
+             return;
         }
 
         $cartItems = [];
-        $subtotal = 0;
+        $subtotal = 0.0;
         foreach ($items as $item) {
             // Validate stock before displaying checkout
             if (!$this->productModel->isInStock($item['product_id'], $item['quantity'])) {
                 $this->setFlashMessage("Item '".htmlspecialchars($item['name'])."' is out of stock. Please update your cart.", 'error');
-                $this->redirect('index.php?page=cart'); // Redirect to cart to resolve
+                $this->redirect('index.php?page=cart');
                 return;
             }
+            $price = $item['price'] ?? 0;
+            $quantity = $item['quantity'] ?? 0;
+            $lineSubtotal = $price * $quantity;
             $cartItems[] = [
                 'product' => $item,
-                'quantity' => $item['quantity'],
-                'subtotal' => ($item['price'] ?? 0) * ($item['quantity'] ?? 0) // Safer calculation
+                'quantity' => $quantity,
+                'subtotal' => $lineSubtotal
             ];
-            $subtotal += ($item['price'] ?? 0) * ($item['quantity'] ?? 0); // Safer calculation
+            $subtotal += $lineSubtotal;
         }
 
-        // Initial calculations (will be updated via JS/AJAX)
-        $tax_rate_formatted = '0%';
-        $tax_amount = 0;
+        // Initial calculations (updated by JS/AJAX)
+        $tax_rate_formatted = '0%'; // Placeholder
+        $tax_amount = 0.0; // Placeholder
         $shipping_cost = $subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
         $total = $subtotal + $shipping_cost + $tax_amount;
 
-        $userModel = new User($this->db); // Use $this->db
-        // --- FIX APPLIED HERE ---
-        // $userAddress = $userModel->getAddress($userId); // FATAL ERROR: Method does not exist in provided User model
-        $userAddress = []; // Temporary fix: Provide empty array to prevent view errors
-        // --- END FIX ---
+        $userModel = new User($this->db);
+        $userAddress = $userModel->getAddress($userId); // Fetches address data or null
 
-        // Prepare data for the view
         $csrfToken = $this->getCsrfToken();
         $bodyClass = 'page-checkout';
         $pageTitle = 'Checkout - The Scent';
 
-        // Use renderView helper
         echo $this->renderView('checkout', [
             'cartItems' => $cartItems,
             'subtotal' => $subtotal,
@@ -1059,82 +1060,92 @@ class CheckoutController extends BaseController {
             'csrfToken' => $csrfToken,
             'bodyClass' => $bodyClass,
             'pageTitle' => $pageTitle,
-            'userAddress' => $userAddress ?? [] // Pass user address or empty array (now always empty array)
+            'userAddress' => $userAddress ?? [] // Pass address data or empty array
         ]);
     }
 
-
+    /**
+     * AJAX endpoint to calculate tax based on country/state.
+     */
     public function calculateTax() {
-        $this->requireLogin(true); // Indicate AJAX request for JSON error response
+        $this->requireLogin(true); // AJAX request
 
         $json = file_get_contents('php://input');
         $data = json_decode($json, true);
 
-        // Use BaseController validation helper
         $country = $this->validateInput($data['country'] ?? null, 'string');
         $state = $this->validateInput($data['state'] ?? null, 'string');
+        // Get subtotal AFTER potential coupon discount (important for accurate tax)
+        // Client JS should pass current subtotal and discount amount, or recalculate subtotal here.
+        // Let's recalculate subtotal for safety.
+        $currentSubtotal = $this->calculateCartSubtotal(); // Fetch current subtotal
+        // Note: This doesn't account for coupon discount applied client-side only yet.
+        // Tax calculation should ideally happen server-side during processCheckout for accuracy.
+        // This AJAX endpoint provides an *estimate*.
 
         if (empty($country)) {
            return $this->jsonResponse(['success' => false, 'error' => 'Country is required'], 400);
         }
-
-        $subtotal = $this->calculateCartSubtotal();
-        if ($subtotal <= 0) {
+        if ($currentSubtotal <= 0) {
              return $this->jsonResponse(['success' => false, 'error' => 'Cart is empty or invalid'], 400);
         }
 
-        $shipping_cost = $subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
-        $tax_amount = $this->taxController->calculateTax($subtotal, $country, $state);
+        $shipping_cost = $currentSubtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST; // Based on original subtotal
+        $tax_amount = $this->taxController->calculateTax($currentSubtotal, $country, $state);
         $tax_rate = $this->taxController->getTaxRate($country, $state);
-        $total = $subtotal + $shipping_cost + $tax_amount;
+        $total = $currentSubtotal + $shipping_cost + $tax_amount; // Estimate
 
         return $this->jsonResponse([
             'success' => true,
             'tax_rate_formatted' => $this->taxController->formatTaxRate($tax_rate),
-            'tax_amount' => number_format($tax_amount, 2),
-            'total' => number_format($total, 2)
+            'tax_amount' => number_format($tax_amount, 2), // Send formatted
+            'total' => number_format($total, 2) // Send formatted estimate
         ]);
     }
 
-    // Helper to get cart subtotal for logged-in user
+    // Helper to get cart subtotal for logged-in user (unchanged)
     private function calculateCartSubtotal(): float {
          $userId = $this->getUserId();
          if (!$userId) return 0.0;
-
-         $cartModel = new Cart($this->db, $userId); // Use $this->db
+         $cartModel = new Cart($this->db, $userId);
          $items = $cartModel->getItems();
          $subtotal = 0.0;
-         foreach ($items as $item) {
-             $subtotal += ($item['price'] ?? 0) * ($item['quantity'] ?? 0); // Safer calculation
-         }
+         foreach ($items as $item) { $subtotal += ($item['price'] ?? 0) * ($item['quantity'] ?? 0); }
          return (float)$subtotal;
     }
 
+    /**
+     * Processes the checkout form submission via AJAX.
+     * Creates order, handles inventory, coupons, and initiates payment intent.
+     */
     public function processCheckout() {
         $this->validateRateLimit('checkout_submit');
-        $this->requireLogin(true); // Indicate AJAX request
+        $this->requireLogin(true); // AJAX request
         $this->validateCSRF();
 
         $userId = $this->getUserId();
-        $cartModel = new Cart($this->db, $userId); // Use $this->db
+        $cartModel = new Cart($this->db, $userId);
         $items = $cartModel->getItems();
 
         if (empty($items)) {
              return $this->jsonResponse(['success' => false, 'error' => 'Your cart is empty.'], 400);
         }
 
-        $cartItemsForOrder = [];
+        // --- Collect Cart Details ---
+        $cartItemsForOrder = []; // Store as [productId => ['quantity' => q, 'price' => p, 'name' => n]]
         $subtotal = 0.0;
         foreach ($items as $item) {
             $productId = $item['product_id'] ?? null;
             $quantity = $item['quantity'] ?? 0;
-            if (!$productId || $quantity <= 0) continue; // Skip invalid items
+            $price = $item['price'] ?? 0;
+            $name = $item['name'] ?? 'Unknown Product';
+            if (!$productId || $quantity <= 0) continue;
 
-            $cartItemsForOrder[$productId] = $quantity;
-            $subtotal += ($item['price'] ?? 0) * $quantity;
+            $cartItemsForOrder[$productId] = ['quantity' => $quantity, 'price' => $price, 'name' => $name];
+            $subtotal += $price * $quantity;
         }
 
-        // Validate required POST fields from AJAX
+        // --- Validate Shipping Input ---
         $requiredFields = [
             'shipping_name', 'shipping_email', 'shipping_address', 'shipping_city',
             'shipping_state', 'shipping_zip', 'shipping_country'
@@ -1143,11 +1154,11 @@ class CheckoutController extends BaseController {
         $postData = [];
         foreach ($requiredFields as $field) {
             $value = $_POST[$field] ?? '';
-            if (empty(trim($value))) { // Check if empty after trimming
+            if (empty(trim($value))) {
                 $missingFields[] = ucwords(str_replace('_', ' ', $field));
             } else {
                  $type = (strpos($field, 'email') !== false) ? 'email' : 'string';
-                 $validatedValue = $this->validateInput($value, $type); // Use BaseController helper
+                 $validatedValue = $this->validateInput($value, $type);
                  if ($validatedValue === false) {
                      $missingFields[] = ucwords(str_replace('_', ' ', $field)) . " (Invalid)";
                  } else {
@@ -1155,66 +1166,72 @@ class CheckoutController extends BaseController {
                  }
             }
         }
-
         if (!empty($missingFields)) {
              return $this->jsonResponse([
                  'success' => false,
-                 'error' => 'Please fill in all required shipping fields correctly: ' . implode(', ', $missingFields) . '.'
+                 'error' => 'Please fill required shipping fields: ' . implode(', ', $missingFields) . '.'
              ], 400);
         }
-        $orderNotes = $this->validateInput($_POST['order_notes'] ?? null, 'string', ['max' => 1000]); // Optional notes
+        $orderNotes = $this->validateInput($_POST['order_notes'] ?? null, 'string', ['max' => 1000]);
 
-
-        // --- Coupon Handling ---
+        // --- Validate Coupon (Again, server-side) ---
         $couponCode = $this->validateInput($_POST['applied_coupon_code'] ?? null, 'string');
         $coupon = null;
         $discountAmount = 0.0;
         if ($couponCode) {
-            $couponValidationResult = $this->couponController->validateCouponCodeOnly($couponCode, $subtotal); // Removed userId check here, re-check during usage recording if needed
-            if ($couponValidationResult['valid']) {
-                 $coupon = $couponValidationResult['coupon'];
-                 $discountAmount = $this->couponController->calculateDiscount($coupon, $subtotal);
+            // Re-validate fully including user usage limit before applying
+            $validationResult = $this->couponController->validateCouponCodeOnly($couponCode, $subtotal);
+            if ($validationResult['valid']) {
+                 $coupon = $validationResult['coupon'];
+                 if ($this->couponController->hasUserUsedCoupon($coupon['id'], $userId)) {
+                     error_log("Checkout Warning: User {$userId} tried applying already used coupon '{$couponCode}' during final processing.");
+                     $coupon = null; // Invalidate coupon
+                     $couponCode = null;
+                 } else {
+                     $discountAmount = $this->couponController->calculateDiscount($coupon, $subtotal);
+                 }
             } else {
-                 error_log("Checkout Warning: Coupon '{$couponCode}' was invalid during final checkout for user {$userId}. Message: " . ($couponValidationResult['message'] ?? 'N/A'));
+                 error_log("Checkout Warning: Coupon '{$couponCode}' became invalid during final checkout for user {$userId}. Message: " . ($validationResult['message'] ?? 'N/A'));
                  $couponCode = null; // Clear invalid code
+                 $coupon = null;
             }
         }
-        // --- End Coupon Handling ---
 
+        // --- Calculate Final Totals ---
+        $subtotalAfterDiscount = max(0, $subtotal - $discountAmount); // Ensure non-negative
+        $shipping_cost = $subtotalAfterDiscount >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
+        $tax_amount = $this->taxController->calculateTax(
+            $subtotalAfterDiscount, // Calculate tax on discounted subtotal
+            $postData['shipping_country'],
+            $postData['shipping_state']
+        );
+        $total = $subtotalAfterDiscount + $shipping_cost + $tax_amount;
+        $total = max(0.50, round($total, 2)); // Ensure total is at least $0.50 for Stripe, round correctly
 
+        // --- Start Transaction ---
         try {
             $this->beginTransaction();
 
+            // --- Re-validate Stock within Transaction ---
             $stockErrors = $this->validateCartStock($cartItemsForOrder); // Use internal helper
             if (!empty($stockErrors)) {
                 $this->rollback();
                  return $this->jsonResponse([
                      'success' => false,
                      'error' => 'Some items went out of stock: ' . implode(', ', $stockErrors) . '. Please review your cart.'
-                 ], 409);
+                 ], 409); // 409 Conflict
             }
 
-            // Calculate final totals including discount
-            $subtotalAfterDiscount = $subtotal - $discountAmount;
-            $shipping_cost = $subtotalAfterDiscount >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
-            $tax_amount = $this->taxController->calculateTax(
-                $subtotalAfterDiscount,
-                $postData['shipping_country'],
-                $postData['shipping_state']
-            );
-            $total = $subtotalAfterDiscount + $shipping_cost + $tax_amount;
-            $total = max(0, $total); // Ensure total is not negative
-
-            // --- Create Order ---
+            // --- Create Order Record ---
             $orderData = [
                 'user_id' => $userId,
-                'subtotal' => $subtotal,
+                'subtotal' => $subtotal, // Original subtotal
                 'discount_amount' => $discountAmount,
                 'coupon_code' => $coupon ? $coupon['code'] : null,
                 'coupon_id' => $coupon ? $coupon['id'] : null,
                 'shipping_cost' => $shipping_cost,
                 'tax_amount' => $tax_amount,
-                'total_amount' => $total,
+                'total_amount' => $total, // Final calculated total
                 'shipping_name' => $postData['shipping_name'],
                 'shipping_email' => $postData['shipping_email'],
                 'shipping_address' => $postData['shipping_address'],
@@ -1222,68 +1239,63 @@ class CheckoutController extends BaseController {
                 'shipping_state' => $postData['shipping_state'],
                 'shipping_zip' => $postData['shipping_zip'],
                 'shipping_country' => $postData['shipping_country'],
-                'status' => 'pending_payment',
-                'payment_status' => 'pending', // Add payment_status
-                'order_notes' => $orderNotes, // Add order notes
-                'payment_intent_id' => null
+                'status' => 'pending_payment', // Initial status
+                'payment_status' => 'pending', // Initial payment status
+                'order_notes' => $orderNotes,
+                'payment_intent_id' => null // Will be updated later
             ];
-            $orderId = $this->orderModel->create($orderData); // Assumes OrderModel handles these fields
+            $orderId = $this->orderModel->create($orderData);
             if (!$orderId) throw new Exception("Failed to create order record.");
 
-            // --- Create Order Items & Update Inventory ---
+            // --- Create Order Items & Decrement Inventory ---
             $itemStmt = $this->db->prepare("
                 INSERT INTO order_items (order_id, product_id, quantity, price)
                 VALUES (?, ?, ?, ?)
             ");
-            foreach ($cartItemsForOrder as $productId => $quantity) {
-                $product = $this->productModel->getById($productId);
-                if ($product && isset($product['price'])) {
-                    $itemStmt->execute([$orderId, $productId, $quantity, $product['price']]);
-                    // Use correct InventoryController method signature - Assume it now takes PDO or is constructed with it
-                    $inventoryController = new InventoryController($this->db); // Instantiate if not already property
-                    if (!$inventoryController->updateStock($productId, -$quantity, 'sale', $orderId)) { // Pass type and referenceId
-                        throw new Exception("Failed to update inventory for product ID {$productId}");
-                    }
-                } else {
-                    throw new Exception("Product ID {$productId} not found or price missing during order item creation.");
+            foreach ($cartItemsForOrder as $productId => $itemData) {
+                // Insert order item
+                $itemStmt->execute([$orderId, $productId, $itemData['quantity'], $itemData['price']]);
+
+                // Decrement stock using InventoryController
+                // Note: Type 'sale', reference is the new order ID
+                if (!$this->inventoryController->updateStock($productId, -$itemData['quantity'], 'sale', $orderId)) {
+                    // InventoryController::updateStock should throw an exception on failure now
+                    throw new Exception("Failed to update inventory for product ID {$productId}");
                 }
             }
 
             // --- Create Payment Intent ---
+            // Pass the final calculated total
             $paymentResult = $this->paymentController->createPaymentIntent($total, 'usd', $orderId, $postData['shipping_email']);
             if (!$paymentResult['success'] || empty($paymentResult['client_secret']) || empty($paymentResult['payment_intent_id'])) {
-                $this->orderModel->updateStatus($orderId, 'failed');
+                // Attempt to update order status to failed, but don't rollback transaction yet
+                $this->orderModel->updateStatus($orderId, 'payment_failed');
                 throw new Exception($paymentResult['error'] ?? 'Could not initiate payment.');
             }
             $clientSecret = $paymentResult['client_secret'];
             $paymentIntentId = $paymentResult['payment_intent_id'];
 
             // --- Update Order with Payment Intent ID ---
-            if (!$this->orderModel->updatePaymentIntentId($orderId, $paymentIntentId)) { // Use correct OrderModel method
+            if (!$this->orderModel->updatePaymentIntentId($orderId, $paymentIntentId)) {
                  throw new Exception("Failed to link Payment Intent ID {$paymentIntentId} to Order ID {$orderId}.");
             }
 
-            // --- Apply Coupon Usage (if applicable) ---
+            // --- Record Coupon Usage ---
             if ($coupon) {
-                 // Re-check user usage limit just before recording (within transaction)
-                 if ($this->couponController->hasUserUsedCoupon($coupon['id'], $userId)) {
-                      error_log("Checkout Critical: User {$userId} attempted to reuse coupon {$coupon['id']} during final checkout for order {$orderId}.");
-                      throw new Exception("Coupon {$coupon['code']} has already been used."); // Fail transaction
-                 }
-                 // Record usage
                  if (!$this->couponController->recordUsage($coupon['id'], $orderId, $userId, $discountAmount)) {
+                      // Log failure but don't necessarily stop the checkout
                       error_log("Warning: Failed to record usage for coupon ID {$coupon['id']} on order ID {$orderId}.");
-                      // Decide if this should be fatal or just logged (non-fatal for now)
                  }
             }
 
+            // --- Commit Transaction ---
             $this->commit();
 
             $this->logAuditTrail('order_pending_payment', $userId, [
                 'order_id' => $orderId, 'total_amount' => $total, 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN'
             ]);
 
-            // --- Return Client Secret to Frontend ---
+            // --- Return Client Secret and Order ID to Frontend ---
             return $this->jsonResponse([
                 'success' => true,
                 'orderId' => $orderId,
@@ -1291,10 +1303,10 @@ class CheckoutController extends BaseController {
             ]);
 
         } catch (Exception $e) {
-            $this->rollback();
+            $this->rollback(); // Rollback on any exception during the process
             error_log("Checkout processing error: User {$userId} - " . $e->getMessage());
-            // Provide specific error message if it's safe, otherwise generic
             $errorMessage = ($e instanceof PDOException) ? 'A database error occurred.' : $e->getMessage();
+            // Return specific error if known (like stock issue), else generic
             return $this->jsonResponse([
                 'success' => false,
                 'error' => $errorMessage
@@ -1302,115 +1314,113 @@ class CheckoutController extends BaseController {
         }
     }
 
-    // --- Method to Handle AJAX Coupon Application ---
+
+    /**
+     * Handles AJAX request from checkout page to validate and apply a coupon.
+     * Returns discount info for UI update. Final validation happens in processCheckout.
+     */
     public function applyCouponAjax() {
-         $this->requireLogin(true); // Indicate AJAX
+         $this->requireLogin(true); // AJAX
          $this->validateCSRF();
 
          $json = file_get_contents('php://input');
          $data = json_decode($json, true);
 
          $code = $this->validateInput($data['code'] ?? null, 'string');
-         $currentSubtotal = $this->validateInput($data['subtotal'] ?? null, 'float');
+         $currentSubtotal = $this->validateInput($data['subtotal'] ?? null, 'float'); // Get subtotal from client
          $userId = $this->getUserId();
 
          if (!$code || $currentSubtotal === false || $currentSubtotal < 0) {
-             return $this->jsonResponse(['success' => false, 'message' => 'Invalid coupon code or subtotal.'], 400);
+             return $this->jsonResponse(['success' => false, 'message' => 'Invalid coupon code or subtotal amount provided.'], 400);
          }
 
          // Use CouponController to validate code only first
          $validationResult = $this->couponController->validateCouponCodeOnly($code, $currentSubtotal);
-
          if (!$validationResult['valid']) {
              return $this->jsonResponse(['success' => false, 'message' => $validationResult['message']]);
          }
-
          $coupon = $validationResult['coupon'];
 
-         // Now check user-specific usage
+         // Check user-specific usage
          if ($this->couponController->hasUserUsedCoupon($coupon['id'], $userId)) {
               return $this->jsonResponse(['success' => false, 'message' => 'You have already used this coupon.']);
          }
 
-         // If valid and not used by user, calculate discount and new totals
+         // Calculate discount
          $discountAmount = $this->couponController->calculateDiscount($coupon, $currentSubtotal);
-
-         // Recalculate totals for the response accurately (including tax)
-         $subtotalAfterDiscount = $currentSubtotal - $discountAmount;
+         $subtotalAfterDiscount = max(0, $currentSubtotal - $discountAmount);
          $shipping_cost = $subtotalAfterDiscount >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
-
-         // We need shipping address to calculate tax - cannot reliably do it here without it.
-         // Return discount, let client update display. Tax will be final on processCheckout.
          $newTotalEstimate = $subtotalAfterDiscount + $shipping_cost; // Excludes tax
-         $newTotalEstimate = max(0, $newTotalEstimate);
 
          return $this->jsonResponse([
              'success' => true,
              'message' => 'Coupon applied successfully!',
              'coupon_code' => $coupon['code'],
              'discount_amount' => number_format($discountAmount, 2),
-             // 'new_tax_amount' => ... // Can't calculate reliably here
-             'new_total_estimate' => number_format($newTotalEstimate, 2) // Send estimate excluding tax
+             'new_total_estimate' => number_format($newTotalEstimate, 2) // Estimate for UI update
          ]);
     }
 
+    /**
+     * Displays the order confirmation page.
+     * Relies on 'last_order_id' being set in the session by the webhook handler.
+     */
     public function showOrderConfirmation() {
          $this->requireLogin();
          $userId = $this->getUserId();
 
-         // Use the order ID stored in the session *after successful payment webhook*
+         // Check if last_order_id is set in session
          if (!isset($_SESSION['last_order_id'])) {
-             $this->setFlashMessage('Could not find recent order details. Payment may still be processing.', 'warning');
-             $this->redirect('index.php?page=account&action=orders');
+             $this->setFlashMessage('Order confirmation details not found. View your orders below.', 'warning');
+             $this->redirect('index.php?page=account&section=orders'); // Redirect to order list
              return;
          }
 
          $lastOrderId = filter_var($_SESSION['last_order_id'], FILTER_VALIDATE_INT);
-          if (!$lastOrderId) {
-              unset($_SESSION['last_order_id']);
-              $this->setFlashMessage('Invalid order identifier found.', 'error');
-              $this->redirect('index.php?page=account&action=orders');
-              return;
-          }
+         if (!$lastOrderId) {
+             unset($_SESSION['last_order_id']); // Clear invalid ID
+             $this->setFlashMessage('Invalid order identifier found.', 'error');
+             $this->redirect('index.php?page=account&section=orders');
+             return;
+         }
 
+         // Fetch the order, ensuring it belongs to the current user AND has items
+         $order = $this->orderModel->getByIdAndUserId($lastOrderId, $userId); // Fetches items via _fetchOrderItems
 
-         // Fetch the specific order, ensuring it belongs to the current user
-         $order = $this->orderModel->getByIdAndUserId($lastOrderId, $userId); // Assumes this method exists and fetches items
-
-         if (!$order) {
-             unset($_SESSION['last_order_id']);
+         if (!$order || empty($order['items'])) { // Check if order exists and has items
+             unset($_SESSION['last_order_id']); // Clear session ID
              $this->setFlashMessage('Order details not found or access denied.', 'error');
-             $this->redirect('index.php?page=account&action=orders');
+             $this->redirect('index.php?page=account&section=orders');
              return;
          }
 
-         // Check status (must be post-payment)
-         if (!in_array($order['status'], ['paid', 'processing', 'shipped', 'delivered'])) {
-             unset($_SESSION['last_order_id']);
-             $this->setFlashMessage('Payment for order #'.str_pad($order['id'], 6, '0', STR_PAD_LEFT).' is pending or failed.', 'warning');
-             $this->redirect('index.php?page=account&action=orders');
+         // Verify order status - should be 'paid' or 'processing' (or maybe shipped/delivered if slow redirect)
+         // Use a set of acceptable post-payment statuses
+         $acceptableStatuses = ['paid', 'processing', 'shipped', 'delivered', 'completed'];
+         if (!in_array($order['status'], $acceptableStatuses)) {
+             // Don't clear session ID yet, maybe webhook hasn't run?
+             $this->setFlashMessage('Payment for order #'.str_pad($order['id'], 6, '0', STR_PAD_LEFT).' may still be processing or failed.', 'warning');
+             $this->redirect('index.php?page=account&section=orders'); // Redirect to list
              return;
          }
 
-         // Clear the session variable after successfully retrieving and validating the order
+         // If everything is valid, clear the session variable
          unset($_SESSION['last_order_id']);
 
-         // Prepare data for the view
          $csrfToken = $this->getCsrfToken();
          $bodyClass = 'page-order-confirmation';
          $pageTitle = 'Order Confirmation - The Scent';
 
-         // Use renderView helper
          echo $this->renderView('order_confirmation', [
-             'order' => $order,
+             'order' => $order, // Pass the order data (including items)
              'csrfToken' => $csrfToken,
              'bodyClass' => $bodyClass,
              'pageTitle' => $pageTitle
-             // User data is automatically added by renderView if needed by layout
          ]);
      }
 
-    // --- Admin Methods ---
+
+    // --- Admin Method (Restored) ---
     public function updateOrderStatus($orderId, $status, $trackingInfo = null) {
          $this->requireAdmin(true); // Indicate AJAX
          $this->validateCSRF();
@@ -1428,17 +1438,17 @@ class CheckoutController extends BaseController {
          }
 
          // --- Add logic to check allowed status transitions ---
-          // Define allowed transitions based on your workflow
          $allowedTransitions = [
-             'pending_payment' => ['paid', 'cancelled', 'failed'],
+             'pending_payment' => ['paid', 'cancelled', 'payment_failed'], // Use payment_failed
              'paid' => ['processing', 'cancelled', 'refunded'],
              'processing' => ['shipped', 'cancelled', 'refunded'],
              'shipped' => ['delivered', 'refunded'], // Consider returns separate?
              'delivered' => ['refunded', 'completed'], // Add completed?
-             'payment_failed' => [], // Or perhaps 'pending_payment' to allow retry?
+             'payment_failed' => ['pending_payment', 'cancelled'], // Allow retry or cancel
              'cancelled' => [],
              'refunded' => [],
-             'disputed' => ['refunded'],
+             'partially_refunded' => ['refunded'], // Allow full refund after partial
+             'disputed' => ['refunded'], // Allow refunding after dispute
              'completed' => [], // Terminal state
          ];
 
@@ -1446,7 +1456,6 @@ class CheckoutController extends BaseController {
               return $this->jsonResponse(['success' => false, 'error' => "Invalid status transition from '{$order['status']}' to '{$status}'."], 400);
          }
          // --- End Status Transition Check ---
-
 
          try {
              $this->beginTransaction();
@@ -1476,44 +1485,37 @@ class CheckoutController extends BaseController {
                       if ($trackingUpdated) {
                           $userModel = new User($this->db);
                           $user = $userModel->getById($order['user_id']);
-                          if ($user && $this->emailService && method_exists($this->emailService, 'sendShippingUpdate')) {
+                          // Fetch full order details for email context
+                          $fullOrder = $this->orderModel->getByIdAndUserId($orderId, $order['user_id']);
+
+                          if ($user && $fullOrder && $this->emailService && method_exists($this->emailService, 'sendShippingUpdate')) {
                                $this->emailService->sendShippingUpdate(
-                                  $order, // Pass original order data
+                                  $fullOrder, // Pass full order data
                                   $user,
                                   $trackingNumber,
                                   $carrier ?? ''
                               );
                           } elseif (!$user) {
                                error_log("Could not find user {$order['user_id']} to send shipping update for order {$orderId}");
+                          } elseif (!$fullOrder) {
+                               error_log("Could not find full order details for shipping update email (Order ID: {$orderId})");
                           } else {
                                error_log("EmailService or sendShippingUpdate method not available for order {$orderId}");
                           }
                       } else {
                           error_log("Failed to update tracking info for order {$orderId}");
-                          // Decide if this should be a fatal error for the transaction? Non-fatal for now.
                       }
                  }
              }
 
-             // --- TODO: Add logic for other status changes (e.g., refund trigger, restock on cancel/refund) ---
+             // TODO: Add more logic for other status changes (e.g., refund trigger, restock on cancel/refund)
              if ($status === 'cancelled' || $status === 'refunded') {
                   error_log("Order {$orderId} status changed to {$status}. Add refund/restock logic here.");
-                  // Example: Trigger refund (if refunded status set by admin)
-                  // if ($status === 'refunded' && $order['payment_intent_id']) {
-                  //     $refundSuccess = $this->paymentController->createRefund($order['payment_intent_id'], $order['total_amount']);
-                  //     if (!$refundSuccess) error_log("Failed to automatically process refund for order {$orderId}");
-                  // }
-                   // Example: Restore stock
-                  // foreach ($order['items'] ?? [] as $item) { // Requires getById to fetch items here
-                  //     $inventoryController = new InventoryController($this->db);
-                  //     $inventoryController->updateStock($item['product_id'], $item['quantity'], 'cancellation/refund', $orderId);
-                  // }
              }
-
 
              $this->commit();
 
-             $adminUserId = $this->getUserId();
+             $adminUserId = $this->getUserId(); // Assumes admin is logged in
              $this->logAuditTrail('order_status_update', $adminUserId, [
                   'order_id' => $orderId, 'new_status' => $status, 'tracking_provided' => ($status === 'shipped' && !empty($trackingNumber))
              ]);
@@ -1526,19 +1528,26 @@ class CheckoutController extends BaseController {
             return $this->jsonResponse(['success' => false, 'error' => 'Failed to update order status.'], 500);
          }
     }
+    // --- End Admin Method (Restored) ---
+
 
     // --- Helper Methods ---
-     private function validateCartStock(array $cartItems): array { // Added type hint
+    /**
+     * Internal helper to validate stock for items in the cart.
+     * Expects $cartItems as [productId => ['quantity' => q, ...]]
+     */
+     private function validateCartStock(array $cartItems): array {
          $errors = [];
-         // $cartItems is now expected as product_id => quantity map
-         if (empty($cartItems)) {
-             return ['Cart is empty']; // Should not happen if checked before calling
-         }
+         if (empty($cartItems)) { return ['Cart is empty']; }
 
-         foreach ($cartItems as $productId => $quantity) {
-             if (!$this->productModel->isInStock($productId, $quantity)) {
-                 $product = $this->productModel->getById($productId);
-                 $errors[] = ($product ? htmlspecialchars($product['name']) : "Product ID {$productId}") . " has insufficient stock";
+         foreach ($cartItems as $productId => $itemData) {
+             $product = $this->productModel->getById($productId); // Fetch product details
+             if (!$product) {
+                 $errors[] = "Product ID {$productId} not found.";
+                 continue;
+             }
+             if (!$this->productModel->isInStock($productId, $itemData['quantity'])) {
+                 $errors[] = htmlspecialchars($product['name'] ?? "Product ID {$productId}") . " has insufficient stock";
              }
          }
          return $errors;
@@ -1847,9 +1856,9 @@ require_once __DIR__ . '/layout/header.php'; // Includes CSRF token output globa
             <div class="confirmation-header">
                 <i class="fas fa-check-circle"></i>
                 <h1>Order Confirmed!</h1>
-                <p>Thank you for your purchase. Your order has been successfully placed.</p>
+                <p>Thank you for your purchase. Your order (#<?= str_pad($order['id'], 6, '0', STR_PAD_LEFT) ?>) has been successfully placed.</p>
             </div>
-            
+
             <div class="order-details">
                 <div class="order-info">
                     <h2>Order Information</h2>
@@ -1864,73 +1873,94 @@ require_once __DIR__ . '/layout/header.php'; // Includes CSRF token output globa
                         </div>
                         <div class="info-item">
                             <span class="label">Order Status:</span>
-                            <span class="value status-pending">Processing</span>
+                            <!-- Display actual status from DB -->
+                            <span class="value status-<?= htmlspecialchars($order['status']) ?>">
+                                <?= ucfirst(str_replace('_', ' ', htmlspecialchars($order['status']))) ?>
+                            </span>
                         </div>
                         <div class="info-item">
-                            <span class="label">Estimated Delivery:</span>
-                            <span class="value"><?= date('F j, Y', strtotime('+5 days')) ?></span>
+                            <span class="label">Payment Status:</span>
+                             <span class="value status-<?= htmlspecialchars($order['payment_status']) ?>">
+                                <?= ucfirst(str_replace('_', ' ', htmlspecialchars($order['payment_status']))) ?>
+                            </span>
                         </div>
+                        <!-- Add estimated delivery if available -->
+                        <?php if (!empty($order['estimated_delivery'])): ?>
+                        <div class="info-item">
+                            <span class="label">Estimated Delivery:</span>
+                            <span class="value"><?= date('F j, Y', strtotime($order['estimated_delivery'])) ?></span>
+                        </div>
+                        <?php endif; ?>
                     </div>
                 </div>
-                
+
                 <div class="shipping-info">
                     <h2>Shipping Address</h2>
-                    <p><?= htmlspecialchars($order['shipping_name']) ?></p>
-                    <p><?= htmlspecialchars($order['shipping_address']) ?></p>
-                    <p><?= htmlspecialchars($order['shipping_city']) . ', ' . 
-                         htmlspecialchars($order['shipping_state']) . ' ' . 
-                         htmlspecialchars($order['shipping_zip']) ?></p>
-                    <p><?= htmlspecialchars($order['shipping_country']) ?></p>
+                    <p><?= htmlspecialchars($order['shipping_name'] ?? 'N/A') ?></p>
+                    <p><?= htmlspecialchars($order['shipping_address'] ?? 'N/A') ?></p>
+                    <p>
+                        <?= htmlspecialchars($order['shipping_city'] ?? 'N/A') ?>,
+                        <?= htmlspecialchars($order['shipping_state'] ?? 'N/A') ?>
+                        <?= htmlspecialchars($order['shipping_zip'] ?? 'N/A') ?>
+                    </p>
+                    <p><?= htmlspecialchars($order['shipping_country'] ?? 'N/A') ?></p>
                 </div>
             </div>
-            
+
             <div class="order-summary">
                 <h2>Order Summary</h2>
                 <div class="summary-items">
-                    <?php foreach ($order['items'] as $item): ?>
-                        <div class="summary-item">
-                            <div class="item-info">
-                                <span class="item-quantity"><?= $item['quantity'] ?>×</span>
-                                <span class="item-name"><?= htmlspecialchars($item['product_name']) ?></span>
+                    <?php // Ensure order items are correctly fetched and passed ?>
+                    <?php if (!empty($order['items']) && is_array($order['items'])): ?>
+                        <?php foreach ($order['items'] as $item): ?>
+                            <div class="summary-item">
+                                <div class="item-info">
+                                    <span class="item-quantity"><?= $item['quantity'] ?>&times;</span>
+                                    <span class="item-name"><?= htmlspecialchars($item['product_name'] ?? 'N/A') ?></span>
+                                    <!-- Optional: add image -->
+                                    <!-- <img src="<?= htmlspecialchars($item['image_url'] ?? '/images/placeholder.jpg') ?>" alt="" class="w-8 h-8 ml-2 rounded"> -->
+                                </div>
+                                <span class="item-price">$<?= number_format(($item['price_at_purchase'] ?? 0) * ($item['quantity'] ?? 0), 2) ?></span>
                             </div>
-                            <span class="item-price">$<?= number_format($item['price'] * $item['quantity'], 2) ?></span>
-                        </div>
-                    <?php endforeach; ?>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                         <p class="text-gray-500 italic">Could not load order items.</p>
+                    <?php endif; ?>
                 </div>
-                
+
                 <div class="summary-totals">
                     <div class="summary-row">
                         <span>Subtotal:</span>
-                        <span>$<?= number_format($order['subtotal'], 2) ?></span>
+                        <span>$<?= number_format($order['subtotal'] ?? 0, 2) ?></span>
                     </div>
-                    <?php if ($order['discount_amount'] > 0): ?>
+                    <?php if (!empty($order['discount_amount']) && $order['discount_amount'] > 0): ?>
                         <div class="summary-row discount">
-                            <span>Discount (<?= htmlspecialchars($order['coupon_code']) ?>):</span>
+                            <span>Discount <?= !empty($order['coupon_code']) ? '(' . htmlspecialchars($order['coupon_code']) . ')' : '' ?>:</span>
                             <span>-$<?= number_format($order['discount_amount'], 2) ?></span>
                         </div>
                     <?php endif; ?>
                     <div class="summary-row">
                         <span>Shipping:</span>
-                        <span><?= $order['shipping_cost'] > 0 ? '$' . number_format($order['shipping_cost'], 2) : 'FREE' ?></span>
+                        <span><?= ($order['shipping_cost'] ?? 0) > 0 ? '$' . number_format($order['shipping_cost'], 2) : '<span class="text-green-600">FREE</span>' ?></span>
                     </div>
                     <div class="summary-row">
                         <span>Tax:</span>
-                        <span>$<?= number_format($order['tax_amount'], 2) ?></span>
+                        <span>$<?= number_format($order['tax_amount'] ?? 0, 2) ?></span>
                     </div>
                     <div class="summary-row total">
-                        <span>Total:</span>
-                        <span>$<?= number_format($order['total_amount'], 2) ?></span>
+                        <span>Total Paid:</span>
+                        <span>$<?= number_format($order['total_amount'] ?? 0, 2) ?></span>
                     </div>
                 </div>
             </div>
-            
+
             <div class="next-steps" data-aos="fade-up">
                 <h2>What's Next?</h2>
                 <div class="steps-grid">
                     <div class="step">
                         <i class="fas fa-envelope"></i>
                         <h3>Order Confirmation Email</h3>
-                        <p>We've sent a confirmation email to <?= htmlspecialchars($order['shipping_email']) ?></p>
+                        <p>We've sent a confirmation email to <?= htmlspecialchars($order['shipping_email'] ?? 'your email') ?>.</p>
                     </div>
                     <div class="step">
                         <i class="fas fa-truck"></i>
@@ -1943,9 +1973,9 @@ require_once __DIR__ . '/layout/header.php'; // Includes CSRF token output globa
                         <p>Visit your account dashboard to track your order and view order history.</p>
                     </div>
                 </div>
-                
+
                 <div class="confirmation-actions">
-                    <a href="index.php?page=account" class="btn-secondary">View Order Status</a>
+                    <a href="index.php?page=account&section=orders" class="btn-secondary">View My Orders</a>
                     <a href="index.php?page=products" class="btn-primary">Continue Shopping</a>
                 </div>
             </div>
@@ -1954,6 +1984,7 @@ require_once __DIR__ . '/layout/header.php'; // Includes CSRF token output globa
 </section>
 
 <?php require_once __DIR__ . '/layout/footer.php'; ?>
+
 ```
 
 # views/order-tracking.php  

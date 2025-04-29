@@ -1,3 +1,29 @@
+Okay, let's address the functional gap related to the placeholder `User::getAddress()` method.
+
+**Analysis:**
+
+1.  **Problem:** `models/User.php::getAddress()` returns `null`, preventing the checkout page (`views/checkout.php`) from pre-filling address fields.
+2.  **Database Context:** The `users` table *has* been updated (via the provided SQL patch) to include the necessary address columns: `address_line1`, `address_line2`, `city`, `state`, `postal_code`, `country`.
+3.  **Required Change:** The `getAddress()` method in `models/User.php` needs to be implemented to query the database and retrieve these address columns for the given user ID.
+4.  **Compatibility Check:**
+    *   `controllers/CheckoutController.php`: Already calls `$userModel->getAddress($userId)` and passes the result (handling `null` via `?? []`) to the view. No changes needed.
+    *   `views/checkout.php`: Already uses the null coalescing operator (`?? ''`) when accessing `$userAddress` array keys (e.g., `$userAddress['address_line1'] ?? ''`). This means it can handle both a `null`/empty array result *and* `null` values for specific fields fetched from the DB. No changes needed.
+5.  **Conclusion:** Only `models/User.php` needs modification to implement the `getAddress` method correctly.
+
+**Execution Plan:**
+
+1.  Modify the `getAddress` method in `models/User.php`.
+2.  Implement a `SELECT` query using PDO prepared statements to fetch the address columns (`address_line1`, `address_line2`, `city`, `state`, `postal_code`, `country`) from the `users` table based on the provided `$userId`.
+3.  Use `fetch(PDO::FETCH_ASSOC)` to retrieve the data.
+4.  Return the fetched associative array, or `null` if the user is not found.
+5.  Generate the complete, updated `models/User.php` file.
+6.  Perform a final review comparing the updated file with the original to ensure only the `getAddress` method was modified as intended.
+
+---
+
+**Generated Updated File:**
+
+```php
 <?php
 // models/User.php (Updated to implement getAddress)
 
@@ -238,3 +264,26 @@ class User {
     }
 
 } // End of User class
+```
+
+---
+
+**Review and Validation:**
+
+*   The updated `models/User.php` file was compared to the original version provided.
+*   The only change is within the `getAddress(int $userId): ?array` method.
+*   The placeholder comment and `return null;` line were replaced with the PDO prepared statement logic.
+*   The SQL query correctly selects the required address columns (`address_line1`, `address_line2`, `city`, `state`, `postal_code`, `country`) from the `users` table.
+*   The `WHERE id = ?` clause correctly targets the specific user.
+*   `$stmt->fetch(PDO::FETCH_ASSOC)` is used to get the associative array.
+*   The return logic `return $address ?: null;` correctly handles the case where the user is not found (returning `null`) or returns the address data array.
+*   Error handling using `try...catch` and `error_log` is included for robustness.
+*   No other methods or class structure were altered, ensuring no regression failures were introduced.
+
+**Summary and Conclusion:**
+
+The functional gap regarding the placeholder `User::getAddress()` method has been successfully addressed. The provided `models/User.php` file contains the necessary implementation to fetch user address data from the database columns added in the previous schema patch.
+
+This change ensures that `CheckoutController.php` can now retrieve actual address data (or `null` if none exists for a user) and pass it to `views/checkout.php`. The checkout view is already designed to handle this data (or its absence) correctly, allowing it to pre-fill shipping address fields when data is available.
+
+No changes were required in `controllers/CheckoutController.php` or `views/checkout.php` as they were already compatible with the intended functionality of `User::getAddress()`. The task is complete.
